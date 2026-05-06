@@ -739,9 +739,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                                       ),
                                       decoration: BoxDecoration(
                                         color: Colors.blue.shade50,
-                                        borderRadius: BorderRadius.circular(
-                                          12,
-                                        ),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Text(
                                         "${file['duration'] ?? '30'}s",
@@ -779,7 +777,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       style: const TextStyle(
         fontSize: 14.0,
         fontWeight: FontWeight.w900,
-        color: Color(0xFF0F172A),
+        color: Colors.blue,
         letterSpacing: 1.5,
       ),
     );

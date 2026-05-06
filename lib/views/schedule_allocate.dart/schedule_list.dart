@@ -381,82 +381,100 @@ class _ScheduleListViewState extends State<ScheduleListView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Heading + top-right button
+                // ── Header row ───────────────────────────────────────────
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    AnimatedHeading(
-                      text: showActive
-                          ? "Active Schedule List"
-                          : "Inactive Schedule List",
+                    // Back arrow chip – only visible in inactive view
+                    if (!showActive) ...[
+                      Tooltip(
+                        message: "Back to Active Schedules",
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () {
+                            setState(() {
+                              showActive = true;
+                              scheduleData = [];
+                            });
+                            _fetchSchedules();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.15),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.arrow_back_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+
+                    // Dynamic heading
+                    Expanded(
+                      child: AnimatedHeading(
+                        text: showActive
+                            ? "Active Schedule List"
+                            : "Inactive Schedule List",
+                      ),
                     ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                        elevation: 2,
+
+                    const SizedBox(width: 12),
+
+                    // Right-side action
+                    if (showActive)
+                      // "View Inactive" button
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F172A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 13),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          elevation: 2,
+                        ),
+                        onPressed: _showInactivePopup,
+                        icon: const Icon(Icons.history, size: 18),
+                        label: const Text(
+                          "View Inactive",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      )
+                    else
+                      // Period button – click to re-open month/year popup
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade600,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 13),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          elevation: 2,
+                        ),
+                        onPressed: _showInactivePopup,
+                        icon: const Icon(Icons.calendar_month, size: 18),
+                        label: Text(
+                          "${DateFormat('MMM').format(DateTime(2024, _selMonth))} $_selYear",
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
                       ),
-                      onPressed: () {
-                        if (showActive) {
-                          _showInactivePopup();
-                        } else {
-                          setState(() {
-                            showActive = true;
-                            scheduleData = [];
-                          });
-                          _fetchSchedules();
-                        }
-                      },
-                      icon: Icon(
-                        showActive ? Icons.history : Icons.check_circle,
-                        size: 20,
-                      ),
-                      label: Text(
-                        showActive ? "View Inactive" : "View Active",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
                   ],
                 ),
-
-                // Inactive badge showing selected period
-                if (!showActive) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                          border:
-                              Border.all(color: Colors.orange.shade200),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.calendar_month,
-                                size: 16,
-                                color: Colors.orange.shade700),
-                            const SizedBox(width: 6),
-                            Text(
-                              "Showing: ${DateFormat('MMMM').format(DateTime(2024, _selMonth))} $_selYear",
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.orange.shade800),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
 
                 const SizedBox(height: 16),
 

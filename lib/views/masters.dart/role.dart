@@ -419,6 +419,10 @@ void _showRoleDialog() {
     context: context,
     title: editingId == null ? "Create Roles" : "Edit Role Details",
     subtitle: "Configure system permissions and access levels",
+    subtitleStyle: const TextStyle(
+    fontSize: 12,
+    color: Color(0xFFCBD5E1),
+  ),
     icon: editingId == null ? Icons.add_moderator : Icons.edit_note_rounded,
     width: MediaQuery.of(context).size.width * 0.6,
     builder: (context, setDialogState) {

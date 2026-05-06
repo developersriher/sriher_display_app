@@ -380,77 +380,93 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     ),
   );
 
-  void _showAddSchedulePopup(BuildContext context) {
+ void _showAddSchedulePopup(BuildContext context) {
     StylishDialog.show(
       context: context,
       title: "NEW SCHEDULE",
+      subtitle: "Define a new department or purpose for scheduling.",
       maxWidth: 480,
       builder: (context, setPopupState) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "Define a new department or purpose for scheduling.",
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              "Schedule Name",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14.0,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 8),
             TextFormField(
               controller: _scheduleNameController,
-              decoration: const InputDecoration(
-                hintText: "e.g., Cardiology OPD, General Ward",
-                fillColor: Color(0xFFF8FAFC),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+              decoration: InputDecoration(
+                hintText: "Enter the schedule name",
+                hintStyle: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF94A3B8),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFCBD5E1),
+                    width: 1.2,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF334155),
+                    width: 1.6,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 20,
                     ),
-                    child: const Text(
-                      "Cancel",
-                      style: TextStyle(
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.bold,
-                      ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      // Logic to save
-                      Navigator.pop(context);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 32,
                     ),
-                    child: const Text(
-                      "Create Schedule",
-                      style: TextStyle(fontWeight: FontWeight.w900),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    "Create Schedule",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
                     ),
                   ),
                 ),
@@ -716,7 +732,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
               Checkbox(
                 value: selectAllSlots,
                 activeColor: const Color.fromARGB(255, 140, 193, 239),
-                side: const BorderSide(color: Color.fromARGB(255, 21, 97, 183),),
+                side: const BorderSide(color: Color.fromARGB(255, 21, 97, 183)),
                 onChanged: (val) {
                   setState(() {
                     selectAllSlots = val!;
@@ -729,7 +745,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
               const Text(
                 "Select All",
                 style: TextStyle(
-                color: Color.fromARGB(255, 16, 96, 188),
+                  color: Color.fromARGB(255, 16, 96, 188),
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
@@ -1002,83 +1018,89 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     );
   }
 
- Widget _buildTableFooter() {
-  // Logic to calculate pages based on your actual data
-  int rowsPerPage = 10; // Change this to your actual pagination limit
-  int totalPages = (templateFiles.length / rowsPerPage).ceil();
-  if (totalPages == 0) totalPages = 1;
+  Widget _buildTableFooter() {
+    // Logic to calculate pages based on your actual data
+    int rowsPerPage = 10; // Change this to your actual pagination limit
+    int totalPages = (templateFiles.length / rowsPerPage).ceil();
+    if (totalPages == 0) totalPages = 1;
 
-  return Container(
-    padding: const EdgeInsets.all(16),
-    decoration: const BoxDecoration(
-      color: Colors.white,
-      // Keeping the bottom of the card rounded, but the buttons inside will be sharp
-      borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
-    ),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          "Total Files: ${templateFiles.length}",
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.black54,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        // Keeping the bottom of the card rounded, but the buttons inside will be sharp
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            "Total Files: ${templateFiles.length}",
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.black54,
+            ),
           ),
-        ),
-        // This Row holds the connected sharp-edged bar
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildMiniBtn("Prev", isFirst: true),
-            
-            // DYNAMIC PAGE NUMBERS:
-            // This will show 1, 2, 3... based on your templateFiles length
-            ...List.generate(totalPages, (index) {
-              return _buildMiniBtn(
-                "${index + 1}", 
-                active: (index + 1) == 1, // Change '1' to your currentPage variable
-              );
-            }),
+          // This Row holds the connected sharp-edged bar
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildMiniBtn("Prev", isFirst: true),
 
-            _buildMiniBtn("Next", isLast: true),
-          ],
-        ),
-      ],
-    ),
-  );
-}
+              // DYNAMIC PAGE NUMBERS:
+              // This will show 1, 2, 3... based on your templateFiles length
+              ...List.generate(totalPages, (index) {
+                return _buildMiniBtn(
+                  "${index + 1}",
+                  active:
+                      (index + 1) ==
+                      1, // Change '1' to your currentPage variable
+                );
+              }),
 
-Widget _buildMiniBtn(String label, {bool active = false, bool isFirst = false, bool isLast = false}) {
-  return Container(
-    // REMOVED margin to ensure buttons touch each other perfectly
-    child: OutlinedButton(
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        backgroundColor: active ? Colors.blue.shade700 : Colors.white,
-        foregroundColor: active ? Colors.white : Colors.black87,
-        // Sharp edges: borderRadius is zero
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero, 
-        ),
-        side: BorderSide(
-          color: active ? Colors.blue.shade700 : Colors.grey.shade300,
-          width: 1.0,
-        ),
-        minimumSize: const Size(0, 34),
-        // Removes extra padding that Flutter adds to buttons
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              _buildMiniBtn("Next", isLast: true),
+            ],
+          ),
+        ],
       ),
-      onPressed: () {
-        // Handle your page change logic here
-      },
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+    );
+  }
+
+  Widget _buildMiniBtn(
+    String label, {
+    bool active = false,
+    bool isFirst = false,
+    bool isLast = false,
+  }) {
+    return Container(
+      // REMOVED margin to ensure buttons touch each other perfectly
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          backgroundColor: active ? Colors.blue.shade700 : Colors.white,
+          foregroundColor: active ? Colors.white : Colors.black87,
+          // Sharp edges: borderRadius is zero
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          side: BorderSide(
+            color: active ? Colors.blue.shade700 : Colors.grey.shade300,
+            width: 1.0,
+          ),
+          minimumSize: const Size(0, 34),
+          // Removes extra padding that Flutter adds to buttons
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        onPressed: () {
+          // Handle your page change logic here
+        },
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
+
   Widget _buildDropdown({
     required String label,
     required String hint,
