@@ -1,4 +1,3 @@
-import 'package:intl/intl.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import 'package:flutter/material.dart';
@@ -17,21 +16,28 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
 
+  // Device list fetched from copyWipe_deviceListview  → data[]
   List<dynamic> deviceList = [];
+
+  // Schedules fetched from copyWipe_deviceSchedulesview → schedules[]
   List<dynamic> sourceSchedules = [];
 
-  String? selectedSourceDeviceId;
-  String? selectedTargetDeviceId;
-  String? selectedWipeDeviceId;
+  // Target devices fetched from copyWipe_deviceSchedulesview → other_devices[]
+  List<dynamic> targetDevices = [];
+
+  int? selectedSourceDeviceId;
+  int? selectedTargetDeviceId;
+  int? selectedWipeDeviceId;
 
   bool isLoadingDevices = false;
   bool isLoadingSchedules = false;
   bool isCheckingConflicts = false;
-  bool isSubmitingCopy = false;
-  bool isSubmitingWipe = false;
+  bool isSubmittingCopy = false;
+  bool isSubmittingWipe = false;
 
+  // null = not checked yet, true = has conflict, false = clear
+  bool? hasConflict;
   String? conflictMessage;
-  bool hasConflict = false;
 
   @override
   void initState() {
@@ -39,24 +45,30 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
     _fetchDeviceList();
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
   // API CALLS
-  // ──────────────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
 
+  /// POST /copyWipe_deviceListview
+  /// Response: { "status": "Success", "data": [ { "id": 1, "device_name": "..." } ] }
   Future<void> _fetchDeviceList() async {
     setState(() => isLoadingDevices = true);
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/copyWipe_deviceListview'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"api_key": _apiKey}),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/copyWipe_deviceListview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"api_key": _apiKey}),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
           deviceList = data['data'] ?? [];
         });
+      } else {
+        _showSnackBar("Failed to load devices (${response.statusCode}).");
       }
     } catch (e) {
       _showSnackBar("Error fetching devices: $e");
@@ -65,20 +77,36 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
     }
   }
 
-  Future<void> _fetchDeviceSchedules(String deviceId) async {
-    setState(() => isLoadingSchedules = true);
+  /// POST /copyWipe_deviceSchedulesview
+  /// Body:    { "api_key": "...", "device_id": <int> }
+  /// Response: { "status": "Success", "schedules": [...], "other_devices": [...] }
+  Future<void> _fetchDeviceSchedules(int deviceId) async {
+    setState(() {
+      isLoadingSchedules = true;
+      sourceSchedules = [];
+      targetDevices = [];
+      hasConflict = null;
+      conflictMessage = null;
+    });
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/copyWipe_deviceSchedulesview'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"api_key": _apiKey, "device_id": deviceId}),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/copyWipe_deviceSchedulesview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"api_key": _apiKey, "device_id": deviceId}),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          sourceSchedules = data['data'] ?? [];
+          sourceSchedules = data['schedules'] ?? [];
+          targetDevices = data['other_devices'] ?? [];
+          // Reset target selection whenever source changes
+          selectedTargetDeviceId = null;
         });
+      } else {
+        _showSnackBar("Failed to load schedules (${response.statusCode}).");
       }
     } catch (e) {
       _showSnackBar("Error fetching schedules: $e");
@@ -87,9 +115,11 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
     }
   }
 
+  /// POST /copyWipe_checkConflictview
+  /// Body:    { "api_key": "...", "source_device_id": <int>, "target_device_id": <int> }
+  /// Response: { "status": "Success|Failed", "Message": "..." }
   Future<void> _checkConflicts() async {
-    if (selectedSourceDeviceId == null || selectedTargetDeviceId == null)
-      return;
+    if (selectedSourceDeviceId == null || selectedTargetDeviceId == null) return;
     if (selectedSourceDeviceId == selectedTargetDeviceId) {
       setState(() {
         hasConflict = true;
@@ -98,24 +128,35 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
       return;
     }
 
-    setState(() => isCheckingConflicts = true);
+    setState(() {
+      isCheckingConflicts = true;
+      hasConflict = null;
+      conflictMessage = null;
+    });
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/copyWipe_checkConflictview'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "api_key": _apiKey,
-          "source_device_id": selectedSourceDeviceId,
-          "target_device_id": selectedTargetDeviceId,
-        }),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/copyWipe_checkConflictview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "api_key": _apiKey,
+              "source_device_id": selectedSourceDeviceId,
+              "target_device_id": selectedTargetDeviceId,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        final status = (data['status'] ?? '').toString().toLowerCase();
+        final msg = data['Message'] ?? data['message'] ?? '';
         setState(() {
-          hasConflict = data['conflict'] == true;
-          conflictMessage = data['message'];
+          // "Success" → no conflict; anything else (e.g. "Failed") → conflict
+          hasConflict = status != 'success';
+          conflictMessage = msg.isNotEmpty ? msg : (hasConflict! ? "Conflict detected." : "No conflicts found.");
         });
+      } else {
+        _showSnackBar("Conflict check failed (${response.statusCode}).");
       }
     } catch (e) {
       _showSnackBar("Error checking conflicts: $e");
@@ -124,49 +165,63 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
     }
   }
 
+  /// POST /copyWipe_copyScheduleview
+  /// Body:    { "api_key": "...", "source_device_id": <int>, "target_device_id": <int> }
+  /// Response: { "status": "Success|Failed", "Message": "..." }
   Future<void> _copySchedule() async {
     if (selectedSourceDeviceId == null || selectedTargetDeviceId == null) {
-      _showSnackBar("Please select both source and target devices.");
+      _showSnackBar("Please select both Source Device and Assign Device.");
       return;
     }
 
-    setState(() => isSubmitingCopy = true);
+    setState(() => isSubmittingCopy = true);
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/copyWipe_copyScheduleview'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "api_key": _apiKey,
-          "source_device_id": selectedSourceDeviceId,
-          "target_device_id": selectedTargetDeviceId,
-        }),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/copyWipe_copyScheduleview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "api_key": _apiKey,
+              "source_device_id": selectedSourceDeviceId,
+              "target_device_id": selectedTargetDeviceId,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        _showSnackBar(data['message'] ?? "Schedules copied successfully!");
-        setState(() {
-          selectedSourceDeviceId = null;
-          selectedTargetDeviceId = null;
-          sourceSchedules = [];
-          hasConflict = false;
-          conflictMessage = null;
-        });
+        final msg = data['Message'] ?? data['message'] ?? "Schedules copied successfully!";
+        final status = (data['status'] ?? '').toString().toLowerCase();
+        _showSnackBar(msg);
+        if (status == 'success') {
+          setState(() {
+            selectedSourceDeviceId = null;
+            selectedTargetDeviceId = null;
+            sourceSchedules = [];
+            targetDevices = [];
+            hasConflict = null;
+            conflictMessage = null;
+          });
+        }
+      } else {
+        _showSnackBar("Copy failed (${response.statusCode}).");
       }
     } catch (e) {
       _showSnackBar("Error copying schedules: $e");
     } finally {
-      setState(() => isSubmitingCopy = false);
+      setState(() => isSubmittingCopy = false);
     }
   }
 
+  /// POST /copyWipe_wipeOffview
+  /// Body:    { "api_key": "...", "device_id": <int> }
+  /// Response: { "status": "Success|Failed", "Message": "..." }
   Future<void> _wipeOff() async {
     if (selectedWipeDeviceId == null) {
       _showSnackBar("Please select a device to wipe.");
       return;
     }
 
-    // Show confirmation dialog using StylishDialog
     bool? confirm = await StylishDialog.show<bool>(
       context: context,
       title: "CONFIRM WIPE OFF",
@@ -229,28 +284,31 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
 
     if (confirm != true) return;
 
-    setState(() => isSubmitingWipe = true);
+    setState(() => isSubmittingWipe = true);
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/copyWipe_wipeOffview'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "api_key": _apiKey,
-          "device_id": selectedWipeDeviceId,
-        }),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/copyWipe_wipeOffview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "api_key": _apiKey,
+              "device_id": selectedWipeDeviceId,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        _showSnackBar(data['message'] ?? "Schedules wiped successfully!");
-        setState(() {
-          selectedWipeDeviceId = null;
-        });
+        final msg = data['Message'] ?? data['message'] ?? "Schedules wiped successfully!";
+        _showSnackBar(msg);
+        setState(() => selectedWipeDeviceId = null);
+      } else {
+        _showSnackBar("Wipe failed (${response.statusCode}).");
       }
     } catch (e) {
       _showSnackBar("Error wiping schedules: $e");
     } finally {
-      setState(() => isSubmitingWipe = false);
+      setState(() => isSubmittingWipe = false);
     }
   }
 
@@ -261,9 +319,9 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
     );
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // UI BUILDERS
-  // ──────────────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
+  // UI
+  // ────────────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +330,7 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // --- COPY SECTION ---
+          // ── COPY SECTION ──────────────────────────────────────────────────
           const AnimatedHeading(text: "Copy Schedule - Devices"),
           const SizedBox(height: 24),
           Container(
@@ -292,93 +350,126 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _buildDropdown(
-                        label: "",
-                        hintText: "Select device Name",
-                        value: selectedSourceDeviceId,
-                        items: deviceList,
-                        onChanged: (val) {
-                          setState(() {
-                            selectedSourceDeviceId = val;
-                            sourceSchedules = [];
-                            hasConflict = false;
-                            conflictMessage = null;
-                          });
-                          if (val != null) {
-                            _fetchDeviceSchedules(val);
-                            _checkConflicts();
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 24),
-                    Expanded(
-                      child: _buildDropdown(
-                        label: "",
-                        hintText: "Select Assign Device Name",
-                        value: selectedTargetDeviceId,
-                        items: deviceList,
-                        onChanged: (val) {
-                          setState(() {
-                            selectedTargetDeviceId = val;
-                            hasConflict = false;
-                            conflictMessage = null;
-                          });
-                          _checkConflicts();
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 24),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 24),
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F172A),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 40,
-                            vertical: 20,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          elevation: 0,
+                // ── Row: Source | Target | Copy button ──────────────────────
+                isLoadingDevices
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: CircularProgressIndicator(),
                         ),
-                        onPressed: (isSubmitingCopy || isCheckingConflicts)
-                            ? null
-                            : _copySchedule,
-                        child: isSubmitingCopy
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Source device dropdown (uses deviceList)
+                          Expanded(
+                            child: _buildDropdown(
+                              label: "Select Device Name",
+                              hintText: "Choose source device…",
+                              value: selectedSourceDeviceId,
+                              items: deviceList,
+                              onChanged: (val) {
+                                if (val == null) return;
+                                setState(() {
+                                  selectedSourceDeviceId = val;
+                                  hasConflict = null;
+                                  conflictMessage = null;
+                                });
+                                _fetchDeviceSchedules(val);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          // Target device dropdown (uses other_devices from schedules API)
+                          Expanded(
+                            child: _buildDropdown(
+                              label: "Select Assign Device Name",
+                              hintText: selectedSourceDeviceId == null
+                                  ? "Select source device first…"
+                                  : "Choose assign device…",
+                              value: selectedTargetDeviceId,
+                              items: targetDevices,
+                              onChanged: selectedSourceDeviceId == null
+                                  ? null
+                                  : (val) {
+                                      setState(() {
+                                        selectedTargetDeviceId = val;
+                                        hasConflict = null;
+                                        conflictMessage = null;
+                                      });
+                                      if (val != null) _checkConflicts();
+                                    },
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          // Copy button
+                          Padding(
+                            padding: const EdgeInsets.only(top: 30),
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0F172A),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 40,
+                                  vertical: 20,
                                 ),
-                              )
-                            : const Text(
-                                "COPY SCHEDULE",
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 0,
                               ),
+                              onPressed:
+                                  (isSubmittingCopy || isCheckingConflicts)
+                                      ? null
+                                      : _copySchedule,
+                              child: isSubmittingCopy
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text(
+                                      "COPY SCHEDULE",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                            ),
+                          ),
+                        ],
                       ),
+
+                // ── Conflict banner ──────────────────────────────────────────
+                if (isCheckingConflicts)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 10),
+                        Text("Checking for conflicts…",
+                            style: TextStyle(
+                                color: Colors.blueGrey, fontSize: 13)),
+                      ],
                     ),
-                  ],
-                ),
-                if (conflictMessage != null) ...[
+                  )
+                else if (conflictMessage != null) ...[
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: hasConflict
+                      color: (hasConflict == true)
                           ? Colors.red.shade50
                           : Colors.green.shade50,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: hasConflict
+                        color: (hasConflict == true)
                             ? Colors.red.shade200
                             : Colors.green.shade200,
                       ),
@@ -386,10 +477,10 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                     child: Row(
                       children: [
                         Icon(
-                          hasConflict
+                          (hasConflict == true)
                               ? Icons.warning_amber_rounded
                               : Icons.check_circle_outline,
-                          color: hasConflict
+                          color: (hasConflict == true)
                               ? Colors.red.shade700
                               : Colors.green.shade700,
                           size: 20,
@@ -399,7 +490,7 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                           child: Text(
                             conflictMessage!,
                             style: TextStyle(
-                              color: hasConflict
+                              color: (hasConflict == true)
                                   ? Colors.red.shade900
                                   : Colors.green.shade900,
                               fontSize: 13,
@@ -411,6 +502,8 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                     ),
                   ),
                 ],
+
+                // ── Schedule list (from source device) ───────────────────────
                 if (isLoadingSchedules)
                   const Padding(
                     padding: EdgeInsets.only(top: 24),
@@ -419,7 +512,7 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                 else if (sourceSchedules.isNotEmpty) ...[
                   const SizedBox(height: 32),
                   Text(
-                    "Schedules included in copy:",
+                    "Schedules on selected device:",
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
@@ -428,7 +521,7 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                   ),
                   const SizedBox(height: 12),
                   Container(
-                    constraints: const BoxConstraints(maxHeight: 200),
+                    constraints: const BoxConstraints(maxHeight: 220),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade200),
                       borderRadius: BorderRadius.circular(8),
@@ -436,26 +529,53 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                     child: ListView.separated(
                       shrinkWrap: true,
                       itemCount: sourceSchedules.length,
-                      separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
+                      separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
-                        final schedule = sourceSchedules[index];
+                        final s = sourceSchedules[index];
+                        final name =
+                            s['schedule_name'] ?? s['name'] ?? 'Unnamed Schedule';
+                        final fromDate = s['from_date'] ?? s['start_date'] ?? '-';
+                        final toDate = s['to_date'] ?? s['end_date'] ?? '-';
+                        final fromTime = s['from_time'] ?? s['start_time'] ?? '-';
+                        final toTime = s['to_time'] ?? s['end_time'] ?? '-';
                         return ListTile(
                           dense: true,
+                          leading: const Icon(Icons.calendar_today,
+                              size: 16, color: Colors.blueGrey),
                           title: Text(
-                            schedule['schedule_name'] ?? 'Unnamed Schedule',
-                            style: const TextStyle(fontWeight: FontWeight.w500),
+                            name,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w500),
                           ),
                           subtitle: Text(
-                            "${schedule['from_date']} to ${schedule['to_date']} | ${schedule['from_time']} - ${schedule['to_time']}",
-                          ),
-                          trailing: const Icon(
-                            Icons.check_circle,
-                            color: Colors.green,
-                            size: 16,
-                          ),
+                              "$fromDate → $toDate  |  $fromTime – $toTime"),
+                          trailing: const Icon(Icons.check_circle,
+                              color: Colors.green, size: 16),
                         );
                       },
+                    ),
+                  ),
+                ] else if (selectedSourceDeviceId != null &&
+                    !isLoadingSchedules) ...[
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            color: Colors.orange.shade700, size: 18),
+                        const SizedBox(width: 10),
+                        Text(
+                          "No schedules found on the selected source device.",
+                          style: TextStyle(
+                              color: Colors.orange.shade900, fontSize: 13),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -465,7 +585,7 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
 
           const SizedBox(height: 48),
 
-          // --- WIPE OFF SECTION ---
+          // ── WIPE OFF SECTION ──────────────────────────────────────────────
           const AnimatedHeading(text: "Wipe Off Devices"),
           const SizedBox(height: 24),
           Container(
@@ -482,71 +602,73 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
               ],
               border: Border.all(color: Colors.red.shade50),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _buildDropdown(
-                        label: "",
-                        hintText: "Select device Name",
-                        value: selectedWipeDeviceId,
-                        items: deviceList,
-                        onChanged: (val) =>
-                            setState(() => selectedWipeDeviceId = val),
-                      ),
-                    ),
-                    const SizedBox(width: 24),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 24),
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade600,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 40,
-                            vertical: 20,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          elevation: 0,
+            child: isLoadingDevices
+                ? const Center(child: CircularProgressIndicator())
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _buildDropdown(
+                          label: "Select Device Name",
+                          hintText: "Choose device to wipe…",
+                          value: selectedWipeDeviceId,
+                          items: deviceList,
+                          onChanged: (val) =>
+                              setState(() => selectedWipeDeviceId = val),
                         ),
-                        onPressed: isSubmitingWipe ? null : _wipeOff,
-                        child: isSubmitingWipe
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text(
-                                "WIPE OFF DEVICE",
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
                       ),
-                    ),
-                    const Spacer(),
-                  ],
-                ),
-              ],
-            ),
+                      const SizedBox(width: 24),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 30),
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 40,
+                              vertical: 20,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            elevation: 0,
+                          ),
+                          onPressed: isSubmittingWipe ? null : _wipeOff,
+                          child: isSubmittingWipe
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  "WIPE OFF DEVICE",
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                        ),
+                      ),
+                      const Spacer(),
+                    ],
+                  ),
           ),
         ],
       ),
     );
   }
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // HELPERS
+  // ────────────────────────────────────────────────────────────────────────────
+
   Widget _buildDropdown({
     required String label,
     required String hintText,
-    required String? value,
+    required int? value,
     required List<dynamic> items,
-    required ValueChanged<String?> onChanged,
+    required ValueChanged<int?>? onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -563,27 +685,37 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: onChanged == null
+                ? Colors.grey.shade100
+                : Colors.white,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
+            border: Border.all(
+              color: onChanged == null
+                  ? Colors.grey.shade200
+                  : Colors.grey.shade300,
+            ),
           ),
           child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: items.any((i) => i['id'].toString() == value)
-                  ? value
-                  : null,
+            child: DropdownButton<int>(
+              value: items.any((i) => _itemId(i) == value) ? value : null,
               hint: Text(
                 hintText,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                style: TextStyle(
+                  color: onChanged == null
+                      ? Colors.grey.shade400
+                      : Colors.grey.shade500,
+                  fontSize: 13,
+                ),
               ),
               isExpanded: true,
               dropdownColor: Colors.white,
               menuMaxHeight: 300,
-              style: const TextStyle(color: Colors.black87),
+              style: const TextStyle(color: Colors.black87, fontSize: 14),
+              onChanged: onChanged,
               items: items
                   .map(
-                    (item) => DropdownMenuItem(
-                      value: item['id'].toString(),
+                    (item) => DropdownMenuItem<int>(
+                      value: _itemId(item),
                       child: Text(
                         item['device_name'] ??
                             item['Device_name'] ??
@@ -593,11 +725,19 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                     ),
                   )
                   .toList(),
-              onChanged: onChanged,
             ),
           ),
         ),
       ],
     );
+  }
+
+  /// Safely parse the `id` field as an integer regardless of whether the API
+  /// returns it as a number or a string.
+  int? _itemId(dynamic item) {
+    final raw = item['id'];
+    if (raw == null) return null;
+    if (raw is int) return raw;
+    return int.tryParse(raw.toString());
   }
 }
