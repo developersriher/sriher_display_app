@@ -16,14 +16,14 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
 
-  // Device list fetched from copyWipe_deviceListview  → data[]
+  // Fetched from deviceview
   List<dynamic> deviceList = [];
 
   // Schedules fetched from copyWipe_deviceSchedulesview → schedules[]
   List<dynamic> sourceSchedules = [];
 
-  // Target devices fetched from copyWipe_deviceSchedulesview → other_devices[]
-  List<dynamic> targetDevices = [];
+  // Fetched from assignDevice_deviceListview
+  List<dynamic> assignDeviceList = [];
 
   int? selectedSourceDeviceId;
   int? selectedTargetDeviceId;
@@ -43,29 +43,46 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
   void initState() {
     super.initState();
     _fetchDeviceList();
+    _fetchAssignDeviceList();
   }
 
   // ────────────────────────────────────────────────────────────────────────────
   // API CALLS
   // ────────────────────────────────────────────────────────────────────────────
 
-  /// POST /copyWipe_deviceListview
-  /// Response: { "status": "Success", "data": [ { "id": 1, "device_name": "..." } ] }
+  /// POST /deviceview
   Future<void> _fetchDeviceList() async {
     setState(() => isLoadingDevices = true);
     try {
       final response = await http
           .post(
-            Uri.parse('$_baseUrl/copyWipe_deviceListview'),
+            Uri.parse('$_baseUrl/deviceview'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({"api_key": _apiKey}),
           )
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final decoded = jsonDecode(response.body);
         setState(() {
-          deviceList = data['data'] ?? [];
+          if (decoded is List) {
+            deviceList = decoded;
+          } else if (decoded is Map) {
+            final data = decoded['data'];
+            if (data is Map) {
+              deviceList = (data['DeviceMasters'] is List)
+                  ? data['DeviceMasters']
+                  : [];
+            } else if (data is List) {
+              deviceList = data;
+            } else {
+              final otherPossibility =
+                  decoded['device_list'] ?? decoded['device_data'];
+              deviceList = (otherPossibility is List) ? otherPossibility : [];
+            }
+          } else {
+            deviceList = [];
+          }
         });
       } else {
         _showSnackBar("Failed to load devices (${response.statusCode}).");
@@ -77,14 +94,35 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
     }
   }
 
+  /// POST /assignDevice_deviceListview
+  Future<void> _fetchAssignDeviceList() async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/assignDevice_deviceListview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"api_key": _apiKey}),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          assignDeviceList = data['data'] ?? [];
+        });
+      }
+    } catch (e) {
+      _showSnackBar("Error fetching assign devices: $e");
+    }
+  }
+
   /// POST /copyWipe_deviceSchedulesview
   /// Body:    { "api_key": "...", "device_id": <int> }
-  /// Response: { "status": "Success", "schedules": [...], "other_devices": [...] }
+  /// Response: { "status": "Success", "schedules": [...] }
   Future<void> _fetchDeviceSchedules(int deviceId) async {
     setState(() {
       isLoadingSchedules = true;
       sourceSchedules = [];
-      targetDevices = [];
       hasConflict = null;
       conflictMessage = null;
     });
@@ -101,7 +139,6 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
         final data = jsonDecode(response.body);
         setState(() {
           sourceSchedules = data['schedules'] ?? [];
-          targetDevices = data['other_devices'] ?? [];
           // Reset target selection whenever source changes
           selectedTargetDeviceId = null;
         });
@@ -198,7 +235,6 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
             selectedSourceDeviceId = null;
             selectedTargetDeviceId = null;
             sourceSchedules = [];
-            targetDevices = [];
             hasConflict = null;
             conflictMessage = null;
           });
@@ -380,7 +416,7 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                             ),
                           ),
                           const SizedBox(width: 24),
-                          // Target device dropdown (uses other_devices from schedules API)
+                          // Target device dropdown (uses assignDeviceList)
                           Expanded(
                             child: _buildDropdown(
                               label: "Select Assign Device Name",
@@ -388,7 +424,7 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                                   ? "Select source device first…"
                                   : "Choose assign device…",
                               value: selectedTargetDeviceId,
-                              items: targetDevices,
+                              items: assignDeviceList,
                               onChanged: selectedSourceDeviceId == null
                                   ? null
                                   : (val) {
