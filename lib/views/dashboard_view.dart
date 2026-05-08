@@ -115,7 +115,7 @@ class _DashboardViewState extends State<DashboardView>
   String? _videoError;
 
   String _selectedCategory = 'Devices';
-  final int _entriesPerPage = 10;
+  int _entriesPerPage = 10;
   int _currentPage = 1;
   String? _userName;
   String? _loginTime;
@@ -551,12 +551,12 @@ class _DashboardViewState extends State<DashboardView>
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      title,
+                      title.toUpperCase(),
                       style: const TextStyle(
                         color: Color(0xFF0F172A),
                         fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                        letterSpacing: 1.0,
+                        fontSize: 11,
+                        letterSpacing: 1.5,
                       ),
                     ),
                     const Spacer(),
@@ -805,7 +805,7 @@ class _DashboardViewState extends State<DashboardView>
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w900,
-                color: Color(0xFF64748B),
+                color: Color(0xFF0F172A),
                 letterSpacing: 1.5,
               ),
             ),
@@ -911,11 +911,12 @@ class _DashboardViewState extends State<DashboardView>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _selectedCategory,
+                _selectedCategory.toUpperCase(),
                 style: const TextStyle(
-                  fontSize: 18,
+                  fontSize: 11,
                   fontWeight: FontWeight.w900,
                   color: Color(0xFF0F172A),
+                  letterSpacing: 1.5,
                 ),
               ),
               const SizedBox(height: 4),
@@ -927,33 +928,60 @@ class _DashboardViewState extends State<DashboardView>
           ),
           const Spacer(),
           // Entries selector
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Text(
-                  'Show ',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+          Row(
+            children: [
+              const Text(
+                'Show ',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w500,
                 ),
-                Text(
-                  _entriesPerPage.toString(),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+              ),
+              Container(
+                height: 32,
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  borderRadius: BorderRadius.circular(6),
+                  color: Colors.white,
+                ),
+                alignment: Alignment.center,
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: _entriesPerPage,
+                    isDense: true,
+                    icon: const Icon(Icons.unfold_more_rounded,
+                        size: 16, color: Color(0xFF64748B)),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _entriesPerPage = val;
+                          _currentPage = 1;
+                        });
+                      }
+                    },
+                    items: [10, 50, 100]
+                        .map((e) => DropdownMenuItem(value: e, child: Text('$e')))
+                        .toList(),
                   ),
                 ),
-                const Icon(
-                  Icons.arrow_drop_down,
-                  size: 16,
+              ),
+              const Text(
+                ' rows',
+                style: TextStyle(
+                  fontSize: 13,
                   color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w500,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
@@ -977,54 +1005,63 @@ class _DashboardViewState extends State<DashboardView>
       width: double.infinity,
       clipBehavior: Clip.antiAlias,
       decoration: const BoxDecoration(),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.vertical,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            columnSpacing: 40,
-            horizontalMargin: 24,
-            dataRowMaxHeight: 64,
-            headingRowHeight: 56,
-            headingTextStyle: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF64748B),
-              fontSize: 12,
-              letterSpacing: 1.0,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: constraints.maxWidth,
+                ),
+                child: DataTable(
+                  columnSpacing: 40,
+                  horizontalMargin: 24,
+                  dataRowMaxHeight: 64,
+                  headingRowHeight: 56,
+                  headingTextStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF64748B),
+                    fontSize: 12,
+                    letterSpacing: 1.0,
+                  ),
+                  columns: _getTableHeaders()
+                      .map((h) => DataColumn(label: Text(h.toUpperCase())))
+                      .toList(),
+                  rows: pageRows.asMap().entries.map((entry) {
+                    final row = entry.value;
+                    return DataRow(
+                      color: WidgetStateProperty.resolveWith<Color?>((states) {
+                        if (entry.key % 2 != 0) {
+                          return const Color(0xFFF8FAFC).withOpacity(0.5);
+                        }
+                        return null;
+                      }),
+                      cells: row.asMap().entries.map((cellEntry) {
+                        final cellValue = cellEntry.value.toString();
+                        return DataCell(
+                          Text(
+                            cellValue,
+                            style: TextStyle(
+                              color: cellEntry.key == 0
+                                  ? const Color(0xFF0F172A)
+                                  : const Color(0xFF334155),
+                              fontWeight: cellEntry.key == 0
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              fontSize: 14,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
-            columns: _getTableHeaders()
-                .map((h) => DataColumn(label: Text(h.toUpperCase())))
-                .toList(),
-            rows: pageRows.asMap().entries.map((entry) {
-              final row = entry.value;
-              return DataRow(
-                color: WidgetStateProperty.resolveWith<Color?>((states) {
-                  if (entry.key % 2 != 0) {
-                    return const Color(0xFFF8FAFC).withOpacity(0.5);
-                  }
-                  return null;
-                }),
-                cells: row.asMap().entries.map((cellEntry) {
-                  final cellValue = cellEntry.value.toString();
-                  return DataCell(
-                    Text(
-                      cellValue,
-                      style: TextStyle(
-                        color: cellEntry.key == 0
-                            ? const Color(0xFF0F172A)
-                            : const Color(0xFF334155),
-                        fontWeight: cellEntry.key == 0
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                        fontSize: 14,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              );
-            }).toList(),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
