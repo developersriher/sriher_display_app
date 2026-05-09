@@ -156,7 +156,8 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
   /// Body:    { "api_key": "...", "source_device_id": <int>, "target_device_id": <int> }
   /// Response: { "status": "Success|Failed", "Message": "..." }
   Future<void> _checkConflicts() async {
-    if (selectedSourceDeviceId == null || selectedTargetDeviceId == null) return;
+    if (selectedSourceDeviceId == null || selectedTargetDeviceId == null)
+      return;
     if (selectedSourceDeviceId == selectedTargetDeviceId) {
       setState(() {
         hasConflict = true;
@@ -190,7 +191,9 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
         setState(() {
           // "Success" → no conflict; anything else (e.g. "Failed") → conflict
           hasConflict = status != 'success';
-          conflictMessage = msg.isNotEmpty ? msg : (hasConflict! ? "Conflict detected." : "No conflicts found.");
+          conflictMessage = msg.isNotEmpty
+              ? msg
+              : (hasConflict! ? "Conflict detected." : "No conflicts found.");
         });
       } else {
         _showSnackBar("Conflict check failed (${response.statusCode}).");
@@ -227,7 +230,10 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final msg = data['Message'] ?? data['message'] ?? "Schedules copied successfully!";
+        final msg =
+            data['Message'] ??
+            data['message'] ??
+            "Schedules copied successfully!";
         final status = (data['status'] ?? '').toString().toLowerCase();
         _showSnackBar(msg);
         if (status == 'success') {
@@ -335,7 +341,10 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final msg = data['Message'] ?? data['message'] ?? "Schedules wiped successfully!";
+        final msg =
+            data['Message'] ??
+            data['message'] ??
+            "Schedules wiped successfully!";
         _showSnackBar(msg);
         setState(() => selectedWipeDeviceId = null);
       } else {
@@ -394,88 +403,85 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                           child: CircularProgressIndicator(),
                         ),
                       )
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Source device dropdown (uses deviceList)
-                          Expanded(
-                            child: _buildDropdown(
-                              label: "Select Device Name",
-                              hintText: "Choose source device…",
-                              value: selectedSourceDeviceId,
-                              items: deviceList,
-                              onChanged: (val) {
-                                if (val == null) return;
-                                setState(() {
-                                  selectedSourceDeviceId = val;
-                                  hasConflict = null;
-                                  conflictMessage = null;
-                                });
-                                _fetchDeviceSchedules(val);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 24),
-                          // Target device dropdown (uses assignDeviceList)
-                          Expanded(
-                            child: _buildDropdown(
-                              label: "Select Assign Device Name",
-                              hintText: selectedSourceDeviceId == null
-                                  ? "Select source device first…"
-                                  : "Choose assign device…",
-                              value: selectedTargetDeviceId,
-                              items: assignDeviceList,
-                              onChanged: selectedSourceDeviceId == null
-                                  ? null
-                                  : (val) {
-                                      setState(() {
-                                        selectedTargetDeviceId = val;
-                                        hasConflict = null;
-                                        conflictMessage = null;
-                                      });
-                                      if (val != null) _checkConflicts();
-                                    },
-                            ),
-                          ),
-                          const SizedBox(width: 24),
-                          // Copy button
-                          Padding(
-                            padding: const EdgeInsets.only(top: 30),
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0F172A),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 40,
-                                  vertical: 20,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                elevation: 0,
-                              ),
-                              onPressed:
-                                  (isSubmittingCopy || isCheckingConflicts)
-                                      ? null
-                                      : _copySchedule,
-                              child: isSubmittingCopy
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text(
-                                      "COPY SCHEDULE",
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                            ),
-                          ),
-                        ],
-                      ),
+                 : Row(
+  // 1. Align all items to the center vertically
+  crossAxisAlignment: CrossAxisAlignment.center, 
+  children: [
+    // Source device dropdown
+    Expanded(
+      child: _buildDropdown(
+        hintText: "Choose source device…",
+        value: selectedSourceDeviceId,
+        items: deviceList,
+        onChanged: (val) {
+          if (val == null) return;
+          setState(() {
+            selectedSourceDeviceId = val;
+            hasConflict = null;
+            conflictMessage = null;
+          });
+          _fetchDeviceSchedules(val);
+        },
+      ),
+    ),
+    const SizedBox(width: 24),
+    // Target device dropdown
+    Expanded(
+      child: _buildDropdown(
+        hintText: selectedSourceDeviceId == null
+            ? "Select source device first…"
+            : "Choose assign device…",
+        value: selectedTargetDeviceId,
+        items: assignDeviceList,
+        onChanged: selectedSourceDeviceId == null
+            ? null
+            : (val) {
+                setState(() {
+                  selectedTargetDeviceId = val;
+                  hasConflict = null;
+                  conflictMessage = null;
+                });
+                if (val != null) _checkConflicts();
+              },
+      ),
+    ),
+    const SizedBox(width: 24),
+    // 2. Removed the Padding(top: 30) wrapper
+    ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF0F172A),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 40,
+          vertical: 20, // Match the height to your dropdown
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        elevation: 0,
+      ),
+      onPressed:
+          (isSubmittingCopy || isCheckingConflicts)
+          ? null
+          : _copySchedule,
+      child: isSubmittingCopy
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
+              ),
+            )
+          : const Text(
+              "COPY SCHEDULE",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+    ),
+  ],
+),
 
                 // ── Conflict banner ──────────────────────────────────────────
                 if (isCheckingConflicts)
@@ -489,9 +495,13 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                         SizedBox(width: 10),
-                        Text("Checking for conflicts…",
-                            style: TextStyle(
-                                color: Colors.blueGrey, fontSize: 13)),
+                        Text(
+                          "Checking for conflicts…",
+                          style: TextStyle(
+                            color: Colors.blueGrey,
+                            fontSize: 13,
+                          ),
+                        ),
                       ],
                     ),
                   )
@@ -569,24 +579,34 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                       itemBuilder: (context, index) {
                         final s = sourceSchedules[index];
                         final name =
-                            s['schedule_name'] ?? s['name'] ?? 'Unnamed Schedule';
-                        final fromDate = s['from_date'] ?? s['start_date'] ?? '-';
+                            s['schedule_name'] ??
+                            s['name'] ??
+                            'Unnamed Schedule';
+                        final fromDate =
+                            s['from_date'] ?? s['start_date'] ?? '-';
                         final toDate = s['to_date'] ?? s['end_date'] ?? '-';
-                        final fromTime = s['from_time'] ?? s['start_time'] ?? '-';
+                        final fromTime =
+                            s['from_time'] ?? s['start_time'] ?? '-';
                         final toTime = s['to_time'] ?? s['end_time'] ?? '-';
                         return ListTile(
                           dense: true,
-                          leading: const Icon(Icons.calendar_today,
-                              size: 16, color: Colors.blueGrey),
+                          leading: const Icon(
+                            Icons.calendar_today,
+                            size: 16,
+                            color: Colors.blueGrey,
+                          ),
                           title: Text(
                             name,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w500),
+                            style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                           subtitle: Text(
-                              "$fromDate → $toDate  |  $fromTime – $toTime"),
-                          trailing: const Icon(Icons.check_circle,
-                              color: Colors.green, size: 16),
+                            "$fromDate → $toDate  |  $fromTime – $toTime",
+                          ),
+                          trailing: const Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 16,
+                          ),
                         );
                       },
                     ),
@@ -603,13 +623,18 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline,
-                            color: Colors.orange.shade700, size: 18),
+                        Icon(
+                          Icons.info_outline,
+                          color: Colors.orange.shade700,
+                          size: 18,
+                        ),
                         const SizedBox(width: 10),
                         Text(
                           "No schedules found on the selected source device.",
                           style: TextStyle(
-                              color: Colors.orange.shade900, fontSize: 13),
+                            color: Colors.orange.shade900,
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
@@ -641,11 +666,11 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
             child: isLoadingDevices
                 ? const Center(child: CircularProgressIndicator())
                 : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    // 1. CHANGE THIS TO CENTER
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
                         child: _buildDropdown(
-                          label: "Select Device Name",
                           hintText: "Choose device to wipe…",
                           value: selectedWipeDeviceId,
                           items: deviceList,
@@ -654,37 +679,34 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                         ),
                       ),
                       const SizedBox(width: 24),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 30),
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red.shade600,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 40,
-                              vertical: 20,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 0,
+                      // 2. REMOVED THE PADDING(TOP: 30) WRAPPER
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade600,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 40,
+                            vertical: 20,
                           ),
-                          onPressed: isSubmittingWipe ? null : _wipeOff,
-                          child: isSubmittingWipe
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text(
-                                  "WIPE OFF DEVICE",
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold),
-                                ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          elevation: 0,
                         ),
+                        onPressed: isSubmittingWipe ? null : _wipeOff,
+                        child: isSubmittingWipe
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                "WIPE OFF DEVICE",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                       ),
                       const Spacer(),
                     ],
@@ -700,7 +722,6 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
   // ────────────────────────────────────────────────────────────────────────────
 
   Widget _buildDropdown({
-    required String label,
     required String hintText,
     required int? value,
     required List<dynamic> items,
@@ -709,21 +730,11 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-            color: Colors.blue.shade900,
-          ),
-        ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: onChanged == null
-                ? Colors.grey.shade100
-                : Colors.white,
+            color: onChanged == null ? Colors.grey.shade100 : Colors.white,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: onChanged == null

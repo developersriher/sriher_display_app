@@ -11,6 +11,7 @@ class ScheduleAllocateView extends StatefulWidget {
   final VoidCallback? onBack;
 
   const ScheduleAllocateView({
+    
     super.key,
     this.editData,
     this.isExtend = false,
@@ -695,7 +696,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                                             color: Colors.grey.shade300,
                                           ),
                                         ),
-                                        child: file['file_name'] != null
+                                        child: (file['file_name'] != null && file['file_name'].toString().trim().isNotEmpty)
                                             ? Image.network(
                                                 "$_baseUrl/uploads/${file['file_name']}",
                                                 height: 65,

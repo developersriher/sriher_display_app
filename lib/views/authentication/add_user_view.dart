@@ -365,7 +365,7 @@ class _AddUserViewState extends State<AddUserView> {
               children: [
                 const AnimatedHeading(
                   text: "User List",
-                  style: TextStyle(  color: Color.fromARGB(255, 18, 28, 53),  fontWeight: FontWeight.bold,
+                  style: TextStyle(  color: Color.fromARGB(255, 64, 164, 246),  fontWeight: FontWeight.bold,
                     fontSize: 22,
                   ),
                 ),

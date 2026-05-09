@@ -59,14 +59,13 @@ class _AnimatedHeadingState extends State<AnimatedHeading>
       child: FadeTransition(
         opacity: _opacityAnimation,
         child: Text(
-          widget.text,
-          style:
-              widget.style ??
-              const TextStyle(
-                color: Colors.blue,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+          widget.text.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 14.0,
+            fontWeight: FontWeight.w900,
+            color: Colors.blue,
+            letterSpacing: 1.5,
+          ),
         ),
       ),
     );

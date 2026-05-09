@@ -179,7 +179,8 @@ class _DashboardViewState extends State<DashboardView>
           .timeout(
             const Duration(seconds: 10),
             onTimeout: () => throw Exception(
-                'Server did not respond. Please check your connection.'),
+              'Server did not respond. Please check your connection.',
+            ),
           );
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
@@ -488,6 +489,7 @@ class _DashboardViewState extends State<DashboardView>
               flex: 1,
               child: _buildMediaCard(
                 'LIVE IMAGE ROTATION',
+                'Dynamic display of rotating image galleries',
                 _buildSlideshow(d.imageUrls),
                 _cardAnimations[4],
               ),
@@ -498,6 +500,7 @@ class _DashboardViewState extends State<DashboardView>
                 flex: 1,
                 child: _buildMediaCard(
                   'VIDEO BROADCAST',
+                  'Streaming real-time video feed broadcast',
                   _buildVideoPlayer(d.videoUrls),
                   _cardAnimations[5],
                 ),
@@ -508,7 +511,7 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 
-  Widget _buildMediaCard(String title, Widget content, Animation<double> anim) {
+  Widget _buildMediaCard(String title, String subtitle, Widget content, Animation<double> anim) {
     return FadeTransition(
       opacity: anim,
       child: SlideTransition(
@@ -539,7 +542,7 @@ class _DashboardViewState extends State<DashboardView>
                   children: [
                     Container(
                       width: 4,
-                      height: 20,
+                      height: 32,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
@@ -550,14 +553,24 @@ class _DashboardViewState extends State<DashboardView>
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      title.toUpperCase(),
-                      style: const TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontWeight: FontWeight.w900,
-                        fontSize: 11,
-                        letterSpacing: 1.5,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title.toUpperCase(),
+                          style: const TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 11,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        ),
+                      ],
                     ),
                     const Spacer(),
                     Container(
@@ -798,16 +811,26 @@ class _DashboardViewState extends State<DashboardView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'PROGRESS TRACK',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF0F172A),
-                letterSpacing: 1.5,
-              ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'PROGRESS TRACK',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF0F172A),
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Monitoring the overall progress',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -952,8 +975,11 @@ class _DashboardViewState extends State<DashboardView>
                   child: DropdownButton<int>(
                     value: _entriesPerPage,
                     isDense: true,
-                    icon: const Icon(Icons.unfold_more_rounded,
-                        size: 16, color: Color(0xFF64748B)),
+                    icon: const Icon(
+                      Icons.unfold_more_rounded,
+                      size: 16,
+                      color: Color(0xFF64748B),
+                    ),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -968,7 +994,9 @@ class _DashboardViewState extends State<DashboardView>
                       }
                     },
                     items: [10, 50, 100]
-                        .map((e) => DropdownMenuItem(value: e, child: Text('$e')))
+                        .map(
+                          (e) => DropdownMenuItem(value: e, child: Text('$e')),
+                        )
                         .toList(),
                   ),
                 ),
@@ -1012,9 +1040,7 @@ class _DashboardViewState extends State<DashboardView>
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: constraints.maxWidth,
-                ),
+                constraints: BoxConstraints(minWidth: constraints.maxWidth),
                 child: DataTable(
                   columnSpacing: 40,
                   horizontalMargin: 24,
@@ -1085,11 +1111,13 @@ class _DashboardViewState extends State<DashboardView>
     switch (_selectedCategory) {
       case 'Devices':
         return d.deviceList
-            .map((e) => [
-                  e['device_name'] ?? '-',
-                  e['device_code'] ?? '-',
-                  e['device_model'] ?? '-',
-                ])
+            .map(
+              (e) => [
+                e['device_name'] ?? '-',
+                e['device_code'] ?? '-',
+                e['device_model'] ?? '-',
+              ],
+            )
             .toList();
       case 'Templates':
         return d.tempList
@@ -1097,11 +1125,13 @@ class _DashboardViewState extends State<DashboardView>
             .toList();
       case 'Locations':
         return d.locationList
-            .map((e) => [
-                  e['location_name'] ?? '-',
-                  e['floor'] ?? '-',
-                  e['sublocation'] ?? '-',
-                ])
+            .map(
+              (e) => [
+                e['location_name'] ?? '-',
+                e['floor'] ?? '-',
+                e['sublocation'] ?? '-',
+              ],
+            )
             .toList();
       case 'Over Views':
         return d.overview
@@ -1198,4 +1228,3 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 }
-

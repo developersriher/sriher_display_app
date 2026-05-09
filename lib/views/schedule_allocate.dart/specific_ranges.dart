@@ -873,8 +873,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                             flex: 2,
                             child: Center(
                               child: Container(
-                                width: 40,
-                                height: 40,
+                                width: 60,
+                                height: 60,
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
@@ -883,17 +883,18 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(4),
-                                  child: file['file_name'] != null
+                                  child: (file['file_name'] != null && file['file_name'].toString().trim().isNotEmpty)
                                       ? Image.network(
                                           "$_baseUrl/uploads/${file['file_name']}",
                                           fit: BoxFit.cover,
                                           errorBuilder: (_, __, ___) =>
                                               const Icon(
                                                 Icons.broken_image,
-                                                size: 20,
+                                                size: 24,
+                                                color: Colors.grey,
                                               ),
                                         )
-                                      : const Icon(Icons.image, size: 20),
+                                      : const Icon(Icons.image, size: 24, color: Colors.grey),
                                 ),
                               ),
                             ),
