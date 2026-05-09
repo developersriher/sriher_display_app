@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:media_kit/media_kit.dart';
@@ -1473,13 +1474,13 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
       final controller = VideoController(player);
 
       // Performance properties for thumbnails
-      if (player.platform is NativePlayer) {
-        (player.platform as NativePlayer).setProperty(
+      if (!kIsWeb && player.platform is NativePlayer) {
+        (player.platform as dynamic).setProperty(
           'hwdec',
           'no',
         ); // Fallback to software decoding if CUDA fails
-        (player.platform as NativePlayer).setProperty('cache', 'yes');
-        (player.platform as NativePlayer).setProperty(
+        (player.platform as dynamic).setProperty('cache', 'yes');
+        (player.platform as dynamic).setProperty(
           'demuxer-max-bytes',
           '10000000',
         );
