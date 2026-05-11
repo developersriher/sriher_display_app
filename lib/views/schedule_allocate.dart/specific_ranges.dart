@@ -380,7 +380,21 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     ),
   );
 
- void _showAddSchedulePopup(BuildContext context) {
+  void _addNewSchedule(String name) {
+    if (name.isEmpty) return;
+    setState(() {
+      // Mock an ID for now until API is integrated
+      final newId = DateTime.now().millisecondsSinceEpoch % 10000;
+      scheduleList = List.from(scheduleList)..add({
+        "id": newId.toString(),
+        "schedule_name": name,
+      });
+      selectedScheduleId = newId;
+      _scheduleNameController.clear();
+    });
+  }
+
+  void _showAddSchedulePopup(BuildContext context) {
     StylishDialog.show(
       context: context,
       title: "NEW SCHEDULE",
@@ -392,6 +406,15 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           children: [
             TextFormField(
               controller: _scheduleNameController,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) {
+                final name = _scheduleNameController.text.trim();
+                if (name.isNotEmpty) {
+                  Navigator.pop(context);
+                  _addNewSchedule(name);
+                }
+              },
               style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
               decoration: InputDecoration(
                 hintText: "Enter the schedule name",
@@ -448,7 +471,11 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                 const SizedBox(width: 12),
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(context);
+                    final name = _scheduleNameController.text.trim();
+                    if (name.isNotEmpty) {
+                      Navigator.pop(context);
+                      _addNewSchedule(name);
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0F172A),

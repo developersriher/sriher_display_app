@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
@@ -128,25 +129,49 @@ class _FileUploadViewState extends State<FileUploadView> {
   // API 2: INSERT FILE (POST /insertFileview) — plain JSON POST
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> insertFileAction() async {
-    if (_selectedDeptId == null || _nameController.text.trim().isEmpty) {
-      _showSnackBar("Please select a Department and enter a File Name.");
+    if (_selectedDeptId == null || _nameController.text.trim().isEmpty || _selectedFile == null) {
+      _showSnackBar("Please select a Department, enter a File Name, and pick a File.");
       return;
     }
 
     setState(() => isSubmitting = true);
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/insertFileview'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "api_key": _apiKey,
-          "category_id": int.parse(_selectedDeptId!),
-          "name": _nameController.text.trim(),
-          "desc": _descController.text.trim(),
-          "group5": _selectedType,
-          "file_duration": 25,
-        }),
-      );
+      var request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/insertFileview'));
+      request.fields['api_key'] = _apiKey;
+      request.fields['category_id'] = _selectedDeptId!;
+      request.fields['name'] = _nameController.text.trim();
+      request.fields['desc'] = _descController.text.trim();
+      request.fields['group5'] = _selectedType;
+      request.fields['file_duration'] = '25';
+
+      String filename = _selectedFile!.name;
+      String extension = filename.split('.').last.toLowerCase();
+      MediaType? contentType;
+      
+      if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(extension)) {
+        contentType = MediaType('image', extension == 'jpg' ? 'jpeg' : extension);
+      } else if (['mp4', 'mov', 'avi', 'mkv'].contains(extension)) {
+        contentType = MediaType('video', extension);
+      }
+
+      if (_selectedFile!.bytes != null) {
+        request.files.add(http.MultipartFile.fromBytes(
+          'file', 
+          _selectedFile!.bytes!, 
+          filename: filename,
+          contentType: contentType,
+        ));
+      } else if (_selectedFile!.path != null) {
+        request.files.add(await http.MultipartFile.fromPath(
+          'file', 
+          _selectedFile!.path!,
+          filename: filename,
+          contentType: contentType,
+        ));
+      }
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
 
       debugPrint("Insert response [${response.statusCode}]: ${response.body}");
 
@@ -698,18 +723,20 @@ class _FileUploadViewState extends State<FileUploadView> {
               border: Border.all(color: Colors.grey.shade200),
               color: Colors.grey.shade100,
             ),
-            child:
-                (item['file_name'] != null &&
-                    item['file_name'].toString().isNotEmpty)
-                ? Image.network(
-                    "$_baseUrl/uploads/${item['file_name']}",
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.broken_image,
-                      size: 20,
-                      color: Colors.grey,
-                    ),
-                  )
+            child: (item['file_name'] != null &&
+                    item['file_name'].toString().trim().isNotEmpty)
+                ? (['mp4', 'mov', 'avi', 'mkv'].contains(
+                    item['file_name'].toString().split('.').last.toLowerCase()))
+                    ? const Icon(Icons.movie, size: 24, color: Colors.blueGrey)
+                    : Image.network(
+                        "$_baseUrl/uploads/${item['file_name']}",
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.broken_image,
+                          size: 20,
+                          color: Colors.grey,
+                        ),
+                      )
                 : const Icon(Icons.image, size: 20, color: Colors.grey),
           ),
         ),

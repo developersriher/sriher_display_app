@@ -246,6 +246,19 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     }
   }
 
+  void _addNewSchedule(String name) {
+    if (name.isEmpty) return;
+    setState(() {
+      final newId = DateTime.now().millisecondsSinceEpoch % 10000;
+      scheduleList = List.from(scheduleList)..add({
+        "id": newId.toString(),
+        "schedule_name": name,
+      });
+      selectedScheduleId = newId;
+      _newScheduleController.clear();
+    });
+  }
+
   void _showSchedulePopup() {
     StylishDialog.show(
       context: context,
@@ -271,9 +284,18 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             const SizedBox(height: 8),
             TextFormField(
               controller: _newScheduleController,
-              decoration: InputDecoration(
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) {
+                final name = _newScheduleController.text.trim();
+                if (name.isNotEmpty) {
+                  Navigator.pop(context);
+                  _addNewSchedule(name);
+                }
+              },
+              decoration: const InputDecoration(
                 hintText: "e.g., Cardiology OPD, General Ward",
-                fillColor: const Color(0xFFF8FAFC),
+                fillColor: Color(0xFFF8FAFC),
               ),
             ),
             const SizedBox(height: 32),
@@ -302,8 +324,11 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   flex: 2,
                   child: ElevatedButton(
                     onPressed: () {
-                      // Logic to save
-                      Navigator.pop(context);
+                      final name = _newScheduleController.text.trim();
+                      if (name.isNotEmpty) {
+                        Navigator.pop(context);
+                        _addNewSchedule(name);
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0F172A),
@@ -359,10 +384,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                 : Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(flex: 5, child: _buildLeftColumn()),
+                      Expanded(flex: 7, child: _buildLeftColumn()),
                       const SizedBox(width: 32),
                       Expanded(
-                        flex: 7,
+                        flex: 5,
                         child: isSelectionComplete
                             ? _buildRightColumn()
                             : Center(
@@ -486,69 +511,78 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Expanded(
+                      flex: 2,
                       child: _buildDateField("From Date", _fromDateController),
                     ),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 10),
                     Expanded(
+                      flex: 2,
                       child: _buildTimeDropdown(
                         "From Time",
                         _fromTimeController,
                         enabled: _fromDateController.text.isNotEmpty,
                       ),
                     ),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 10),
                     Expanded(
+                      flex: 2,
                       child: _buildDateField("To Date", _toDateController),
                     ),
-                    const SizedBox(width: 20),
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 2),
-                      child: Row(
-                        children: [
-                          Checkbox(
-                            value: selectAllSlot,
-                            activeColor: Colors.blue,
-                            side: BorderSide(color: Colors.grey.shade400),
-                            onChanged: (val) => setState(() {
-                              selectAllSlot = val!;
-                              if (selectAllSlot) {
-                                try {
-                                  DateTime start = DateFormat(
-                                    'yyyy-MM-dd',
-                                  ).parse(_fromDateController.text);
-                                  DateTime end = DateFormat(
-                                    'yyyy-MM-dd',
-                                  ).parse(_toDateController.text);
-                                  if (end.isBefore(start)) end = start;
-                                  for (
-                                    int i = 0;
-                                    i <= end.difference(start).inDays;
-                                    i++
-                                  ) {
-                                    String key = DateFormat(
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 2),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: selectAllSlot,
+                              activeColor: Colors.blue,
+                              side: BorderSide(color: Colors.grey.shade400),
+                              onChanged: (val) => setState(() {
+                                selectAllSlot = val!;
+                                if (selectAllSlot) {
+                                  try {
+                                    DateTime start = DateFormat(
                                       'yyyy-MM-dd',
-                                    ).format(start.add(Duration(days: i)));
-                                    selectedSlotsByDay[key] = List.from(
-                                      slotPairs,
-                                    );
+                                    ).parse(_fromDateController.text);
+                                    DateTime end = DateFormat(
+                                      'yyyy-MM-dd',
+                                    ).parse(_toDateController.text);
+                                    if (end.isBefore(start)) end = start;
+                                    for (
+                                      int i = 0;
+                                      i <= end.difference(start).inDays;
+                                      i++
+                                    ) {
+                                      String key = DateFormat(
+                                        'yyyy-MM-dd',
+                                      ).format(start.add(Duration(days: i)));
+                                      selectedSlotsByDay[key] = List.from(
+                                        slotPairs,
+                                      );
+                                    }
+                                  } catch (e) {
+                                    debugPrint(e.toString());
                                   }
-                                } catch (e) {
-                                  debugPrint(e.toString());
+                                } else {
+                                  selectedSlotsByDay.clear();
                                 }
-                              } else {
-                                selectedSlotsByDay.clear();
-                              }
-                            }),
-                          ),
-                          const Text(
-                            "Select All Slot",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13.0,
-                              color: Colors.black87,
+                              }),
                             ),
-                          ),
-                        ],
+                            const Expanded(
+                              child: Text(
+                                "Select All",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12.0,
+                                  color: Colors.black87,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -593,16 +627,14 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
   }
 
   Widget _buildRightColumn() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildSectionTitle("Template Duration"),
-          const SizedBox(height: 20),
-          Expanded(
-            child: Container(
-              clipBehavior: Clip.antiAlias,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSectionTitle("Template Duration"),
+        const SizedBox(height: 20),
+        Expanded(
+          child: Container(
+            clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
@@ -766,8 +798,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -808,7 +839,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           value: value,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(color: Colors.black38, fontSize: 12.0),
+            hintStyle: const TextStyle(color: Colors.black38, fontSize: 11.0),
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(
@@ -834,7 +865,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               value: id,
               child: Text(
                 name,
-                style: const TextStyle(fontSize: 12.0, color: Colors.black87),
+                style: const TextStyle(fontSize: 11.0, color: Colors.black87),
               ),
             );
           }).toList(),
@@ -945,7 +976,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           readOnly: true,
           style: const TextStyle(fontSize: 13.0, color: Colors.black87),
           decoration: InputDecoration(
-            hintText: 'mm/dd/yy',
+            hintText: 'MM/DD/YYYY',
             hintStyle: const TextStyle(color: Colors.black38, fontSize: 13.0),
             filled: true,
             fillColor: Colors.white,
@@ -995,8 +1026,17 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         children: [
           Row(
             children: [
+              const Text(
+                "Show",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.0,
+                  color: Colors.black54,
+                ),
+              ),
+              const SizedBox(width: 12),
               SizedBox(
-                width: 90,
+                width: 65,
                 height: 38,
                 child: DropdownButtonFormField<String>(
                   value: entriesValue,
@@ -1023,7 +1063,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               const Text(
                 "entries",
                 style: TextStyle(

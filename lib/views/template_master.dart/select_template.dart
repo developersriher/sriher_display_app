@@ -105,13 +105,23 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     setState(() => isLoadingTemplates = true);
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/new_templateview'),
+        Uri.parse('$_baseUrl/new_templateview?_t=${DateTime.now().millisecondsSinceEpoch}'),
         body: jsonEncode({"api_key": _apiKey}),
         headers: {'Content-Type': 'application/json'},
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (mounted) setState(() => templates = data['data'] ?? []);
+        if (mounted) {
+          setState(() {
+            final List<dynamic> list = data['data'] ?? [];
+            list.sort((a, b) {
+              final idA = int.tryParse(a['id']?.toString() ?? '') ?? 0;
+              final idB = int.tryParse(b['id']?.toString() ?? '') ?? 0;
+              return idA.compareTo(idB);
+            });
+            templates = list;
+          });
+        }
       }
     } catch (e) {
       debugPrint("Error: $e");
@@ -125,13 +135,23 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     setState(() => isLoadingCategories = true);
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/categoryview'),
+        Uri.parse('$_baseUrl/categoryview?_t=${DateTime.now().millisecondsSinceEpoch}'),
         body: jsonEncode({"api_key": _apiKey}),
         headers: {'Content-Type': 'application/json'},
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (mounted) setState(() => categories = data['data'] ?? []);
+        if (mounted) {
+          setState(() {
+            final List<dynamic> list = data['data'] ?? [];
+            list.sort((a, b) {
+              final idA = int.tryParse(a['id']?.toString() ?? '') ?? 0;
+              final idB = int.tryParse(b['id']?.toString() ?? '') ?? 0;
+              return idA.compareTo(idB);
+            });
+            categories = list;
+          });
+        }
       }
     } catch (e) {
       debugPrint("Error: $e");
@@ -198,7 +218,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
   }
 
-  Future<void> _assignFile(int fileId, String formattedDuration) async {
+  Future<void> _assignFile(int fileId, String formattedDuration, String fileName) async {
     // Use stored raw duration or parse formatted back to seconds
     final int durationSecs =
         _rawFileDurations[fileId] ?? _parseFormattedDuration(formattedDuration);
@@ -213,13 +233,46 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }),
         headers: {'Content-Type': 'application/json'},
       );
-      if (response.statusCode == 200) _fetchAssignedFiles();
+      if (response.statusCode == 200) {
+        _fetchAssignedFiles();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: RichText(
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: fileName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        decoration: TextDecoration.underline,
+                        decorationColor: Colors.white,
+                      ),
+                    ),
+                    const TextSpan(
+                      text: " has been added to the current selection list.",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              backgroundColor: Colors.green.shade600,
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+      }
     } catch (e) {
       debugPrint("Error: $e");
     }
   }
 
-  Future<void> _removeFile(int fileId) async {
+  Future<void> _removeFile(int fileId, String fileName) async {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/selectTemplate_removeFileview'),
@@ -230,7 +283,25 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }),
         headers: {'Content-Type': 'application/json'},
       );
-      if (response.statusCode == 200) _fetchAssignedFiles();
+      if (response.statusCode == 200) {
+        _fetchAssignedFiles();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "'$fileName' has been removed.",
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: Colors.red.shade600,
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+      }
     } catch (e) {
       debugPrint("Error: $e");
     }
@@ -680,8 +751,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                             flex: 2,
                             child: Center(
                               child: ElevatedButton(
-                                onPressed: () =>
-                                    _assignFile(fileId, controller.text),
+                                onPressed: () => _assignFile(
+                                  fileId, 
+                                  controller.text, 
+                                  file['user_filename'] ?? file['file_name'] ?? 'File',
+                                ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue.shade600,
                                   foregroundColor: Colors.white,
@@ -836,8 +910,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                               color: Colors.red,
                               size: 20,
                             ),
-                            onPressed: () =>
-                                _removeFile(int.parse(file['id'].toString())),
+                            onPressed: () => _removeFile(
+                              int.parse(file['id'].toString()),
+                              file['user_filename'] ?? file['file_name'] ?? 'File',
+                            ),
                           ),
                         ),
                       ],
@@ -925,17 +1001,33 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                       color: Colors.blue,
                     ),
                     onChanged: onChanged,
-                    items: items.map<DropdownMenuItem<int>>((t) {
-                      return DropdownMenuItem<int>(
-                        value: int.tryParse(t['id'].toString()),
-                        child: Text(
-                          t['temp_name'] ??
-                              t['category_name'] ??
-                              t['name'] ??
-                              '',
-                        ),
-                      );
-                    }).toList(),
+                    items: (() {
+                      final uniqueIds = <int>{};
+                      final uniqueItems = <dynamic>[];
+                      for (var t in items) {
+                        final id = int.tryParse(t['id']?.toString() ?? '');
+                        if (id != null && !uniqueIds.contains(id)) {
+                          uniqueIds.add(id);
+                          uniqueItems.add(t);
+                        }
+                      }
+                      return uniqueItems.map<DropdownMenuItem<int>>((t) {
+                        return DropdownMenuItem<int>(
+                          value: int.parse(t['id'].toString()),
+                          child: Text(
+                            t['temp_name'] ??
+                                t['category_name'] ??
+                                t['name'] ??
+                                '',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF1E293B),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        );
+                      }).toList();
+                    })(),
                   ),
                 ),
               ),
@@ -966,14 +1058,38 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/insertNew_templateview'),
-        body: jsonEncode({"api_key": _apiKey, "temp_name": name}),
+        body: jsonEncode({"api_key": _apiKey, "template_name": name}),
         headers: {'Content-Type': 'application/json'},
       );
       if (response.statusCode == 200) {
-        _fetchTemplates();
+        bool found = false;
+        for (int i = 0; i < 4; i++) {
+          await _fetchTemplates();
+          dynamic newTemplate;
+          for (var t in templates) {
+            if (t['temp_name'] == name || t['name'] == name) {
+              newTemplate = t;
+              break;
+            }
+          }
+          if (newTemplate != null) {
+            found = true;
+            if (mounted) {
+              setState(() {
+                selectedTemplateId = int.tryParse(newTemplate['id'].toString());
+                selectedCategoryId = null;
+                availableFiles = [];
+                assignedFiles = [];
+              });
+              _fetchAssignedFiles();
+            }
+            break;
+          }
+          await Future.delayed(const Duration(milliseconds: 1500));
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Template added successfully")),
+            SnackBar(content: Text(found ? "Template added successfully" : "Processing...")),
           );
         }
       }
@@ -990,10 +1106,31 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         headers: {'Content-Type': 'application/json'},
       );
       if (response.statusCode == 200) {
-        _fetchCategories();
+        bool found = false;
+        for (int i = 0; i < 4; i++) {
+          await _fetchCategories();
+          dynamic newCategory;
+          for (var c in categories) {
+            if (c['category_name'] == name || c['name'] == name) {
+              newCategory = c;
+              break;
+            }
+          }
+          if (newCategory != null) {
+            found = true;
+            if (mounted) {
+              setState(() {
+                selectedCategoryId = int.tryParse(newCategory['id'].toString());
+              });
+              _fetchAvailableFiles();
+            }
+            break;
+          }
+          await Future.delayed(const Duration(milliseconds: 1500));
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Department added successfully")),
+            SnackBar(content: Text(found ? "Department added successfully" : "Processing...")),
           );
         }
       }
@@ -1004,125 +1141,102 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
   void _showAddTemplateDialog() {
     _newTemplateNameController.clear();
-    showDialog(
+    StylishDialog.show(
       context: context,
-      builder: (ctx) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 300,
-            vertical: 200,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      title: "ADD NEW TEMPLATE",
+      subtitle: "Define a new template for your display layout.",
+      maxWidth: 480,
+      builder: (ctx, setPopupState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextFormField(
+              controller: _newTemplateNameController,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+              decoration: InputDecoration(
+                hintText: "Enter the template name",
+                hintStyle: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF94A3B8),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFCBD5E1),
+                    width: 1.2,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF334155),
+                    width: 1.6,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const Text(
-                  "ADD NEW TEMPLATE",
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                    letterSpacing: 0.8,
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 20,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _newTemplateNameController,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: "Enter the template name",
-                    hintStyle: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey.shade50,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(
-                        color: Colors.blue,
-                        width: 1.5,
-                      ),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey.shade200,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 9,
-                        ),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text(
-                        "Close",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    final name = _newTemplateNameController.text.trim();
+                    if (name.isNotEmpty) {
+                      Navigator.pop(context);
+                      _addNewTemplate(name);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 32,
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        final name = _newTemplateNameController.text.trim();
-                        if (name.isNotEmpty) {
-                          Navigator.pop(ctx);
-                          _addNewTemplate(name);
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade700,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 9,
-                        ),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text(
-                        "Submit",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                  ],
+                  ),
+                  child: const Text(
+                    "Submit",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
+          ],
         );
       },
     );
@@ -1130,125 +1244,102 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
   void _showAddDepartmentDialog() {
     _newDepartmentNameController.clear();
-    showDialog(
+    StylishDialog.show(
       context: context,
-      builder: (ctx) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 400,
-            vertical: 320,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      title: "ADD NEW DEPARTMENT",
+      subtitle: "Define a new department for your organization.",
+      maxWidth: 480,
+      builder: (ctx, setPopupState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextFormField(
+              controller: _newDepartmentNameController,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+              decoration: InputDecoration(
+                hintText: "Enter the department name",
+                hintStyle: const TextStyle(
+                  fontSize: 12, 
+                  color: Color(0xFF94A3B8),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFCBD5E1),
+                    width: 1.2,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF334155),
+                    width: 1.6,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const Text(
-                  "ADD NEW DEPARTMENT",
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                    letterSpacing: 0.8,
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 20,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _newDepartmentNameController,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: "Enter the department name",
-                    hintStyle: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey.shade50,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(
-                        color: Colors.blue,
-                        width: 1.5,
-                      ),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey.shade200,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 9,
-                        ),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text(
-                        "Close",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    final name = _newDepartmentNameController.text.trim();
+                    if (name.isNotEmpty) {
+                      Navigator.pop(context);
+                      _addNewDepartment(name);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 32,
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        final name = _newDepartmentNameController.text.trim();
-                        if (name.isNotEmpty) {
-                          Navigator.pop(ctx);
-                          _addNewDepartment(name);
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade700,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 9,
-                        ),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text(
-                        "Submit",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                  ],
+                  ),
+                  child: const Text(
+                    "Submit",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
+          ],
         );
       },
     );
