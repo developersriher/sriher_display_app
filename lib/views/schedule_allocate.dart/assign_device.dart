@@ -335,7 +335,7 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
     );
   }
 
-  Widget _buildDropdown({
+ Widget _buildDropdown({
     required String label,
     required String hint,
     int? value,
@@ -350,7 +350,7 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
-            color: Colors.blueAccent,
+            color: Color(0xFF64748B), // ← changed from Colors.blueAccent
           ),
         ),
         const SizedBox(height: 8),

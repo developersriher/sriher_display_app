@@ -303,8 +303,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       title: _editingId == null
           ? "Create Default Template"
           : "Edit Default Template",
-      subtitle:
-          "Assign a default template to a device type",
+      subtitle: "Assign a default template to a device type",
       subtitleStyle: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
       maxWidth: 480,
       builder: (context, setDialogState) {
@@ -373,7 +372,9 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                     ),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(
+                        4,
+                      ), // ← was 16, now sharp
                     ),
                   ),
                   child: _isSubmitting
@@ -599,38 +600,47 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     String hint,
     Function(String?) onChanged,
   ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(8),
+    return DropdownButtonFormField<String>(
+      value: items.any((i) => i[idKey].toString() == value) ? value : null,
+      isDense: true,
+      menuMaxHeight: 300,
+      dropdownColor: Colors.white,
+      hint: Text(
+        hint,
+        style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          isExpanded: true,
-          dropdownColor: Colors.white,
-          value: items.any((i) => i[idKey].toString() == value) ? value : null,
-          hint: Text(
-            hint,
-            style: const TextStyle(fontSize: 13, color: Colors.black45),
-          ),
-          style: const TextStyle(color: Colors.black87),
-          menuMaxHeight: 300,
-          alignment:
-              AlignmentDirectional.topStart, // Helps keep menu below the button
-          items: items.map((item) {
-            return DropdownMenuItem<String>(
-              value: item[idKey].toString(),
-              child: Text(
-                item[nameKey] ?? "",
-                style: const TextStyle(fontSize: 13, color: Colors.black87),
-              ),
-            );
-          }).toList(),
-          onChanged: onChanged,
+      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+      decoration: InputDecoration(
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 10,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
         ),
       ),
+      items: items.map((item) {
+        return DropdownMenuItem<String>(
+          value: item[idKey].toString(),
+          child: Text(
+            item[nameKey] ?? "",
+            style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+          ),
+        );
+      }).toList(),
+      onChanged: onChanged,
     );
   }
 

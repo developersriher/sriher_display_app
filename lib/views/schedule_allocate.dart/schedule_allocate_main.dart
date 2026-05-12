@@ -477,24 +477,23 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                 Row(
                   children: [
                     Expanded(
-                      child: _buildDropdownField(
+                      child: _buildDropdown(
+                        label: "Schedule Name",
                         hint: "Select Schedule Name",
                         value: selectedScheduleId,
                         items: scheduleList,
-                        label: "Schedule Name",
+                        showAdd: true,
                         onChanged: (val) =>
                             setState(() => selectedScheduleId = val),
                       ),
                     ),
-                    const SizedBox(width: 15),
-                    _buildCircularAddButton(),
                     const SizedBox(width: 25),
                     Expanded(
-                      child: _buildDropdownField(
+                      child: _buildDropdown(
+                        label: "Template Name",
                         hint: "Select Template Name",
                         value: selectedTemplateId,
                         items: templateList,
-                        label: "Template Name",
                         onChanged: (val) {
                           setState(() {
                             selectedTemplateId = val;
@@ -815,12 +814,13 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     );
   }
 
-  Widget _buildDropdownField({
+  Widget _buildDropdown({
+    required String label,
     required String hint,
     int? value,
     required List<dynamic> items,
-    required String label,
-    required Function(int?) onChanged,
+    bool showAdd = false,
+    required ValueChanged<int?> onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -828,47 +828,66 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         Text(
           label,
           style: const TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 12.0,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
             color: Color(0xFF64748B),
-            letterSpacing: 0.5,
           ),
         ),
         const SizedBox(height: 8),
-        DropdownButtonFormField<int>(
-          value: value,
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(color: Colors.black38, fontSize: 11.0),
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 12,
-            ),
-          ),
-          dropdownColor: Colors.white,
-          isExpanded: true,
-          onChanged: onChanged,
-          items: items.map((e) {
-            final id = int.tryParse(e['id'].toString());
-            final name = e['schedule_name'] ?? e['temp_name'] ?? '';
-            return DropdownMenuItem<int>(
-              value: id,
-              child: Text(
-                name,
-                style: const TextStyle(fontSize: 11.0, color: Colors.black87),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: value,
+                    hint: Text(
+                      hint,
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 14,
+                      ),
+                    ),
+                    isExpanded: true,
+                    dropdownColor: Colors.white,
+                    onChanged: onChanged,
+                    items: items.map((e) {
+                      final id = int.tryParse(e['id'].toString());
+                      final name =
+                          e['schedule_name'] ??
+                          e['temp_name'] ??
+                          e['name'] ??
+                          '';
+                      return DropdownMenuItem<int>(
+                        value: id,
+                        child: Text(name, style: const TextStyle(fontSize: 14)),
+                      );
+                    }).toList(),
+                  ),
+                ),
               ),
-            );
-          }).toList(),
+            ),
+            if (showAdd) ...[
+              const SizedBox(width: 8),
+              IconButton.filled(
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.blue.shade50,
+                  foregroundColor: Colors.blue.shade600,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: _showSchedulePopup,
+                icon: const Icon(Icons.add, size: 20),
+              ),
+            ],
+          ],
         ),
       ],
     );
@@ -940,22 +959,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     );
   }
 
-  Widget _buildCircularAddButton() {
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade100,
-        shape: BoxShape.circle,
-      ),
-      child: IconButton(
-        iconSize: 18,
-        padding: const EdgeInsets.all(4),
-        constraints: const BoxConstraints(),
-        icon: const Icon(Icons.add, color: Colors.blue, size: 16),
-        onPressed: _showSchedulePopup,
-      ),
-    );
-  }
+
 
   Widget _buildDateField(String label, TextEditingController controller) {
     return Column(
@@ -1036,7 +1040,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               ),
               const SizedBox(width: 12),
               SizedBox(
-                width: 65,
+                width: 85,
                 height: 38,
                 child: DropdownButtonFormField<String>(
                   value: entriesValue,

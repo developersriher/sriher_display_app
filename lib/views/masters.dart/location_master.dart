@@ -513,6 +513,9 @@ Widget _buildSmallTextField(String hint, TextEditingController controller) {
             style: const TextStyle(color: Colors.black87),
             decoration: InputDecoration(
               hintText: "Search Locations...",
+              hintStyle: TextStyle(fontSize: 12
+                
+              ),
               prefixIcon: const Icon(Icons.search),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.zero,

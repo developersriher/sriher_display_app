@@ -678,6 +678,7 @@ class _FileUploadViewState extends State<FileUploadView> {
               constraints: BoxConstraints(minWidth: constraints.maxWidth),
               child: DataTable(
                 headingRowHeight: 45,
+                dataRowMaxHeight: 75,
                 headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
                 border: TableBorder.all(color: Colors.grey.shade100),
                 columns: [
@@ -716,9 +717,9 @@ class _FileUploadViewState extends State<FileUploadView> {
         ),
         DataCell(
           Container(
-            width: 40,
-            height: 50,
-            margin: const EdgeInsets.symmetric(vertical: 4),
+            width: 60,
+            height: 60,
+            margin: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
               border: Border.all(color: Colors.grey.shade200),
               color: Colors.grey.shade100,

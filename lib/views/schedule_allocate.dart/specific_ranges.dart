@@ -37,12 +37,14 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
   final TextEditingController _fromDateController = TextEditingController();
   final TextEditingController _toDateController = TextEditingController();
   final TextEditingController _scheduleNameController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void dispose() {
     _fromDateController.dispose();
     _toDateController.dispose();
     _scheduleNameController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -72,16 +74,43 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
       isLoadingTemplates = true;
     });
     try {
-      final response = await http.post(
+      // Fetch Schedules from the main schedule list API
+      final schedRes = await http.post(
+        Uri.parse('$_baseUrl/scheduleMenu_listview'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"api_key": _apiKey}),
+      );
+
+      // Fetch Templates from the schedulerange API
+      final tempRes = await http.post(
         Uri.parse('$_baseUrl/schedulerange_scheduleNamesview'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"api_key": _apiKey}),
       );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+
+      if (schedRes.statusCode == 200) {
+        final schedData = jsonDecode(schedRes.body);
+        final List<dynamic> rawSchedules = schedData['data'] ?? [];
+        
+        // Filter for unique schedule names to avoid dropdown duplicates
+        final Map<String, dynamic> uniqueSchedules = {};
+        for (var item in rawSchedules) {
+          final name = item['schedule_name']?.toString() ?? '';
+          if (name.isNotEmpty && !uniqueSchedules.containsKey(name)) {
+            uniqueSchedules[name] = item;
+          }
+        }
+
         setState(() {
-          scheduleList = data['schedule_names'] ?? [];
-          templateList = data['templates'] ?? [];
+          scheduleList = uniqueSchedules.values.toList();
+        });
+      }
+
+      if (tempRes.statusCode == 200) {
+        final tempData = jsonDecode(tempRes.body);
+        setState(() {
+          // Keep templates from this endpoint
+          templateList = tempData['templates'] ?? [];
         });
       }
     } catch (e) {
@@ -165,130 +194,255 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     }
 
     List<String> tempSelected = List.from(offDates);
+    bool showDateList = false;
 
-    StylishDialog.show(
+  StylishDialog.show(
       context: context,
-      title: "EXCLUDE SPECIFIC DATES",
+      title: "Remove Dates",
+      subtitle: "Select dates to exclude from the schedule.",
       maxWidth: 480,
       builder: (context, setDialogState) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "Select the dates you wish to exclude from this range allocation.",
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+            // Toggle Button
+            GestureDetector(
+              onTap: () {
+                setDialogState(() {
+                  showDateList = !showDateList;
+                });
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: showDateList
+                        ? const Color(0xFF334155)
+                        : const Color(0xFFCBD5E1),
+                    width: showDateList ? 1.6 : 1.2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      showDateList
+                          ? Icons.calendar_month_rounded
+                          : Icons.calendar_today_rounded,
+                      size: 16,
+                      color: const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      showDateList
+                          ? "Hide date list"
+                          : "Select dates to remove",
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF1E293B),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      showDateList
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ],
+                ),
+              ),
             ),
+
+            // Date List
+            if (showDateList) ...[
+              const SizedBox(height: 12),
+              Container(
+                height: 280,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    // Select All Row
+                    Container(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(10),
+                          topRight: Radius.circular(10),
+                        ),
+                      ),
+                      child: CheckboxListTile(
+                        dense: true,
+                        title: const Text(
+                          "Select All Dates",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        value: tempSelected.length == rangeDates.length &&
+                            rangeDates.isNotEmpty,
+                        activeColor: const Color(0xFF0F172A),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            if (val!) {
+                              tempSelected = List.from(rangeDates);
+                            } else {
+                              tempSelected = [];
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                    // Date Items
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: rangeDates.length,
+                        separatorBuilder: (_, __) => const Divider(
+                          height: 1,
+                          color: Color(0xFFE2E8F0),
+                        ),
+                        itemBuilder: (context, index) {
+                          final date = rangeDates[index];
+                          final isSelected = tempSelected.contains(date);
+                          return Container(
+                            color: isSelected
+                                ? const Color(0xFFF1F5F9)
+                                : Colors.transparent,
+                            child: CheckboxListTile(
+                              dense: true,
+                              title: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.calendar_today_rounded,
+                                    size: 13,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    date,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      color: isSelected
+                                          ? const Color(0xFF0F172A)
+                                          : const Color(0xFF334155),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              value: isSelected,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              activeColor: const Color(0xFF0F172A),
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  if (val!) {
+                                    tempSelected.add(date);
+                                  } else {
+                                    tempSelected.remove(date);
+                                  }
+                                });
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    // Selected count badge
+                    if (tempSelected.isNotEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF0F172A),
+                          borderRadius: BorderRadius.only(
+                            bottomLeft: Radius.circular(10),
+                            bottomRight: Radius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          "${tempSelected.length} date${tempSelected.length > 1 ? 's' : ''} selected",
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+
             const SizedBox(height: 24),
             Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Checkbox(
-                  value:
-                      tempSelected.length == rangeDates.length &&
-                      rangeDates.isNotEmpty,
-                  activeColor: const Color(0xFF3B82F6),
-                  onChanged: (val) {
-                    setDialogState(() {
-                      if (val!) {
-                        tempSelected = List.from(rangeDates);
-                      } else {
-                        tempSelected = [];
-                      }
-                    });
+                TextButton(
+                  onPressed: () {
+                    setState(() => skipDates = false);
+                    Navigator.pop(context);
                   },
-                ),
-                const Text(
-                  "Select All Dates",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 20,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              height: 300,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: ListView.separated(
-                itemCount: rangeDates.length,
-                separatorBuilder: (context, index) =>
-                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                itemBuilder: (context, index) {
-                  final date = rangeDates[index];
-                  return CheckboxListTile(
-                    title: Text(
-                      date,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    value: tempSelected.contains(date),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    activeColor: const Color(0xFF3B82F6),
-                    onChanged: (val) {
-                      setDialogState(() {
-                        if (val!)
-                          tempSelected.add(date);
-                        else
-                          tempSelected.remove(date);
-                      });
-                    },
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() => skipDates = false);
-                      Navigator.pop(context);
-                    },
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: const Text(
-                      "Cancel",
-                      style: TextStyle(
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.bold,
-                      ),
+                  child: const Text(
+                    "Close",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        offDates = List.from(tempSelected);
-                        if (offDates.isEmpty) skipDates = false;
-                      });
-                      Navigator.pop(context);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() => offDates = List.from(tempSelected));
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 32,
                     ),
-                    child: const Text(
-                      "Apply Selection",
-                      style: TextStyle(fontWeight: FontWeight.w900),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    "Save",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
                     ),
                   ),
                 ),
@@ -714,7 +868,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           },
         ),
         const Text(
-          "Skip Conflict Dates",
+          "Skip Dates(Between Selected Range)",
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
@@ -725,23 +879,28 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     );
   }
 
-  Widget _buildSubmitButton({bool isFullWidth = false}) {
+ Widget _buildSubmitButton({bool isFullWidth = false}) {
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.blue.shade600,
         foregroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(
-          horizontal: isFullWidth ? 0 : 32,
-          vertical: 20,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 32,
+          vertical: 12,
         ),
-        minimumSize: isFullWidth ? const Size(double.infinity, 0) : null,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
       ),
       onPressed: _handleInsertSlots,
       child: const Text(
-        "SUBMIT ALLOCATION",
-        style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+        "SUBMIT",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+          fontSize: 13,
+        ),
       ),
     );
   }
@@ -849,6 +1008,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              _buildListHeader(),
               _buildTableHeader(),
               if (isLoadingFiles)
                 const SizedBox(
@@ -1046,9 +1206,105 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     );
   }
 
+  Widget _buildListHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              const Text(
+                "Show",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.0,
+                  color: Colors.black54,
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 75,
+                height: 38,
+                child: DropdownButtonFormField<String>(
+                  value: entriesValue,
+                  items: ["10", "25", "50"]
+                      .map(
+                        (e) => DropdownMenuItem(
+                          value: e,
+                          child: Text(
+                            e,
+                            style: const TextStyle(fontSize: 13.0),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => entriesValue = v!),
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                "entries",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.0,
+                  color: Colors.black54,
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              const Text(
+                "Search:",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.0,
+                  color: Colors.black54,
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 200,
+                height: 38,
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: "Search files...",
+                    hintStyle: const TextStyle(fontSize: 12, color: Colors.grey),
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTableFooter() {
-    // Logic to calculate pages based on your actual data
-    int rowsPerPage = 10; // Change this to your actual pagination limit
+    int rowsPerPage = int.tryParse(entriesValue) ?? 10;
     int totalPages = (templateFiles.length / rowsPerPage).ceil();
     if (totalPages == 0) totalPages = 1;
 
@@ -1129,7 +1385,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     );
   }
 
-  Widget _buildDropdown({
+Widget _buildDropdown({
     required String label,
     required String hint,
     int? value,
@@ -1145,7 +1401,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
-            color: Colors.blueAccent,
+            color: Color(0xFF64748B), // ← changed
           ),
         ),
         const SizedBox(height: 8),
@@ -1181,7 +1437,10 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                           '';
                       return DropdownMenuItem<int>(
                         value: id,
-                        child: Text(name, style: const TextStyle(fontSize: 14)),
+                        child: Text(
+                          name,
+                          style: const TextStyle(fontSize: 14),
+                        ),
                       );
                     }).toList(),
                   ),
@@ -1207,8 +1466,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
       ],
     );
   }
-
-  Widget _buildDateField(String label, TextEditingController controller) {
+Widget _buildDateField(String label, TextEditingController controller) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1217,7 +1475,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
-            color: Colors.blueAccent,
+            color: Color.fromARGB(255, 83, 96, 115),
           ),
         ),
         const SizedBox(height: 8),
@@ -1246,13 +1504,14 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
             DateTime? picked = await showDatePicker(
               context: context,
               initialDate: DateTime.now(),
-              firstDate: DateTime(2000),
+              firstDate: DateTime.now(), // ← only today & future clickable
               lastDate: DateTime(2101),
             );
-            if (picked != null)
+            if (picked != null) {
               setState(
                 () => controller.text = DateFormat('yyyy-MM-dd').format(picked),
               );
+            }
           },
         ),
       ],

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
@@ -229,7 +230,7 @@ class _AddUserViewState extends State<AddUserView> {
     );
   }
 
-  void _showFormDialog() {
+void _showFormDialog() {
     StylishDialog.show(
       context: context,
       title: editingDatabaseId == null ? "Add User" : "Edit User",
@@ -266,73 +267,70 @@ class _AddUserViewState extends State<AddUserView> {
         ),
       ),
       actions: [
-        Expanded(
-          child: TextButton(
-            onPressed: () {
-              _resetForm();
-              Navigator.pop(context);
-            },
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+        TextButton(
+          onPressed: () {
+            _resetForm();
+            Navigator.pop(context);
+          },
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(
+              vertical: 12,
+              horizontal: 20,
             ),
-            child: const Text(
-              "Cancel",
-              style: TextStyle(
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.bold,
-              ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          child: const Text(
+            "Cancel",
+            style: TextStyle(
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
             ),
           ),
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          flex: 2,
-          child: StatefulBuilder(
-            builder: (context, setBtnState) {
-              return ElevatedButton(
-                onPressed: isSubmitting
-                    ? null
-                    : () async {
-                        setBtnState(() => isSubmitting = true);
-                        await handleSubmit();
-                        if (mounted) Navigator.pop(context);
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 32,
-                  ),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+        const SizedBox(width: 12),
+        StatefulBuilder(
+          builder: (context, setBtnState) {
+            return ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      setBtnState(() => isSubmitting = true);
+                      await handleSubmit();
+                      if (mounted) Navigator.pop(context);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 32,
                 ),
-                child: isSubmitting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        editingDatabaseId == null
-                            ? "Create User Account"
-                            : "Update",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                        ),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
                       ),
-              );
-            },
-          ),
+                    )
+                  : Text(
+                      editingDatabaseId == null ? "Submit" : "Update",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
+                    ),
+            );
+          },
         ),
       ],
     );
@@ -474,30 +472,30 @@ class _AddUserViewState extends State<AddUserView> {
       validator: (v) =>
           (v == null || v.trim().isEmpty) ? "Enter user id" : null,
       style: const TextStyle(
-        fontSize: 14,
-        color: Colors.black,
-        fontWeight: FontWeight.w600,
+        fontSize: 13,
+        color: Color(0xFF475569),
       ),
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       decoration: InputDecoration(
         hintText: "User ID",
-        hintStyle: const TextStyle(fontSize: 13, color: Colors.black38),
+        hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: const BorderSide(color: Colors.black45, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: const BorderSide(color: Colors.black45, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: Colors.blue.shade700, width: 2),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: const BorderSide(color: Colors.red, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
@@ -555,7 +553,7 @@ class _AddUserViewState extends State<AddUserView> {
   }
 
   // ── Generic text input ────────────────────────────────────────────────────
-  Widget _buildInput(
+Widget _buildInput(
     String hint,
     TextEditingController c, {
     bool isPass = false,
@@ -566,34 +564,48 @@ class _AddUserViewState extends State<AddUserView> {
       obscureText: isPass,
       validator: validator,
       style: const TextStyle(
-        fontSize: 14,
-        color: Colors.black,
-        fontWeight: FontWeight.w600,
+        fontSize: 13,
+        color: Color(0xFF475569),
       ),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(fontSize: 13, color: Colors.black38),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: const BorderSide(color: Colors.black45, width: 1.5),
+        hintStyle: const TextStyle(
+          fontSize: 13,
+          color: Color(0xFF94A3B8),
         ),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: const BorderSide(color: Colors.black45, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFFCBD5E1),
+            width: 1.2,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: Colors.blue.shade700, width: 2),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFF334155),
+            width: 1.6,
+          ),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: const BorderSide(color: Colors.red, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFFEF4444),
+            width: 1.2,
+          ),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFFCBD5E1),
+            width: 1.2,
+          ),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
-          vertical: 16,
+          vertical: 14,
         ),
       ),
     );
@@ -604,26 +616,25 @@ class _AddUserViewState extends State<AddUserView> {
       value: selectedRoleId,
       dropdownColor: Colors.white,
       style: const TextStyle(
-        fontSize: 14,
-        color: Colors.black,
-        fontWeight: FontWeight.w600,
+        fontSize: 13,
+        color: Color(0xFF475569),
       ),
       decoration: InputDecoration(
         hintText: "Select Role",
-        hintStyle: const TextStyle(fontSize: 13, color: Colors.black38),
+        hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: const BorderSide(color: Colors.black45, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: const BorderSide(color: Colors.black45, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: Colors.blue.shade700, width: 2),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
@@ -637,8 +648,8 @@ class _AddUserViewState extends State<AddUserView> {
               child: Text(
                 r['role_name'] ?? '',
                 style: const TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF475569),
+                  fontWeight: FontWeight.normal,
                 ),
               ),
             ),
@@ -753,14 +764,19 @@ class _AddUserViewState extends State<AddUserView> {
             const Text(" entries", style: TextStyle(fontSize: 14)),
           ],
         ),
-        SizedBox(
+       SizedBox(
           width: 250,
           child: TextField(
             controller: _searchController,
             onChanged: (v) => setState(() => searchQuery = v),
+            style: const TextStyle(fontSize: 12),
             decoration: InputDecoration(
               hintText: "Search ID or Name...",
-              prefixIcon: const Icon(Icons.search, size: 20),
+              hintStyle: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF94A3B8),
+              ),
+              prefixIcon: const Icon(Icons.search, size: 16),
               contentPadding: const EdgeInsets.symmetric(vertical: 0),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.zero,

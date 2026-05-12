@@ -51,6 +51,7 @@ class _RoleViewState extends State<RoleView>
   bool isLoading = true;
   String entriesValue = "10";
   String searchQuery = "";
+  int currentPage = 0;
   final TextEditingController _searchController = TextEditingController();
 
   // ── form state ──
@@ -118,7 +119,8 @@ class _RoleViewState extends State<RoleView>
     StylishDialog.show(
       context: context,
       title: "Service Unavailable",
-      subtitle: "The backend server is currently unreachable or returned an error. Please try again later.",
+      subtitle:
+          "The backend server is currently unreachable or returned an error. Please try again later.",
       icon: Icons.cloud_off,
       maxWidth: 400,
       builder: (context, setPopupState) {
@@ -133,7 +135,10 @@ class _RoleViewState extends State<RoleView>
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: const Text("OK", style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text(
+              "OK",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         );
       },
@@ -145,7 +150,7 @@ class _RoleViewState extends State<RoleView>
     final id = int.tryParse(role['id']?.toString() ?? '');
     if (id == null) return;
 
-    setState(() => isLoading = true); // Added loading state for fetch
+    setState(() => isLoading = true);
     try {
       final res = await http
           .post(
@@ -164,7 +169,6 @@ class _RoleViewState extends State<RoleView>
             ? payload[0]
             : payload;
 
-        // Parse privileges — may come as List<String>, List<Map>, or comma-separated string
         final rawPrivs = r['previliges'] ?? r['privileges'] ?? [];
         final Set<String> privSet = {};
         if (rawPrivs is List) {
@@ -210,7 +214,6 @@ class _RoleViewState extends State<RoleView>
         setState(() => isLoading = false);
       }
     } catch (_) {
-      // Fallback: use row data we already have
       if (!mounted) return;
       setState(() {
         editingId = id;
@@ -218,12 +221,11 @@ class _RoleViewState extends State<RoleView>
         _selectedPrivs.clear();
         isLoading = false;
       });
-      _showRoleDialog(); // Open dialog even on fallback
+      _showRoleDialog();
       _snack("Could not load role details.", isError: true);
     }
   }
 
-  /// POST /createRoleview or /updateRoleview
   Future<void> handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedPrivs.isEmpty) {
@@ -256,50 +258,26 @@ class _RoleViewState extends State<RoleView>
 
       if (res.statusCode == 200) {
         if (!mounted) return;
-        // Decode response to get the saved/updated role data if available
-        final resData = jsonDecode(res.body);
-        final payload = resData is Map && resData.containsKey('data')
-            ? resData['data']
-            : resData;
-        // Build a role map to insert at the top of the list
-        final newRole = {
-          'id': isUpdate
-              ? editingId.toString()
-              : (payload is Map
-                  ? (payload['id'] ?? payload['role_id'] ?? '').toString()
-                  : ''),
-          'role_name': _roleNameController.text.trim(),
-        };
         _snack(isUpdate ? "Role updated!" : "Role created!");
         _resetForm();
         if (Navigator.canPop(context)) Navigator.pop(context);
-        // Insert/move the new or updated entry to the top of the list
-        setState(() {
-          if (isUpdate) {
-            allRoles.removeWhere(
-              (r) => r['id']?.toString() == newRole['id'],
-            );
-          }
-          if (newRole['id'] != null && newRole['id']!.isNotEmpty) {
-            allRoles.insert(0, newRole);
-          } else {
-            // Fallback: full refresh if we couldn't get an ID
-            fetchRoles();
-          }
-        });
+        fetchRoles();
       } else {
         if (!mounted) return;
-        _snack("Server error (${res.statusCode}). Try again.", isError: true);
+        final resData = jsonDecode(res.body);
+        final errorMsg = resData is Map
+            ? (resData['message'] ?? resData['error'] ?? "Server error")
+            : "Server error";
+        _snack("$errorMsg (${res.statusCode}).", isError: true);
       }
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      _snack("Connection failed. Check network.", isError: true);
+      _snack("Connection failed: $e", isError: true);
     } finally {
       if (mounted) setState(() => isSubmitting = false);
     }
   }
 
-  /// POST /deleteRoleview — with confirmation dialog
   Future<void> deleteRole(dynamic role) async {
     final id = int.tryParse(role['id']?.toString() ?? '');
     if (id == null) return;
@@ -410,27 +388,21 @@ class _RoleViewState extends State<RoleView>
     );
   }
 
-  // ──────────────────────────── POPUP DIALOG ────────────────────────────────
+  void _showRoleDialog() {
+    final Set<String> snapPrivs = Set<String>.from(_selectedPrivs);
 
-void _showRoleDialog() {
-  final Set<String> snapPrivs = Set<String>.from(_selectedPrivs);
-
-  StylishDialog.show(
-    context: context,
-    title: editingId == null ? "Create Roles" : "Edit Role Details",
-    subtitle: "Configure system permissions and access levels",
-    subtitleStyle: const TextStyle(
-    fontSize: 12,
-    color: Color(0xFFCBD5E1),
-  ),
-    icon: editingId == null ? Icons.add_moderator : Icons.edit_note_rounded,
-    width: MediaQuery.of(context).size.width * 0.6,
-    builder: (context, setDialogState) {
-      return _buildRoleFormDialog(setDialogState, snapPrivs);
-    },
-  );
-}
-  // ──────────────────────────── BUILD ──────────────────────────────────────
+    StylishDialog.show(
+      context: context,
+      title: editingId == null ? "Create Roles" : "Edit Role Details",
+      subtitle: "Configure system permissions and access levels",
+      subtitleStyle: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
+      icon: editingId == null ? Icons.add_moderator : Icons.edit_note_rounded,
+      width: MediaQuery.of(context).size.width * 0.6,
+      builder: (context, setDialogState) {
+        return _buildRoleFormDialog(setDialogState, snapPrivs);
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -443,7 +415,18 @@ void _showRoleDialog() {
                     .contains(searchQuery.toLowerCase()),
               )
               .toList();
-    final paged = filtered.take(limit).toList();
+
+    final int totalPages = (filtered.length / limit).ceil();
+    if (currentPage >= totalPages && totalPages > 0) {
+      currentPage = totalPages - 1;
+    }
+    final int start = currentPage * limit;
+    final int end = (start + limit > filtered.length)
+        ? filtered.length
+        : start + limit;
+    final paged = (filtered.isEmpty || start >= filtered.length)
+        ? []
+        : filtered.sublist(start, end);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -479,7 +462,7 @@ void _showRoleDialog() {
                     ),
                     ElevatedButton.icon(
                       onPressed: () {
-                        _resetForm(); // ensure clean state for create
+                        _resetForm();
                         _showRoleDialog();
                       },
                       icon: const Icon(Icons.add_moderator, size: 20),
@@ -501,10 +484,10 @@ void _showRoleDialog() {
                       ? const Center(child: CircularProgressIndicator())
                       : paged.isEmpty
                       ? const Center(child: Text("No roles found."))
-                      : _buildTableContainer(paged, filtered.length),
+                      : _buildTableContainer(paged, filtered.length, limit),
                 ),
                 const SizedBox(height: 20),
-                _buildFooter(paged.length, filtered.length),
+                _buildFooter(paged.length, filtered.length, limit),
               ],
             ),
           ),
@@ -513,7 +496,11 @@ void _showRoleDialog() {
     );
   }
 
-  Widget _buildTableContainer(List<dynamic> paged, int totalFiltered) {
+  Widget _buildTableContainer(
+    List<dynamic> paged,
+    int totalFiltered,
+    int limit,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         return Container(
@@ -544,7 +531,10 @@ void _showRoleDialog() {
                   rows: paged
                       .asMap()
                       .entries
-                      .map((e) => _buildRow(e.key + 1, e.value))
+                      .map(
+                        (e) =>
+                            _buildRow(currentPage * limit + e.key + 1, e.value),
+                      )
                       .toList(),
                 ),
               ),
@@ -555,23 +545,19 @@ void _showRoleDialog() {
     );
   }
 
-  Widget _buildFooter(int pagedCount, int totalCount) {
+  Widget _buildFooter(int pagedCount, int totalCount, int limit) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          "Showing $pagedCount of $totalCount entries",
+          "Showing ${totalCount == 0 ? 0 : currentPage * limit + 1} to ${currentPage * limit + pagedCount} of $totalCount entries",
           style: const TextStyle(color: Colors.grey, fontSize: 13),
         ),
-        _buildPagination(),
+        _buildPagination(totalCount, limit),
       ],
     );
   }
 
-  // (Removed _buildFullViewEdit as it is no longer needed)
-
-  /// Dialog-scoped form that owns a local copy of selected privileges
-  /// so checkboxes reflect the pre-loaded edit data immediately.
   Widget _buildRoleFormDialog(
     StateSetter setDialogState,
     Set<String> localPrivs,
@@ -611,10 +597,7 @@ void _showRoleDialog() {
             padding: const EdgeInsets.all(12.0),
             child: Text(
               section,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
             ),
           ),
           Padding(
@@ -634,10 +617,7 @@ void _showRoleDialog() {
                               MaterialTapTargetSize.shrinkWrap,
                           activeColor: const Color(0xFF0F172A),
                         ),
-                        Text(
-                          p.name,
-                          style: const TextStyle(fontSize: 12),
-                        ),
+                        Text(p.name, style: const TextStyle(fontSize: 12)),
                         const SizedBox(width: 8),
                       ],
                     ),
@@ -743,7 +723,6 @@ void _showRoleDialog() {
           ),
           const SizedBox(height: 24),
 
-          // Action Buttons
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -771,36 +750,42 @@ void _showRoleDialog() {
                 ),
               ),
               const SizedBox(width: 12),
-              ElevatedButton(
-                onPressed: isSubmitting ? null : handleSubmit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 10,
-                    horizontal: 32,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                child: isSubmitting
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        editingId == null ? "Save" : "Update",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
+              StatefulBuilder(
+                builder: (context, setBtnState) {
+                  return ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            setBtnState(() => {});
+                            await handleSubmit();
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 32,
                       ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            editingId == null ? "Submit" : "Update",
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                  );
+                },
               ),
             ],
           ),
@@ -808,7 +793,6 @@ void _showRoleDialog() {
       ),
     );
   }
-  // ──────────────────────────── UI HELPERS ─────────────────────────────────
 
   DataColumn _buildCol(String label) {
     return DataColumn(
@@ -841,7 +825,7 @@ void _showRoleDialog() {
         DataCell(
           IconButton(
             icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-            tooltip: "Edit  ",
+            tooltip: "Edit",
             onPressed: () => loadForEdit(role),
           ),
         ),
@@ -894,7 +878,10 @@ void _showRoleDialog() {
                 items: ["10", "25", "50"]
                     .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                     .toList(),
-                onChanged: (v) => setState(() => entriesValue = v!),
+                onChanged: (v) => setState(() {
+                  entriesValue = v!;
+                  currentPage = 0;
+                }),
               ),
             ),
             const SizedBox(width: 8),
@@ -913,7 +900,10 @@ void _showRoleDialog() {
           height: 38,
           child: TextField(
             controller: _searchController,
-            onChanged: (val) => setState(() => searchQuery = val),
+            onChanged: (val) => setState(() {
+              searchQuery = val;
+              currentPage = 0;
+            }),
             decoration: InputDecoration(
               hintText: 'Search roles...',
               hintStyle: const TextStyle(
@@ -943,54 +933,94 @@ void _showRoleDialog() {
     );
   }
 
- Widget _buildPagination() {
-  return Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      // Only the first button gets left rounded corners
-      _pageBtn("Prev", position: "first"),
-      _pageBtn("1", active: true, position: "middle"),
-      _pageBtn("2", position: "middle"), // Example of an extra page
-      // Only the last button gets right rounded corners
-      _pageBtn("Next", position: "last"),
-    ],
-  );
-}
- Widget _pageBtn(String label, {bool active = false, String position = "middle"}) {
-  // Define border radius based on position to keep the bar look
-  BorderRadius borderRadius;
-  if (position == "first") {
-    borderRadius = const BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(6));
-  } else if (position == "last") {
-    borderRadius = const BorderRadius.only(topRight: Radius.circular(6), bottomRight: Radius.circular(6));
-  } else {
-    borderRadius = BorderRadius.zero; // Square edges for middle buttons
+  Widget _buildPagination(int totalCount, int limit) {
+    int totalPages = (totalCount / limit).ceil();
+    if (totalPages <= 1) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _pageBtn(
+          "Prev",
+          onTap: currentPage > 0 ? () => setState(() => currentPage--) : null,
+          position: "first",
+        ),
+        ...List.generate(totalPages, (index) {
+          if (totalPages > 5) {
+            if (index != 0 &&
+                index != totalPages - 1 &&
+                (index < currentPage - 1 || index > currentPage + 1)) {
+              if (index == currentPage - 2 || index == currentPage + 2) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Text("..."),
+                );
+              }
+              return const SizedBox.shrink();
+            }
+          }
+          return _pageBtn(
+            "${index + 1}",
+            active: currentPage == index,
+            onTap: () => setState(() => currentPage = index),
+            position: index == 0
+                ? "first"
+                : (index == totalPages - 1 ? "last" : "middle"),
+          );
+        }),
+        _pageBtn(
+          "Next",
+          onTap: currentPage < totalPages - 1
+              ? () => setState(() => currentPage++)
+              : null,
+          position: "last",
+        ),
+      ],
+    );
   }
 
-  return Container(
-    // REMOVED: margin: const EdgeInsets.symmetric(horizontal: 4),
-    child: OutlinedButton(
+  Widget _pageBtn(
+    String label, {
+    bool active = false,
+    VoidCallback? onTap,
+    String position = "middle",
+  }) {
+    BorderRadius borderRadius;
+    if (position == "first") {
+      borderRadius = const BorderRadius.only(
+        topLeft: Radius.circular(6),
+        bottomLeft: Radius.circular(6),
+      );
+    } else if (position == "last") {
+      borderRadius = const BorderRadius.only(
+        topRight: Radius.circular(6),
+        bottomRight: Radius.circular(6),
+      );
+    } else {
+      borderRadius = BorderRadius.zero;
+    }
+
+    return OutlinedButton(
       style: OutlinedButton.styleFrom(
         backgroundColor: active ? Colors.blue : Colors.white,
-        foregroundColor: active ? Colors.white : Colors.black87,
-        // Use a slightly thinner side to prevent thick double borders
+        foregroundColor: active
+            ? Colors.white
+            : (onTap == null ? Colors.grey : Colors.black87),
         side: BorderSide(
           color: active ? Colors.blue : Colors.grey.shade300,
-          width: 0.8, 
+          width: 0.8,
         ),
-        padding: EdgeInsets.symmetric(horizontal: label.length > 1 ? 15 : 12),
-        minimumSize: const Size(40, 36),
+        padding: EdgeInsets.symmetric(horizontal: label.length > 1 ? 12 : 8),
+        minimumSize: const Size(36, 36),
         shape: RoundedRectangleBorder(borderRadius: borderRadius),
-        // Remove standard button elevation and overlay to keep it flat
         elevation: 0,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
-      onPressed: () {},
+      onPressed: onTap,
       child: Text(
         label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
       ),
-    ),
-  );
+    );
+  }
 }
-    }
