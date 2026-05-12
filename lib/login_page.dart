@@ -190,10 +190,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           });
         }
       } else {
-        setState(() => _errorMessage = "Server error: ${response.statusCode}");
+        setState(() {
+          if (response.statusCode == 0) {
+            _errorMessage = "Network error or CORS policy blocking the request. Please check your connection.";
+          } else {
+            _errorMessage = "Server error: ${response.statusCode}";
+          }
+        });
       }
     } catch (e) {
-      _showError('Connection failed: $e');
+      String msg = e.toString();
+      if (msg.contains('Failed to fetch') || msg.contains('XMLHttpRequest')) {
+        _showError('Connection blocked by CORS or Network issue. Ensure you are using the HTML renderer.');
+      } else {
+        _showError('Connection failed: $e');
+      }
     } finally {
       if (mounted) setState(() => _isLoggingIn = false);
     }

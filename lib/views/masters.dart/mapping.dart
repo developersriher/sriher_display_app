@@ -850,25 +850,29 @@ class _MappingViewState extends State<MappingView> {
   InputDecoration _inputDec(String label) => InputDecoration(
     hintText: label,
     hintStyle: const TextStyle(
-      color: Color(0xFF64748B),
-      fontSize: 13,
-      fontWeight: FontWeight.w500,
+      color: Color(0xFF94A3B8),
+      fontSize: 12,
     ),
     filled: true,
     fillColor: const Color(0xFFF8FAFC),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: Colors.grey.shade600),
-    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: Colors.grey.shade600),
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(
+        color: Color(0xFFCBD5E1),
+        width: 1.2,
+      ),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.zero,
-      borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(
+        color: Color(0xFF334155),
+        width: 1.6,
+      ),
     ),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+    ),
   );
 
   InputDecoration _hintDec(String hint) => _inputDec(hint);

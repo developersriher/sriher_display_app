@@ -803,22 +803,36 @@ class _FileUploadViewState extends State<FileUploadView> {
     TextEditingController ctrl, {
     int maxLines = 1,
   }) {
-    return TextField(
+    return TextFormField(
       controller: ctrl,
       maxLines: maxLines,
-      style: const TextStyle(color: Colors.black87),
+      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(fontSize: 13, color: Colors.black54),
-        border: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.grey.shade400),
+        labelStyle: const TextStyle(
+          fontSize: 12,
+          color: Color(0xFF94A3B8),
         ),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
         enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFFCBD5E1),
+            width: 1.2,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.blue.shade400, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFF334155),
+            width: 1.6,
+          ),
         ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         alignLabelWithHint: true,
       ),
     );
