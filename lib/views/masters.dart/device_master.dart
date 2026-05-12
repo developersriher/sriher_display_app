@@ -850,16 +850,34 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 color: Colors.black87,
               ),
             ),
+            const SizedBox(width: 6),
             SizedBox(
-              width: 70,
+              width:70,
               height: 35,
               child: DropdownButtonFormField<String>(
                 value: entriesValue,
                 dropdownColor: Colors.white,
                 style: const TextStyle(color: Colors.black87, fontSize: 13),
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 5),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                 ),
                 items: ["10", "25", "50"]
                     .map((v) => DropdownMenuItem(value: v, child: Text(v)))
@@ -867,6 +885,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 onChanged: (v) => setState(() => entriesValue = v!),
               ),
             ),
+            const SizedBox(width: 6),
             const Text(
               " entries",
               style: TextStyle(
@@ -886,18 +905,36 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 // TODO: Implement actual filtering
               });
             },
+            style: const TextStyle(fontSize: 12, color: Colors.black87),
             decoration: InputDecoration(
               hintText: "Search Devices...",
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF94A3B8),
+              ),
+              prefixIcon: const Icon(Icons.search, size: 16),
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
             ),
           ),
         ),
       ],
     );
   }
-
   Widget _buildTableFooter() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -506,7 +506,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
     );
   }
 
-  Widget _buildListHeader() {
+ Widget _buildListHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -520,19 +520,42 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            DropdownButton<String>(
-              value: entriesValue,
-              dropdownColor: Colors.white,
-              style: const TextStyle(color: Colors.black87, fontSize: 13),
-              items: ["10", "25", "50"]
-                  .map(
-                    (v) => DropdownMenuItem<String>(value: v, child: Text(v)),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() {
-                entriesValue = v!;
-                currentPage = 1;
-              }),
+            SizedBox(
+              width: 70,
+              height: 35,
+              child: DropdownButtonFormField<String>(
+                value: entriesValue,
+                dropdownColor: Colors.white,
+                style: const TextStyle(color: Colors.black87, fontSize: 13),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                ),
+                items: ["10", "25", "50"]
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                    .toList(),
+                onChanged: (v) => setState(() {
+                  entriesValue = v!;
+                  currentPage = 1;
+                }),
+              ),
             ),
             const Text(
               " entries",
@@ -549,14 +572,30 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
           height: 40,
           child: TextField(
             controller: _searchController,
-            style: const TextStyle(color: Colors.black87),
+            style: const TextStyle(color: Colors.black87, fontSize: 12),
             decoration: InputDecoration(
               hintText: "Search templates...",
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF94A3B8),
               ),
-              prefixIcon: const Icon(Icons.search),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+              prefixIcon: const Icon(Icons.search, size: 16),
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
             ),
           ),
         ),

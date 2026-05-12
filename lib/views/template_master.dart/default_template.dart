@@ -644,7 +644,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     );
   }
 
-  Widget _buildTableControls() {
+ Widget _buildTableControls() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -665,9 +665,26 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                 value: _entriesValue,
                 dropdownColor: Colors.white,
                 style: const TextStyle(color: Colors.black87, fontSize: 13),
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 5),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                 ),
                 items: ["10", "25", "50"]
                     .map((v) => DropdownMenuItem(value: v, child: Text(v)))
@@ -697,12 +714,30 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
               _searchQuery = v;
               _currentPage = 1;
             }),
-            style: const TextStyle(color: Colors.black87, fontSize: 13),
+            style: const TextStyle(color: Colors.black87, fontSize: 12),
             decoration: InputDecoration(
               hintText: "Search devices...",
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF94A3B8),
+              ),
+              prefixIcon: const Icon(Icons.search, size: 16),
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
             ),
           ),
         ),

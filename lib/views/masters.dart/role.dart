@@ -840,7 +840,7 @@ class _RoleViewState extends State<RoleView>
     );
   }
 
-  Widget _buildListHeader() {
+ Widget _buildListHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -854,25 +854,33 @@ class _RoleViewState extends State<RoleView>
                 color: Color(0xFF64748B),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             SizedBox(
-              width: 80,
+              width: 70,
               height: 38,
               child: DropdownButtonFormField<String>(
                 value: entriesValue,
                 dropdownColor: Colors.white,
                 style: const TextStyle(color: Colors.black87, fontSize: 13),
                 decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                  isDense: true,
                   filled: true,
                   fillColor: const Color(0xFFF8FAFC),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
+                    borderRadius: BorderRadius.circular(4),
                     borderSide: BorderSide(color: Colors.grey.shade200),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
+                    borderRadius: BorderRadius.circular(4),
                     borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
                   ),
                 ),
                 items: ["10", "25", "50"]
@@ -884,7 +892,7 @@ class _RoleViewState extends State<RoleView>
                 }),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             const Text(
               " entries",
               style: TextStyle(
@@ -904,28 +912,34 @@ class _RoleViewState extends State<RoleView>
               searchQuery = val;
               currentPage = 0;
             }),
+            style: const TextStyle(fontSize: 12, color: Colors.black87),
             decoration: InputDecoration(
               hintText: 'Search roles...',
               hintStyle: const TextStyle(
                 color: Color(0xFF94A3B8),
-                fontSize: 13,
+                fontSize: 12,
               ),
               prefixIcon: const Icon(
                 Icons.search,
-                size: 18,
+                size: 16,
                 color: Color(0xFF94A3B8),
               ),
+              isDense: true,
               filled: true,
               fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
+                borderRadius: BorderRadius.circular(4),
                 borderSide: BorderSide(color: Colors.grey.shade200),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
+                borderRadius: BorderRadius.circular(4),
                 borderSide: BorderSide(color: Colors.grey.shade200),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
             ),
           ),
         ),

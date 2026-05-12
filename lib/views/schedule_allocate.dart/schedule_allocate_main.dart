@@ -520,6 +520,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                         "From Time",
                         _fromTimeController,
                         enabled: _fromDateController.text.isNotEmpty,
+                        
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -851,7 +852,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                       hint,
                       style: TextStyle(
                         color: Colors.grey.shade400,
-                        fontSize: 14,
+                        fontSize: 12,
                       ),
                     ),
                     isExpanded: true,
@@ -919,10 +920,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               : null,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(
-              color: enabled ? Colors.black38 : Colors.grey.shade400,
-              fontSize: 13.0,
-            ),
+           hintStyle: TextStyle(
+  color: enabled ? Colors.black38 : Colors.grey.shade400,
+  fontSize: 11.0,  
+),
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(
@@ -1044,6 +1045,29 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                 height: 38,
                 child: DropdownButtonFormField<String>(
                   value: entriesValue,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                  ),
                   items: ["10", "25", "50"]
                       .map(
                         (e) => DropdownMenuItem(
@@ -1056,15 +1080,6 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                       )
                       .toList(),
                   onChanged: (val) => setState(() => entriesValue = val!),
-                  decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1082,21 +1097,30 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             width: 180,
             height: 38,
             child: TextField(
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
               decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search, size: 18),
+                prefixIcon: const Icon(Icons.search, size: 16),
                 hintText: "Search...",
-                hintStyle: const TextStyle(fontSize: 12.0),
+                hintStyle: const TextStyle(
+                  fontSize: 12.0,
+                  color: Color(0xFF94A3B8),
+                ),
+                isDense: true,
                 filled: true,
                 fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
+                  borderRadius: BorderRadius.circular(4),
                   borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
+                  borderRadius: BorderRadius.circular(4),
                   borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
               ),
             ),
           ),

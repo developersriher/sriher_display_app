@@ -451,7 +451,7 @@ Widget _buildSmallTextField(String hint, TextEditingController controller) {
       ),
     );
   }
-  Widget _buildListHeader() {
+ Widget _buildListHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -465,31 +465,42 @@ Widget _buildSmallTextField(String hint, TextEditingController controller) {
                 color: Colors.black87,
               ),
             ),
-            const SizedBox(width: 4),
-            Container(
-             width: 70,
-                    height: 35,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                border: Border.all(color: Colors.grey.shade400),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: entriesValue,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 70,
+              height: 35,
+              child: DropdownButtonFormField<String>(
+                value: entriesValue,
+                dropdownColor: Colors.white,
+                style: const TextStyle(color: Colors.black87, fontSize: 13),
+                decoration: InputDecoration(
                   isDense: true,
-                  icon: Icon(Icons.arrow_drop_down,
-                      size: 16, color: Colors.grey.shade600),
-                  items: ["10", "25", "50"]
-                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                      .toList(),
-                  onChanged: (v) => setState(() => entriesValue = v!),
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                 ),
+                items: ["10", "25", "50"]
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                    .toList(),
+                onChanged: (v) => setState(() => entriesValue = v!),
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             const Text(
               "entries",
               style: TextStyle(
@@ -505,22 +516,31 @@ Widget _buildSmallTextField(String hint, TextEditingController controller) {
           height: 40,
           child: TextField(
             controller: _searchController,
-            onChanged: (val) {
-              setState(() {
-                searchQuery = val;
-              });
-            },
-            style: const TextStyle(color: Colors.black87),
+            onChanged: (val) => setState(() => searchQuery = val),
+            style: const TextStyle(fontSize: 12, color: Colors.black87),
             decoration: InputDecoration(
               hintText: "Search Locations...",
-              hintStyle: TextStyle(fontSize: 12
-                
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF94A3B8),
               ),
-              prefixIcon: const Icon(Icons.search),
+              prefixIcon: const Icon(Icons.search, size: 16),
+              isDense: true,
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
             ),
           ),
         ),

@@ -368,7 +368,13 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
               isExpanded: true,
               dropdownColor: Colors.white,
               onChanged: onChanged,
-              items: items.map((e) {
+              items: items.where((e) {
+                final name = e['device_name'] ??
+                    e['schedule_name'] ??
+                    e['device_code'] ??
+                    '';
+                return name.toString().trim().isNotEmpty;
+              }).map((e) {
                 final id = int.tryParse(e['id'].toString());
                 final name =
                     e['device_name'] ??
@@ -378,7 +384,7 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
                 return DropdownMenuItem<int>(
                   value: id ?? 0,
                   child: Text(
-                    name,
+                    name.toString(),
                     style: const TextStyle(fontSize: 14, color: Colors.black87),
                   ),
                 );

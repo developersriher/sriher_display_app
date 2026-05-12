@@ -701,88 +701,126 @@ class _ScheduleListViewState extends State<ScheduleListView> {
 
   // ── List header ───────────────────────────────────────────────────────────
 
-  Widget _buildListHeader() {
+ Widget _buildListHeader() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(children: [
-            const Text("Show ",
+          Row(
+            children: [
+              const Text(
+                "Show",
                 style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Colors.black54)),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 80,
-              height: 36,
-              child: DropdownButtonFormField<String>(
-                value: entriesValue,
-                decoration: InputDecoration(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide:
-                        BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide:
-                        BorderSide(color: Colors.grey.shade300),
-                  ),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.black87,
                 ),
-                onChanged: (v) {
-                  if (v != null)
-                    setState(() {
-                      entriesValue = v;
-                      _currentPage = 1;
-                    });
-                },
-                items: ['10', '25', '50']
-                    .map((v) => DropdownMenuItem(
-                        value: v,
-                        child: Text(v,
-                            style: const TextStyle(fontSize: 14))))
-                    .toList(),
               ),
-            ),
-            const SizedBox(width: 8),
-            const Text(" entries",
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 70,
+                height: 36,
+                child: DropdownButtonFormField<String>(
+                  value: entriesValue,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                  ),
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() {
+                        entriesValue = v;
+                        _currentPage = 1;
+                      });
+                    }
+                  },
+                  items: ['10', '25', '50']
+                      .map(
+                        (v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(
+                            v,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                "entries",
                 style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Colors.black54)),
-          ]),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
           SizedBox(
             width: 260,
             height: 36,
             child: TextField(
               controller: _searchCtrl,
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
               decoration: InputDecoration(
                 hintText: 'Search schedules…',
-                hintStyle: TextStyle(
-                    color: Colors.grey.shade400, fontSize: 13),
-                prefixIcon: const Icon(Icons.search,
-                    size: 18, color: Colors.grey),
+                hintStyle: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 12,
+                ),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 16,
+                  color: Colors.grey,
+                ),
                 suffixIcon: _searchCtrl.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear,
-                            size: 16, color: Colors.grey),
+                        icon: const Icon(
+                          Icons.clear,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
                         onPressed: _searchCtrl.clear,
                       )
                     : null,
+                isDense: true,
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
+                  borderRadius: BorderRadius.circular(4),
                   borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
+                  borderRadius: BorderRadius.circular(4),
                   borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 10),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
               ),
             ),
           ),
@@ -790,7 +828,6 @@ class _ScheduleListViewState extends State<ScheduleListView> {
       ),
     );
   }
-
   // ── Footer ────────────────────────────────────────────────────────────────
 
   Widget _buildFooter() {

@@ -637,7 +637,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           onBack: () => setState(() => _selectedIndex = 8),
         );
       case 7:
-        return const AssignDeviceView();
+        return AssignDeviceView();
       case 8:
         return ScheduleListView(
           onEdit: (data) =>

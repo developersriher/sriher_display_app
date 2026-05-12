@@ -1219,15 +1219,38 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13.0,
-                  color: Colors.black54,
+                  color: Colors.black87,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 6),
               SizedBox(
-                width: 75,
+                width: 70,
                 height: 38,
                 child: DropdownButtonFormField<String>(
                   value: entriesValue,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                  ),
                   items: ["10", "25", "50"]
                       .map(
                         (e) => DropdownMenuItem(
@@ -1240,26 +1263,15 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                       )
                       .toList(),
                   onChanged: (v) => setState(() => entriesValue = v!),
-                  decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                  ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 6),
               const Text(
                 "entries",
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13.0,
-                  color: Colors.black54,
+                  color: Colors.black87,
                 ),
               ),
             ],
@@ -1271,26 +1283,37 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13.0,
-                  color: Colors.black54,
+                  color: Colors.black87,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 6),
               SizedBox(
                 width: 200,
                 height: 38,
                 child: TextField(
                   controller: _searchController,
+                  style: const TextStyle(fontSize: 12, color: Colors.black87),
                   decoration: InputDecoration(
                     hintText: "Search files...",
-                    hintStyle: const TextStyle(fontSize: 12, color: Colors.grey),
-                    prefixIcon: const Icon(Icons.search, size: 18),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    hintStyle: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    prefixIcon: const Icon(Icons.search, size: 16),
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(4),
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                   ),
