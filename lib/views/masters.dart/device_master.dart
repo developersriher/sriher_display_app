@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 class DeviceMasterView extends StatefulWidget {
   const DeviceMasterView({super.key});
@@ -22,6 +23,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   bool isLoading = true;
   String entriesValue = "10";
   int? editingId;
+  bool isSubmitting = false;
 
   // --- FORM CONTROLLERS ---
   final TextEditingController _deviceCodeController = TextEditingController();
@@ -117,6 +119,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       return;
     }
 
+    setState(() => isSubmitting = true);
+
     final bool isUpdate = editingId != null;
     final String endPoint = isUpdate
         ? '/deviceUpdateview'
@@ -158,7 +162,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 : "Device Created Successfully",
           );
           _clearForm();
-          if (Navigator.canPop(context)) Navigator.pop(context);
+          // DISMISS NOW HANDLED IN BUTTON PRESS
           await fetchDevices(); // Ensure we await the refresh
         } else {
           _showSnackBar(
@@ -169,6 +173,10 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     } catch (e) {
       if (!mounted) return;
       _showSnackBar("Error sending data: $e");
+    } finally {
+      if (mounted) {
+        setState(() => isSubmitting = false);
+      }
     }
   }
 
@@ -420,9 +428,12 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton(
-                  onPressed: () async {
-                    await handleFormSubmit();
-                  },
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          if (Navigator.canPop(context)) Navigator.pop(context);
+                          await handleFormSubmit();
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0F172A),
                     foregroundColor: Colors.white,
@@ -432,16 +443,25 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     ),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: Text(
-                    editingId == null ? "Save" : "Update",
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                    ),
-                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          editingId == null ? "Submit" : "Update",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -474,7 +494,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Padding(
+      body: SelectionArea(child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
@@ -490,7 +510,10 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                   ),
                 ),
                 ElevatedButton.icon(
-                  onPressed: _showDeviceDialog,
+                  onPressed: () {
+                    _clearForm();
+                    _showDeviceDialog();
+                  },
                   icon: const Icon(Icons.add_to_queue_rounded, size: 20),
                   label: const Text(
                     "CREATE DEVICE",
@@ -505,6 +528,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             Expanded(child: _buildTableCard()),
           ],
         ),
+      ),
       ),
     );
   }
@@ -783,56 +807,11 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     required List<String> items,
     required ValueChanged<String?> onChanged,
   }) {
-    return DropdownButtonFormField<String>(
+    return SearchableDropdown<String>(
       value: value,
-      hint: Text(
-        hint,
-        style: const TextStyle(
-          fontSize: 12,
-          color: Color(0xFF94A3B8),
-          fontWeight: FontWeight.w400,
-        ),
-      ),
-      dropdownColor: Colors.white,
-      style: const TextStyle(
-        color: Color(0xFF1E293B),
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-      ),
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 14,
-        ),
-      ),
-      items: items
-          .map(
-            (e) => DropdownMenuItem(
-              value: e,
-              child: Text(e, style: const TextStyle(fontSize: 13)),
-            ),
-          )
-          .toList(),
+      hint: hint,
       onChanged: onChanged,
-      isExpanded: true,
+      items: items.map((e) => SearchableDropdownItem(value: e, label: e)).toList(),
     );
   }
 
@@ -852,7 +831,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             ),
             const SizedBox(width: 6),
             SizedBox(
-              width:70,
+              width: 75,
               height: 35,
               child: DropdownButtonFormField<String>(
                 value: entriesValue,
@@ -879,10 +858,15 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     vertical: 8,
                   ),
                 ),
-                items: ["10", "25", "50"]
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                items: ["10", "25", "50", "100"]
+                    .map((v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(v),
+                        ))
                     .toList(),
-                onChanged: (v) => setState(() => entriesValue = v!),
+                onChanged: (v) => setState(() {
+                  entriesValue = v!;
+                }),
               ),
             ),
             const SizedBox(width: 6),

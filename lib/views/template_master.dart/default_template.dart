@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 class DefaultTemplateView extends StatefulWidget {
   const DefaultTemplateView({super.key});
@@ -128,6 +129,8 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     }
 
     setState(() => _isSubmitting = true);
+    // DISMISS NOW HANDLED IN BUTTON PRESS
+
     try {
       // Find the name of the selected device to send as device_name
       final selectedDevice = _deviceDropdownList.firstWhere(
@@ -161,10 +164,9 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
       if (response.statusCode == 200) {
         _showSnackBar(
-          _editingId == null ? "Saved successfully" : "Updated successfully",
+          _editingId == null ? "Submitted successfully" : "Updated successfully",
         );
         _resetForm();
-        if (mounted && Navigator.canPop(context)) Navigator.pop(context);
         _fetchTableData();
       }
     } catch (e) {
@@ -362,7 +364,12 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitAction,
+                  onPressed: _isSubmitting
+                      ? null
+                      : () async {
+                          Navigator.pop(context);
+                          await _submitAction();
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0F172A),
                     foregroundColor: Colors.white,
@@ -410,7 +417,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Padding(
+      body: SelectionArea(child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
@@ -457,6 +464,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -600,44 +608,13 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     String hint,
     Function(String?) onChanged,
   ) {
-    return DropdownButtonFormField<String>(
+    return SearchableDropdown<String>(
       value: items.any((i) => i[idKey].toString() == value) ? value : null,
-      isDense: true,
-      menuMaxHeight: 300,
-      dropdownColor: Colors.white,
-      hint: Text(
-        hint,
-        style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-      ),
-      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-      decoration: InputDecoration(
-        isDense: true,
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 10,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-      ),
+      hint: hint,
       items: items.map((item) {
-        return DropdownMenuItem<String>(
+        return SearchableDropdownItem<String>(
           value: item[idKey].toString(),
-          child: Text(
-            item[nameKey] ?? "",
-            style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-          ),
+          label: item[nameKey] ?? "",
         );
       }).toList(),
       onChanged: onChanged,
@@ -659,7 +636,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
               ),
             ),
             SizedBox(
-              width: 70,
+              width: 75,
               height: 35,
               child: DropdownButtonFormField<String>(
                 value: _entriesValue,
@@ -686,7 +663,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                     vertical: 8,
                   ),
                 ),
-                items: ["10", "25", "50"]
+                items: ["10", "25", "50", "100"]
                     .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                     .toList(),
                 onChanged: (v) => setState(() {

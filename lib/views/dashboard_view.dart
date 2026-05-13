@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/searchable_dropdown.dart';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -249,8 +250,9 @@ class _DashboardViewState extends State<DashboardView>
     if (_error != null) return _buildError();
 
     final d = _data!;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+    return SelectionArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -264,6 +266,7 @@ class _DashboardViewState extends State<DashboardView>
           const SizedBox(height: 48),
         ],
       ),
+    ),
     );
   }
 
@@ -961,44 +964,48 @@ class _DashboardViewState extends State<DashboardView>
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              Container(
-                height: 32,
-                margin: const EdgeInsets.symmetric(horizontal: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                  borderRadius: BorderRadius.circular(6),
-                  color: Colors.white,
-                ),
-                alignment: Alignment.center,
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: _entriesPerPage,
+              SizedBox(
+                width: 75,
+                height: 35,
+                child: DropdownButtonFormField<int>(
+                  value: _entriesPerPage,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  decoration: InputDecoration(
                     isDense: true,
-                    icon: const Icon(
-                      Icons.unfold_more_rounded,
-                      size: 16,
-                      color: Color(0xFF64748B),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() {
-                          _entriesPerPage = val;
-                          _currentPage = 1;
-                        });
-                      }
-                    },
-                    items: [10, 50, 100]
-                        .map(
-                          (e) => DropdownMenuItem(value: e, child: Text('$e')),
-                        )
-                        .toList(),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                   ),
+                  items: [10, 25, 50, 100]
+                      .map((v) => DropdownMenuItem(
+                            value: v,
+                            child: Text(v.toString()),
+                          ))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _entriesPerPage = val;
+                        _currentPage = 1;
+                      });
+                    }
+                  },
                 ),
               ),
               const Text(

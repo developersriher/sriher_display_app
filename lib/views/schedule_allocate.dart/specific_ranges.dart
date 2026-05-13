@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 class SpecificRangesView extends StatefulWidget {
   const SpecificRangesView({super.key});
@@ -661,7 +662,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
+    return SelectionArea(
+      child: LayoutBuilder(
       builder: (context, constraints) {
         final bool isNarrow = constraints.maxWidth < 1000;
 
@@ -794,27 +796,34 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                             ],
                           )
                         : Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Expanded(
-                                child: _buildDateField(
-                                  "From Date",
-                                  _fromDateController,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildDateField(
-                                  "To Date",
-                                  _toDateController,
-                                ),
-                              ),
-                              const SizedBox(width: 24),
-                              _buildCheckboxRow(),
-                              const SizedBox(width: 24),
-                              _buildSubmitButton(),
-                            ],
-                          ),
+  crossAxisAlignment: CrossAxisAlignment.end,
+  mainAxisAlignment: MainAxisAlignment.start, // Keeps everything on the left
+  children: [
+    // Fixed width for From Date
+    SizedBox(
+      width: 180, // Half the usual size
+      child: _buildDateField(
+        "From Date",
+        _fromDateController,
+      ),
+    ),
+    const SizedBox(width: 12),
+    // Fixed width for To Date
+    SizedBox(
+      width: 180, // Half the usual size
+      child: _buildDateField(
+        "To Date",
+        _toDateController,
+      ),
+    ),
+    const SizedBox(width: 20),
+    _buildCheckboxRow(),
+    const SizedBox(width: 20),
+    _buildSubmitButton(),
+    // This is the secret: it pushes everything to the left
+    const Spacer(flex: 2), 
+  ],
+)
                   ],
                 ),
               ),
@@ -852,6 +861,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           ),
         );
       },
+    ),
     );
   }
 
@@ -1224,8 +1234,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
               ),
               const SizedBox(width: 6),
               SizedBox(
-                width: 70,
-                height: 38,
+                width: 75,
+                height: 35,
                 child: DropdownButtonFormField<String>(
                   value: entriesValue,
                   dropdownColor: Colors.white,
@@ -1251,18 +1261,15 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                       vertical: 8,
                     ),
                   ),
-                  items: ["10", "25", "50"]
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e,
-                          child: Text(
-                            e,
-                            style: const TextStyle(fontSize: 13.0),
-                          ),
-                        ),
-                      )
+                  items: ["10", "25", "50", "100"]
+                      .map((v) => DropdownMenuItem(
+                            value: v,
+                            child: Text(v),
+                          ))
                       .toList(),
-                  onChanged: (v) => setState(() => entriesValue = v!),
+                  onChanged: (v) => setState(() {
+                    entriesValue = v!;
+                  }),
                 ),
               ),
               const SizedBox(width: 6),
@@ -1335,7 +1342,6 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
       padding: const EdgeInsets.all(16),
       decoration: const BoxDecoration(
         color: Colors.white,
-        // Keeping the bottom of the card rounded, but the buttons inside will be sharp
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
       ),
       child: Row(
@@ -1349,23 +1355,16 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
               color: Colors.black54,
             ),
           ),
-          // This Row holds the connected sharp-edged bar
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildMiniBtn("Prev", isFirst: true),
-
-              // DYNAMIC PAGE NUMBERS:
-              // This will show 1, 2, 3... based on your templateFiles length
               ...List.generate(totalPages, (index) {
                 return _buildMiniBtn(
                   "${index + 1}",
-                  active:
-                      (index + 1) ==
-                      1, // Change '1' to your currentPage variable
+                  active: (index + 1) == 1,
                 );
               }),
-
               _buildMiniBtn("Next", isLast: true),
             ],
           ),
@@ -1381,25 +1380,20 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     bool isLast = false,
   }) {
     return Container(
-      // REMOVED margin to ensure buttons touch each other perfectly
       child: OutlinedButton(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           backgroundColor: active ? Colors.blue.shade700 : Colors.white,
           foregroundColor: active ? Colors.white : Colors.black87,
-          // Sharp edges: borderRadius is zero
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           side: BorderSide(
             color: active ? Colors.blue.shade700 : Colors.grey.shade300,
             width: 1.0,
           ),
           minimumSize: const Size(0, 34),
-          // Removes extra padding that Flutter adds to buttons
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
-        onPressed: () {
-          // Handle your page change logic here
-        },
+        onPressed: () {},
         child: Text(
           label,
           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
@@ -1408,7 +1402,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     );
   }
 
-Widget _buildDropdown({
+  Widget _buildDropdown({
     required String label,
     required String hint,
     int? value,
@@ -1424,64 +1418,39 @@ Widget _buildDropdown({
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
-            color: Color(0xFF64748B), // ← changed
+            color: Color(0xFF64748B),
           ),
         ),
         const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: value,
-                    hint: Text(
-                      hint,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 14,
-                      ),
-                    ),
-                    isExpanded: true,
-                    dropdownColor: Colors.white,
-                    onChanged: onChanged,
-                    items: items.map((e) {
-                      final id = int.tryParse(e['id'].toString());
-                      final name =
-                          e['schedule_name'] ??
-                          e['temp_name'] ??
-                          e['name'] ??
-                          '';
-                      return DropdownMenuItem<int>(
-                        value: id,
-                        child: Text(
-                          name,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
+              child: SearchableDropdown<int>(
+                value: value,
+                hint: hint,
+                items: items.map((item) {
+                  return SearchableDropdownItem<int>(
+                    value: int.tryParse(item['id']?.toString() ?? '') ?? 0,
+                    label: item['name']?.toString() ??
+                        item['schedule_name']?.toString() ??
+                        item['temp_name']?.toString() ??
+                        '',
+                  );
+                }).toList(),
+                onChanged: onChanged,
               ),
             ),
             if (showAdd) ...[
               const SizedBox(width: 8),
-              IconButton.filled(
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.blue.shade50,
-                  foregroundColor: Colors.blue.shade600,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                onPressed: () => _showAddSchedulePopup(context),
-                icon: const Icon(Icons.add, size: 20),
+                child: IconButton(
+                  icon: const Icon(Icons.add, color: Colors.blue),
+                  onPressed: () => _showAddSchedulePopup(context),
+                ),
               ),
             ],
           ],
@@ -1489,7 +1458,8 @@ Widget _buildDropdown({
       ],
     );
   }
-Widget _buildDateField(String label, TextEditingController controller) {
+
+  Widget _buildDateField(String label, TextEditingController controller) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1503,40 +1473,51 @@ Widget _buildDateField(String label, TextEditingController controller) {
         ),
         const SizedBox(height: 8),
         TextFormField(
-          controller: controller,
-          readOnly: true,
-          decoration: InputDecoration(
-            hintText: 'yyyy-mm-dd',
-            filled: true,
-            fillColor: Colors.white,
-            prefixIcon: const Icon(
-              Icons.calendar_today,
-              size: 18,
-              color: Colors.blue,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-          ),
-          onTap: () async {
-            DateTime? picked = await showDatePicker(
-              context: context,
-              initialDate: DateTime.now(),
-              firstDate: DateTime.now(), // ← only today & future clickable
-              lastDate: DateTime(2101),
-            );
-            if (picked != null) {
-              setState(
-                () => controller.text = DateFormat('yyyy-MM-dd').format(picked),
-              );
-            }
-          },
-        ),
+  controller: controller,
+  readOnly: true,
+  style: const TextStyle(fontSize: 13), // Main text size
+  decoration: InputDecoration(
+    hintText: 'YYYY-MM-DD',
+    // 1. THIS REDUCES THE HINT TEXT SIZE
+    hintStyle: TextStyle(
+      fontSize: 14, 
+      color: Colors.grey.shade400,
+    ),
+    
+    filled: true,
+    fillColor: Colors.white,
+    prefixIcon: const Icon(
+      Icons.calendar_today,
+      size: 16, // Slightly smaller icon to match
+      color: Colors.blue,
+    ),
+    
+    // 2. REDUCE PADDING TO MATCH THE SMALLER TEXT
+    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.zero,
+      borderSide: BorderSide(color: Colors.grey.shade300),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.zero,
+      borderSide: BorderSide(color: Colors.grey.shade300),
+    ),
+  ),
+  onTap: () async {
+    DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now(), 
+      lastDate: DateTime(2101),
+    );
+    if (picked != null) {
+      // Ensure you have the intl package for DateFormat
+      controller.text = DateFormat('yyyy-MM-dd').format(picked);
+      setState(() {}); 
+    }
+  },
+),
       ],
     );
   }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 class DepartmentView extends StatefulWidget {
   const DepartmentView({super.key});
@@ -21,6 +22,7 @@ class _DepartmentViewState extends State<DepartmentView> {
   List<dynamic> categoryList = [];
   List<dynamic> filteredList = [];
   bool isLoading = true;
+  bool isSubmitting = false;
   String entriesValue = "10";
   int currentPage = 0;
   int? editingId;
@@ -85,33 +87,35 @@ class _DepartmentViewState extends State<DepartmentView> {
     }
 
     final bool isUpdate = editingId != null;
-    final String endPoint = isUpdate
-        ? '/categoryUpdateview'
-        : '/insertCategoryview';
-
-    final Map<String, dynamic> body = {
-      "api_key": _apiKey,
-      "category_name": _departmentNameController.text,
-    };
-    if (isUpdate) body["id"] = editingId.toString();
+    setState(() => isSubmitting = true);
 
     try {
+      final String name = _departmentNameController.text.trim();
       final response = await http.post(
-        Uri.parse('$_baseUrl$endPoint'),
+        Uri.parse(isUpdate
+            ? '$_baseUrl/categoryUpdateview'
+            : '$_baseUrl/insertCategoryview'),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode(body),
+        body: jsonEncode(isUpdate
+            ? {"api_key": _apiKey, "id": editingId, "category_name": name}
+            : {"api_key": _apiKey, "category_name": name}),
       );
 
       if (response.statusCode == 200) {
         if (!mounted) return;
-        _showSnackBar(isUpdate ? "Department Updated!" : "Department Saved!");
-        _clearForm();
         if (Navigator.canPop(context)) Navigator.pop(context);
+        _showSnackBar(
+            isUpdate ? "Department Updated!" : "Department Submitted!");
+        _clearForm();
         fetchCategories(); // Refresh table immediately
+      } else {
+        _showSnackBar("Error: ${response.statusCode}");
       }
     } catch (e) {
       if (!mounted) return;
       _showSnackBar("Submit failed: $e");
+    } finally {
+      if (mounted) setState(() => isSubmitting = false);
     }
   }
 
@@ -121,21 +125,49 @@ class _DepartmentViewState extends State<DepartmentView> {
       final response = await http.post(
         Uri.parse('$_baseUrl/categoryEditview'),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"api_key": _apiKey, "id": id.toString()}),
+        body: jsonEncode({"api_key": _apiKey, "id": int.tryParse(id.toString()) ?? id}),
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body)['data'];
+        final resBody = jsonDecode(response.body);
+        final dynamic data = resBody['data'] ?? resBody['category_data'];
+        
         if (!mounted) return;
-        setState(() {
-          editingId = int.parse(id.toString());
-          _departmentNameController.text = data['category_name'] ?? "";
-        });
-        _showDepartmentDialog(); // Open dialog after loading data
+        
+        // Handle if data is a list or a map
+        dynamic category;
+        if (data is List && data.isNotEmpty) {
+          category = data[0];
+        } else if (data is Map) {
+          category = data;
+        }
+
+        // Additional fallback: search in categoryList if API response is empty or missing name
+        if (category == null || (category['category_name'] == null && category['name'] == null)) {
+           category = categoryList.firstWhere(
+            (item) => item['id']?.toString() == id.toString(),
+            orElse: () => null,
+          );
+        }
+
+        if (category != null) {
+          setState(() {
+            editingId = int.parse(id.toString());
+            _departmentNameController.text = 
+                category['category_name']?.toString() ?? 
+                category['name']?.toString() ?? 
+                "";
+          });
+          _showDepartmentDialog();
+        } else {
+          _showSnackBar("Could not find department details");
+        }
+      } else {
+        _showSnackBar("Server Error: ${response.statusCode}");
       }
     } catch (e) {
       if (!mounted) return;
-      _showSnackBar("Error loading data");
+      _showSnackBar("Error loading data: $e");
     }
   }
 
@@ -252,20 +284,30 @@ class _DepartmentViewState extends State<DepartmentView> {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: handleFormSubmit,
+          onPressed: isSubmitting ? null : handleFormSubmit,
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF0F172A),
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 28),
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(8),
             ),
           ),
-          child: Text(
-            editingId == null ? "Save" : "Update",
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-          ),
+          child: isSubmitting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : Text(
+                  editingId == null ? "Submit" : "Update",
+                  style:
+                      const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                ),
         ),
       ],
     );
@@ -278,7 +320,7 @@ class _DepartmentViewState extends State<DepartmentView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Padding(
+      body: SelectionArea(child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
@@ -294,7 +336,10 @@ class _DepartmentViewState extends State<DepartmentView> {
                   ),
                 ),
                 ElevatedButton.icon(
-                  onPressed: _showDepartmentDialog,
+                  onPressed: () {
+                    _clearForm();
+                    _showDepartmentDialog();
+                  },
                   icon: const Icon(Icons.add_business_rounded, size: 20),
                   label: const Text(
                     "ADD DEPARTMENT",
@@ -326,6 +371,7 @@ class _DepartmentViewState extends State<DepartmentView> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -532,18 +578,38 @@ class _DepartmentViewState extends State<DepartmentView> {
               ),
             ),
             SizedBox(
-              width: 70,
+              width: 75,
               height: 35,
               child: DropdownButtonFormField<String>(
                 value: entriesValue,
                 dropdownColor: Colors.white,
                 style: const TextStyle(color: Colors.black87, fontSize: 13),
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 5),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                 ),
-                items: ["10", "25", "50"]
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                items: ["10", "25", "50", "100"]
+                    .map((v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(v),
+                        ))
                     .toList(),
                 onChanged: (v) => setState(() {
                   entriesValue = v!;

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 class LocationMasterView extends StatefulWidget {
   const LocationMasterView({super.key});
@@ -24,6 +25,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   int? editingId;
   final TextEditingController _searchController = TextEditingController();
   String searchQuery = "";
+  int currentPage = 1;
 
   // --- FORM CONTROLLERS ---
   final TextEditingController _buildingAreaController = TextEditingController();
@@ -33,7 +35,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   @override
   void initState() {
     super.initState();
-    fetchLocations();
+    fetchLocations(showLoading: true);
   }
 
   @override
@@ -46,8 +48,8 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   }
 
   // 1. FETCH ALL LOCATIONS
-  Future<void> fetchLocations() async {
-    setState(() => isLoading = true);
+  Future<void> fetchLocations({bool showLoading = true}) async {
+    if (showLoading) setState(() => isLoading = true);
     final url = Uri.parse('$_baseUrl/locationview');
     try {
       final response = await http.post(
@@ -86,6 +88,9 @@ class _LocationMasterViewState extends State<LocationMasterView> {
     };
 
     try {
+      // DISMISS IMMEDIATELY
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
@@ -94,10 +99,9 @@ class _LocationMasterViewState extends State<LocationMasterView> {
 
       if (response.statusCode == 200) {
         if (!mounted) return;
-        _showSnackBar("Location Saved Successfully!");
+        _showSnackBar("Location Submitted Successfully!");
         _clearForm();
-        if (Navigator.canPop(context)) Navigator.pop(context);
-        fetchLocations();
+        fetchLocations(showLoading: false);
       }
     } catch (e) {
       if (!mounted) return;
@@ -144,6 +148,9 @@ class _LocationMasterViewState extends State<LocationMasterView> {
     };
 
     try {
+      // DISMISS IMMEDIATELY
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
@@ -154,8 +161,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
         if (!mounted) return;
         _showSnackBar("Location Updated Successfully!");
         _clearForm();
-        if (Navigator.canPop(context)) Navigator.pop(context);
-        fetchLocations();
+        fetchLocations(showLoading: false);
       }
     } catch (e) {
       if (!mounted) return;
@@ -225,41 +231,54 @@ class _LocationMasterViewState extends State<LocationMasterView> {
           ),
         ],
       ),
-      actions: [
-        Expanded(
-          child: TextButton(
-            onPressed: () {
-              _clearForm();
-              Navigator.pop(context);
-            },
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            ),
-            child: const Text(
-              "Cancel",
-              style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold),
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          flex: 2,
-          child: ElevatedButton(
-            onPressed: editingId == null ? submitNewLocation : updateLocation,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            ),
-            child: Text(
-              editingId == null ? "Save" : "Update",
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ),
-        ),
+     actions: [
+  TextButton(
+    onPressed: () {
+      _clearForm();
+      Navigator.pop(context);
+    },
+    style: TextButton.styleFrom(
+      padding: const EdgeInsets.symmetric(
+        vertical: 12,
+        horizontal: 20,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+    ),
+    child: const Text(
+      "Cancel",
+      style: TextStyle(
+        color: Color(0xFF64748B),
+        fontWeight: FontWeight.bold,
+        fontSize: 13,
+      ),
+    ),
+  ),
+  const SizedBox(width: 12),
+  ElevatedButton(
+    onPressed: editingId == null ? submitNewLocation : updateLocation,
+    style: ElevatedButton.styleFrom(
+      backgroundColor: const Color(0xFF0F172A),
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(
+        vertical: 12,
+        horizontal: 32,
+      ),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+    ),
+    child: Text(
+      editingId == null ? "Submit" : "Update",
+      style: const TextStyle(
+        fontWeight: FontWeight.w900,
+        fontSize: 13,
+      ),
+    ),
+  ),
+
       ],
     );
   }
@@ -268,7 +287,8 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Padding(
+      body: SelectionArea(
+        child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
@@ -325,6 +345,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -385,8 +406,15 @@ class _LocationMasterViewState extends State<LocationMasterView> {
                                       color: Colors.blue,
                                       size: 18,
                                     ),
-                                    onPressed: () =>
-                                        fetchLocationDetailsForEdit(loc['id']),
+                                    onPressed: () {
+                                      setState(() {
+                                        editingId = int.tryParse(loc['id'].toString());
+                                        _buildingAreaController.text = loc['location_name']?.toString() ?? "";
+                                        _floorNameController.text = loc['floor']?.toString() ?? "";
+                                        _subLocationController.text = loc['sublocation']?.toString() ?? "";
+                                      });
+                                      _showLocationDialog();
+                                    },
                                   ),
                                 ),
                                 DataCell(
@@ -467,7 +495,7 @@ Widget _buildSmallTextField(String hint, TextEditingController controller) {
             ),
             const SizedBox(width: 6),
             SizedBox(
-              width: 70,
+              width: 75,
               height: 35,
               child: DropdownButtonFormField<String>(
                 value: entriesValue,
@@ -476,7 +504,7 @@ Widget _buildSmallTextField(String hint, TextEditingController controller) {
                 decoration: InputDecoration(
                   isDense: true,
                   filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
+                  fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(4),
                     borderSide: BorderSide(color: Colors.grey.shade300),
@@ -494,10 +522,20 @@ Widget _buildSmallTextField(String hint, TextEditingController controller) {
                     vertical: 8,
                   ),
                 ),
-                items: ["10", "25", "50"]
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                items: ["10", "25", "50", "100"]
+                    .map((v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(v),
+                        ))
                     .toList(),
-                onChanged: (v) => setState(() => entriesValue = v!),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      entriesValue = v;
+                      currentPage = 1;
+                    });
+                  }
+                },
               ),
             ),
             const SizedBox(width: 6),

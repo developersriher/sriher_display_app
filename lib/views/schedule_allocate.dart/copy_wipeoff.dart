@@ -1,5 +1,6 @@
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -370,7 +371,7 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return SelectionArea(child: SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -714,6 +715,7 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -731,49 +733,18 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: onChanged == null ? Colors.grey.shade100 : Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: onChanged == null
-                  ? Colors.grey.shade200
-                  : Colors.grey.shade300,
-            ),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: items.any((i) => _itemId(i) == value) ? value : null,
-              hint: Text(
-                hintText,
-                style: TextStyle(
-                  color: onChanged == null
-                      ? Colors.grey.shade400
-                      : Colors.grey.shade500,
-                  fontSize: 13,
-                ),
-              ),
-              isExpanded: true,
-              dropdownColor: Colors.white,
-              menuMaxHeight: 300,
-              style: const TextStyle(color: Colors.black87, fontSize: 14),
-              onChanged: onChanged,
-              items: items
-                  .map(
-                    (item) => DropdownMenuItem<int>(
-                      value: _itemId(item),
-                      child: Text(
-                        item['device_name'] ??
-                            item['Device_name'] ??
-                            'Unknown Device',
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
+        SearchableDropdown<int>(
+          value: items.any((i) => _itemId(i) == value) ? value : null,
+          hint: hintText,
+          items: items.map((item) {
+            return SearchableDropdownItem<int>(
+              value: _itemId(item) ?? 0,
+              label: item['device_name'] ??
+                  item['Device_name'] ??
+                  'Unknown Device',
+            );
+          }).toList(),
+          onChanged: onChanged,
         ),
       ],
     );

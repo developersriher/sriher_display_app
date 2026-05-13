@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 /**
  * CreateTemplateView Master Module
@@ -108,6 +109,8 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
     }
 
     setState(() => isSubmitting = true);
+    // DISMISS NOW HANDLED IN BUTTON PRESS
+
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/insertNew_templateview'),
@@ -119,9 +122,8 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
       );
 
       if (response.statusCode == 200) {
-        _showSnackBar("Record saved and stored in database.");
+        _showSnackBar("Template submitted successfully.");
         _templateNameController.clear();
-        if (mounted && Navigator.canPop(context)) Navigator.pop(context);
         await fetchTemplatesFromServer();
       }
     } catch (e) {
@@ -145,6 +147,8 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
   Future<void> updateTemplateAction() async {
     if (editingId == null) return;
     setState(() => isSubmitting = true);
+    // DISMISS NOW HANDLED IN BUTTON PRESS
+
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/new_templateUpdateview'),
@@ -157,11 +161,10 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
       );
 
       if (response.statusCode == 200) {
-        _showSnackBar("Template metadata updated.");
+        _showSnackBar("Template updated successfully.");
         _templateNameController.clear();
         setState(() => editingId = null);
-        if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-        fetchTemplatesFromServer();
+        await fetchTemplatesFromServer();
       }
     } catch (e) {
       _showSnackBar("Update execution failed.");
@@ -321,9 +324,15 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
         ElevatedButton(
           onPressed: isSubmitting
               ? null
-              : (editingId == null
-                    ? insertTemplateAction
-                    : updateTemplateAction),
+              : () async {
+                  // VALIDATE HERE IF NEEDED, THEN POP
+                  Navigator.pop(context);
+                  if (editingId == null) {
+                    await insertTemplateAction();
+                  } else {
+                    await updateTemplateAction();
+                  }
+                },
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF0F172A),
             foregroundColor: Colors.white,
@@ -343,7 +352,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
                   ),
                 )
               : Text(
-                  editingId == null ? 'Save' : 'Update',
+                  editingId == null ? 'Submit' : 'Update',
                   style: const TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 13,
@@ -359,7 +368,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Padding(
+      body: SelectionArea(child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
@@ -430,6 +439,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -521,7 +531,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
               ),
             ),
             SizedBox(
-              width: 70,
+              width: 75,
               height: 35,
               child: DropdownButtonFormField<String>(
                 value: entriesValue,
@@ -548,7 +558,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
                     vertical: 8,
                   ),
                 ),
-                items: ["10", "25", "50"]
+                items: ["10", "25", "50", "100"]
                     .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                     .toList(),
                 onChanged: (v) => setState(() {

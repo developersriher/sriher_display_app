@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 class MappingView extends StatefulWidget {
   const MappingView({super.key});
@@ -157,6 +158,9 @@ class _MappingViewState extends State<MappingView> {
   Future<void> _insert() async {
     if (!_validate()) return;
     setState(() => _submitting = true);
+    // DISMISS IMMEDIATELY
+    if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+
     try {
       // Find the device entry to get device_name and device_model
       final dev = _deviceList.firstWhere(
@@ -187,9 +191,8 @@ class _MappingViewState extends State<MappingView> {
       );
       if (res.statusCode == 200) {
         if (!mounted) return;
-        _snack('Mapping added successfully!');
+        _snack('Mapping submitted successfully!');
         _clearForm();
-        if (Navigator.canPop(context)) Navigator.pop(context);
         await _fetchMappings();
       } else {
         if (!mounted) return;
@@ -268,6 +271,8 @@ class _MappingViewState extends State<MappingView> {
   Future<void> _update() async {
     if (!_validate()) return;
     setState(() => _submitting = true);
+    // DISMISS IMMEDIATELY
+    if (mounted && Navigator.canPop(context)) Navigator.pop(context);
     try {
       final loc = _locationList.firstWhere(
         (l) => l['id'].toString() == _selLocationId,
@@ -292,7 +297,6 @@ class _MappingViewState extends State<MappingView> {
         if (!mounted) return;
         _snack('Record updated!');
         _clearForm();
-        if (Navigator.canPop(context)) Navigator.pop(context);
         await _fetchMappings();
       } else {
         if (!mounted) return;
@@ -424,12 +428,10 @@ class _MappingViewState extends State<MappingView> {
                           value: _selDeviceId,
                           items: _deviceList
                               .map(
-                                (d) => DropdownMenuItem<String>(
+                                (d) => SearchableDropdownItem<String>(
                                   value: d['id'].toString(),
-                                  child: Text(
-                                    d['device_code']?.toString() ??
-                                        d['id'].toString(),
-                                  ),
+                                  label: d['device_code']?.toString() ??
+                                      d['id'].toString(),
                                 ),
                               )
                               .toList(),
@@ -477,12 +479,10 @@ class _MappingViewState extends State<MappingView> {
                     value: _selLocationId,
                     items: _locationList
                         .map(
-                          (l) => DropdownMenuItem<String>(
+                          (l) => SearchableDropdownItem<String>(
                             value: l['id'].toString(),
-                            child: Text(
-                              l['location_name']?.toString() ??
-                                  l['id'].toString(),
-                            ),
+                            label: l['location_name']?.toString() ??
+                                l['id'].toString(),
                           ),
                         )
                         .toList(),
@@ -626,7 +626,7 @@ class _MappingViewState extends State<MappingView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Padding(
+      body: SelectionArea(child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
@@ -677,6 +677,7 @@ class _MappingViewState extends State<MappingView> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -710,19 +711,13 @@ class _MappingViewState extends State<MappingView> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       )
-                    : DropdownButtonFormField<String>(
-                        initialValue: _selDeviceId,
-                        decoration: _inputDec('Select Device Code'),
-                        isExpanded: true,
+                    : SearchableDropdown<String>(
+                        value: _selDeviceId,
+                        hint: "Select Device Code",
                         items: _deviceList.map((d) {
-                          return DropdownMenuItem<String>(
+                          return SearchableDropdownItem<String>(
                             value: d['id'].toString(),
-                            child: Text(
-                              d['device_code']?.toString() ??
-                                  d['id'].toString(),
-                              style: const TextStyle(fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            label: d['device_code']?.toString() ?? d['id'].toString(),
                           );
                         }).toList(),
                         onChanged: (v) => setState(() => _selDeviceId = v),
@@ -762,19 +757,13 @@ class _MappingViewState extends State<MappingView> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       )
-                    : DropdownButtonFormField<String>(
-                        initialValue: _selLocationId,
-                        decoration: _inputDec('Select Location Name'),
-                        isExpanded: true,
+                    : SearchableDropdown<String>(
+                        value: _selLocationId,
+                        hint: "Select Location Name",
                         items: _locationList.map((l) {
-                          return DropdownMenuItem<String>(
+                          return SearchableDropdownItem<String>(
                             value: l['id'].toString(),
-                            child: Text(
-                              l['location_name']?.toString() ??
-                                  l['id'].toString(),
-                              style: const TextStyle(fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            label: l['location_name']?.toString() ?? l['id'].toString(),
                           );
                         }).toList(),
                         onChanged: (v) => setState(() => _selLocationId = v),
@@ -897,29 +886,14 @@ class _MappingViewState extends State<MappingView> {
   Widget _buildDropdownField({
     required String hint,
     String? value,
-    required List<DropdownMenuItem<String>> items,
+    required List<SearchableDropdownItem<String>> items,
     required ValueChanged<String?> onChanged,
   }) {
-    return DropdownButtonFormField<String>(
+    return SearchableDropdown<String>(
       value: value,
-      hint: Text(
-        hint,
-        style: const TextStyle(
-          fontSize: 13,
-          color: Color(0xFF64748B),
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      dropdownColor: Colors.white,
-      style: const TextStyle(
-        color: Color(0xFF1E293B),
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-      ),
-      decoration: _inputDec(hint),
-      items: items,
+      hint: hint,
       onChanged: onChanged,
-      isExpanded: true,
+      items: items,
     );
   }
 
@@ -960,7 +934,7 @@ class _MappingViewState extends State<MappingView> {
                     ),
                   ),
                   SizedBox(
-                    width: 70,
+                    width: 75,
                     height: 35,
                     child: DropdownButtonFormField<String>(
                       value: _entries,
@@ -969,7 +943,7 @@ class _MappingViewState extends State<MappingView> {
                       decoration: InputDecoration(
                         isDense: true,
                         filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
+                        fillColor: Colors.white,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
                           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -987,15 +961,20 @@ class _MappingViewState extends State<MappingView> {
                           vertical: 8,
                         ),
                       ),
-                      items: ['10', '25', '50']
-                          .map(
-                            (v) => DropdownMenuItem(value: v, child: Text(v)),
-                          )
+                      items: ["10", "25", "50", "100"]
+                          .map((v) => DropdownMenuItem(
+                                value: v,
+                                child: Text(v),
+                              ))
                           .toList(),
-                      onChanged: (v) => setState(() {
-                        _entries = v!;
-                        _page = 1;
-                      }),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() {
+                            _entries = v;
+                            _page = 1;
+                          });
+                        }
+                      },
                     ),
                   ),
                   const Text(

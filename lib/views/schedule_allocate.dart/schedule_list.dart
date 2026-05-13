@@ -1,9 +1,10 @@
-import 'package:intl/intl.dart';
-import '../../widgets/animated_heading.dart';
-import '../../widgets/stylish_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:intl/intl.dart';
+import '../../widgets/animated_heading.dart';
+import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 class ScheduleListView extends StatefulWidget {
   final Function(Map<String, dynamic>)? onEdit;
@@ -248,31 +249,18 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                               fontSize: 14,
                               color: Color(0xFF0F172A))),
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<int>(
+                      SearchableDropdown<int>(
                         value: tmpMonth,
-                        decoration: InputDecoration(
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                BorderSide(color: Colors.grey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                BorderSide(color: Colors.grey.shade300),
-                          ),
-                        ),
-                        onChanged: (m) =>
-                            setPopupState(() => tmpMonth = m!),
+                        hint: "Month",
                         items: List.generate(12, (i) => i + 1)
-                            .map((m) => DropdownMenuItem(
+                            .map((m) => SearchableDropdownItem<int>(
                                   value: m,
-                                  child: Text(DateFormat('MMMM')
-                                      .format(DateTime(2024, m))),
+                                  label: DateFormat('MMMM')
+                                      .format(DateTime(2024, m)),
                                 ))
                             .toList(),
+                        onChanged: (m) =>
+                            setPopupState(() => tmpMonth = m!),
                       ),
                     ],
                   ),
@@ -289,31 +277,18 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                               fontSize: 14,
                               color: Color(0xFF0F172A))),
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<int>(
+                      SearchableDropdown<int>(
                         value: tmpYear,
-                        decoration: InputDecoration(
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                BorderSide(color: Colors.grey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                BorderSide(color: Colors.grey.shade300),
-                          ),
-                        ),
-                        onChanged: (y) =>
-                            setPopupState(() => tmpYear = y!),
+                        hint: "Year",
                         items: List.generate(
                                 5, (i) => DateTime.now().year - i)
-                            .map((y) => DropdownMenuItem(
+                            .map((y) => SearchableDropdownItem<int>(
                                   value: y,
-                                  child: Text(y.toString()),
+                                  label: y.toString(),
                                 ))
                             .toList(),
+                        onChanged: (y) =>
+                            setPopupState(() => tmpYear = y!),
                       ),
                     ],
                   ),
@@ -373,7 +348,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return SelectionArea(child: Column(
       children: [
         Expanded(
           child: Padding(
@@ -513,6 +488,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
           ),
         ),
       ],
+    ),
     );
   }
 
@@ -719,8 +695,8 @@ class _ScheduleListViewState extends State<ScheduleListView> {
               ),
               const SizedBox(width: 6),
               SizedBox(
-                width: 70,
-                height: 36,
+                width: 75,
+                height: 35,
                 child: DropdownButtonFormField<String>(
                   value: entriesValue,
                   dropdownColor: Colors.white,
@@ -746,6 +722,12 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                       vertical: 8,
                     ),
                   ),
+                  items: ["10", "25", "50", "100"]
+                      .map((v) => DropdownMenuItem(
+                            value: v,
+                            child: Text(v),
+                          ))
+                      .toList(),
                   onChanged: (v) {
                     if (v != null) {
                       setState(() {
@@ -754,17 +736,6 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                       });
                     }
                   },
-                  items: ['10', '25', '50']
-                      .map(
-                        (v) => DropdownMenuItem(
-                          value: v,
-                          child: Text(
-                            v,
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ),
-                      )
-                      .toList(),
                 ),
               ),
               const SizedBox(width: 6),

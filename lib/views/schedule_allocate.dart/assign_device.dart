@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import '../../widgets/animated_heading.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 class AssignDeviceView extends StatefulWidget {
   const AssignDeviceView({super.key});
@@ -172,7 +173,7 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SelectionArea(child: Padding(
       padding: const EdgeInsets.only(
         left: 24.0,
         right: 24.0,
@@ -294,6 +295,7 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -335,7 +337,7 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
     );
   }
 
- Widget _buildDropdown({
+  Widget _buildDropdown({
     required String label,
     required String hint,
     int? value,
@@ -350,47 +352,32 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
-            color: Color(0xFF64748B), // ← changed from Colors.blueAccent
+            color: Color(0xFF64748B),
           ),
         ),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: value,
-              hint: Text(hint, style: TextStyle(color: Colors.grey.shade400)),
-              isExpanded: true,
-              dropdownColor: Colors.white,
-              onChanged: onChanged,
-              items: items.where((e) {
-                final name = e['device_name'] ??
-                    e['schedule_name'] ??
-                    e['device_code'] ??
-                    '';
-                return name.toString().trim().isNotEmpty;
-              }).map((e) {
-                final id = int.tryParse(e['id'].toString());
-                final name =
-                    e['device_name'] ??
-                    e['schedule_name'] ??
-                    e['device_code'] ??
-                    '';
-                return DropdownMenuItem<int>(
-                  value: id ?? 0,
-                  child: Text(
-                    name.toString(),
-                    style: const TextStyle(fontSize: 14, color: Colors.black87),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
+        SearchableDropdown<int>(
+          value: value,
+          hint: hint,
+          items: items.where((e) {
+            final name = e['device_name'] ??
+                e['schedule_name'] ??
+                e['device_code'] ??
+                '';
+            return name.toString().trim().isNotEmpty;
+          }).map((e) {
+            final id = int.tryParse(e['id'].toString());
+            final name =
+                e['device_name'] ??
+                e['schedule_name'] ??
+                e['device_code'] ??
+                '';
+            return SearchableDropdownItem<int>(
+              value: id ?? 0,
+              label: name.toString(),
+            );
+          }).toList(),
+          onChanged: onChanged,
         ),
       ],
     );

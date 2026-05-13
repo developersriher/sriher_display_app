@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 class SelectTemplateView extends StatefulWidget {
   const SelectTemplateView({super.key});
@@ -340,7 +341,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Padding(
+      body: SelectionArea(child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -552,6 +553,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -967,7 +969,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     List<dynamic> items,
     ValueChanged<int?> onChanged,
   ) {
-    final bool isTemplate = label == 'Template';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -984,52 +985,16 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         Row(
           children: [
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: value,
-                    hint: Text(hint, style: const TextStyle(fontSize: 13)),
-                    isExpanded: true,
-                    icon: const Icon(
-                      Icons.keyboard_arrow_down,
-                      color: Colors.blue,
-                    ),
-                    onChanged: onChanged,
-                    items: (() {
-                      final uniqueIds = <int>{};
-                      final uniqueItems = <dynamic>[];
-                      for (var t in items) {
-                        final id = int.tryParse(t['id']?.toString() ?? '');
-                        if (id != null && !uniqueIds.contains(id)) {
-                          uniqueIds.add(id);
-                          uniqueItems.add(t);
-                        }
-                      }
-                      return uniqueItems.map<DropdownMenuItem<int>>((t) {
-                        return DropdownMenuItem<int>(
-                          value: int.parse(t['id'].toString()),
-                          child: Text(
-                            t['temp_name'] ??
-                                t['category_name'] ??
-                                t['name'] ??
-                                '',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Color(0xFF1E293B),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        );
-                      }).toList();
-                    })(),
-                  ),
-                ),
+              child: SearchableDropdown<int>(
+                value: value,
+                hint: hint,
+                items: items.map((item) {
+                  return SearchableDropdownItem<int>(
+                    value: int.tryParse(item['id'].toString()) ?? 0,
+                    label: item['temp_name'] ?? item['category_name'] ?? '',
+                  );
+                }).toList(),
+                onChanged: onChanged,
               ),
             ),
             const SizedBox(width: 8),
@@ -1041,7 +1006,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                 borderRadius: BorderRadius.circular(6),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(6),
-                  onTap: isTemplate
+                  onTap: (label == 'Template')
                       ? () => _showAddTemplateDialog()
                       : () => _showAddDepartmentDialog(),
                   child: const Icon(Icons.add, color: Colors.white, size: 20),

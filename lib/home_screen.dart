@@ -222,6 +222,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               children: [
                 _buildSidebarItem(Icons.dashboard_rounded, 'Dashboard', 0),
                 const SizedBox(height: 16),
+                _buildSectionHeader('SYSTEM MASTERS'),
+                _buildSidebarItem(
+                  Icons.admin_panel_settings_rounded,
+                  'Roles',
+                  11,
+                ),
+                _buildSidebarItem(Icons.settings_cell_rounded, 'Devices', 12),
+                _buildSidebarItem(Icons.business_rounded, 'Departments', 13),
+                _buildSidebarItem(Icons.location_on_rounded, 'Locations', 14),
+                _buildSidebarItem(Icons.map_rounded, 'Mapping', 15),
+                   const SizedBox(height: 16),
                 _buildSectionHeader('MANAGEMENT'),
                 _buildSidebarItem(Icons.person_add_rounded, 'Add User', 1),
                 _buildSidebarItem(
@@ -258,16 +269,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   10,
                 ),
                 const SizedBox(height: 16),
-                _buildSectionHeader('SYSTEM MASTERS'),
-                _buildSidebarItem(
-                  Icons.admin_panel_settings_rounded,
-                  'Roles',
-                  11,
-                ),
-                _buildSidebarItem(Icons.settings_cell_rounded, 'Devices', 12),
-                _buildSidebarItem(Icons.business_rounded, 'Departments', 13),
-                _buildSidebarItem(Icons.location_on_rounded, 'Locations', 14),
-                _buildSidebarItem(Icons.map_rounded, 'Mapping', 15),
+                
                 const SizedBox(height: 32),
               ],
             ),

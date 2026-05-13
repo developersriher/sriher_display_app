@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -260,99 +261,106 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
   }
 
   void _showSchedulePopup() {
-    StylishDialog.show(
-      context: context,
-      title: "NEW SCHEDULE",
-      maxWidth: 480,
-      builder: (context, setPopupState) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Define a new department or purpose for scheduling.",
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              "Schedule Name",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14.0,
-                color: Color(0xFF0F172A),
+  StylishDialog.show(
+    context: context,
+    title: "NEW SCHEDULE",
+    // Adding the subtitle here ensures it stays directly under the heading
+    subtitle: "Define a new department or purpose for scheduling.",
+    maxWidth: 480,
+    builder: (context, setPopupState) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Subtitle is now handled by StylishDialog.show, 
+          // so we start directly with the input field
+          const SizedBox(height: 8), 
+          TextFormField(
+            controller: _newScheduleController,
+            autofocus: true,
+            style: const TextStyle(fontSize: 14),
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) {
+              final name = _newScheduleController.text.trim();
+              if (name.isNotEmpty) {
+                Navigator.pop(context);
+                _addNewSchedule(name);
+              }
+            },
+            decoration: InputDecoration(
+              // Added "Enter the schedule name" as requested
+              hintText: "Enter the schedule name (e.g., Cardiology OPD)",
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              
+              // Added your signature sharp borders
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: Colors.grey.shade400),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(0),
+                borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 18,
               ),
             ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _newScheduleController,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) {
-                final name = _newScheduleController.text.trim();
-                if (name.isNotEmpty) {
-                  Navigator.pop(context);
-                  _addNewSchedule(name);
-                }
-              },
-              decoration: const InputDecoration(
-                hintText: "e.g., Cardiology OPD, General Ward",
-                fillColor: Color(0xFFF8FAFC),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+          ),
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Text(
-                      "Cancel",
-                      style: TextStyle(
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.bold,
-                      ),
+                  ),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      final name = _newScheduleController.text.trim();
-                      if (name.isNotEmpty) {
-                        Navigator.pop(context);
-                        _addNewSchedule(name);
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: const Text(
-                      "Create Schedule",
-                      style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: () {
+                    final name = _newScheduleController.text.trim();
+                    if (name.isNotEmpty) {
+                      Navigator.pop(context);
+                      _addNewSchedule(name);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
                   ),
+                  child: const Text(
+                    "Create Schedule",
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
                 ),
-              ],
-            ),
-          ],
-        );
-      },
-    );
-  }
-
+              ),
+            ],
+          ),
+        ],
+      );
+    },
+  );
+}
   @override
   Widget build(BuildContext context) {
     if (isSelectionComplete && !_wasSelectionComplete) {
@@ -364,7 +372,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: LayoutBuilder(
+      body: SelectionArea(
+        child: LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 1100;
           return Padding(
@@ -416,6 +425,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           );
         },
       ),
+    ),
     );
   }
 
@@ -838,54 +848,37 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         Row(
           children: [
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: value,
-                    hint: Text(
-                      hint,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 12,
-                      ),
-                    ),
-                    isExpanded: true,
-                    dropdownColor: Colors.white,
-                    onChanged: onChanged,
-                    items: items.map((e) {
-                      final id = int.tryParse(e['id'].toString());
-                      final name =
-                          e['schedule_name'] ??
-                          e['temp_name'] ??
-                          e['name'] ??
-                          '';
-                      return DropdownMenuItem<int>(
-                        value: id,
-                        child: Text(name, style: const TextStyle(fontSize: 14)),
-                      );
-                    }).toList(),
-                  ),
-                ),
+              child: SearchableDropdown<int>(
+                value: value,
+                hint: hint,
+                items: items.map((item) {
+                  return SearchableDropdownItem<int>(
+                    value: int.tryParse(item['id']?.toString() ?? '') ?? 0,
+                    label: item['schedule_name']?.toString() ??
+                        item['template_name']?.toString() ??
+                        item['temp_name']?.toString() ??
+                        item['name']?.toString() ??
+                        item['role_name']?.toString() ??
+                        item['device_name']?.toString() ??
+                        item['location_name']?.toString() ??
+                        item['department_name']?.toString() ??
+                        'Unnamed',
+                  );
+                }).toList(),
+                onChanged: onChanged,
               ),
             ),
             if (showAdd) ...[
               const SizedBox(width: 8),
-              IconButton.filled(
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.blue.shade50,
-                  foregroundColor: Colors.blue.shade600,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                onPressed: _showSchedulePopup,
-                icon: const Icon(Icons.add, size: 20),
+                child: IconButton(
+                  icon: const Icon(Icons.add, color: Colors.blue),
+                  onPressed: () => _showSchedulePopup(),
+                ),
               ),
             ],
           ],
@@ -899,6 +892,11 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     TextEditingController controller, {
     bool enabled = true,
   }) {
+    final List<String> slots = _generateTimeSlots();
+    final String? currentValue = (slots.contains(controller.text) && controller.text.isNotEmpty)
+        ? controller.text
+        : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -912,49 +910,21 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           ),
         ),
         const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value:
-              (_generateTimeSlots().contains(controller.text) &&
-                  controller.text.isNotEmpty)
-              ? controller.text
-              : null,
-          decoration: InputDecoration(
-            hintText: hint,
-           hintStyle: TextStyle(
-  color: enabled ? Colors.black38 : Colors.grey.shade400,
-  fontSize: 11.0,  
-),
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 12,
-            ),
-          ),
-          dropdownColor: Colors.white,
-          isExpanded: true,
+        SearchableDropdown<String>(
+          value: currentValue,
+          hint: hint,
+          items: slots.map((time) {
+            return SearchableDropdownItem<String>(value: time, label: time);
+          }).toList(),
           onChanged: enabled
               ? (v) {
-                  if (v != null) setState(() => controller.text = v);
+                  if (v != null) {
+                    setState(() {
+                      controller.text = v;
+                    });
+                  }
                 }
               : null,
-          items: _generateTimeSlots().map((String time) {
-            return DropdownMenuItem<String>(
-              value: time,
-              child: Text(
-                time,
-                style: const TextStyle(fontSize: 13.0, color: Colors.black87),
-              ),
-            );
-          }).toList(),
         ),
       ],
     );
@@ -1041,8 +1011,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               ),
               const SizedBox(width: 12),
               SizedBox(
-                width: 85,
-                height: 38,
+                width: 75,
+                height: 35,
                 child: DropdownButtonFormField<String>(
                   value: entriesValue,
                   dropdownColor: Colors.white,
@@ -1068,18 +1038,15 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                       vertical: 8,
                     ),
                   ),
-                  items: ["10", "25", "50"]
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e,
-                          child: Text(
-                            e,
-                            style: const TextStyle(fontSize: 13.0),
-                          ),
-                        ),
-                      )
+                  items: ["10", "25", "50", "100"]
+                      .map((v) => DropdownMenuItem(
+                            value: v,
+                            child: Text(v),
+                          ))
                       .toList(),
-                  onChanged: (val) => setState(() => entriesValue = val!),
+                  onChanged: (v) => setState(() {
+                    entriesValue = v!;
+                  }),
                 ),
               ),
               const SizedBox(width: 8),

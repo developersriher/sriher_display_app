@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Privilege definitions
@@ -234,6 +235,8 @@ class _RoleViewState extends State<RoleView>
     }
 
     setState(() => isSubmitting = true);
+    // DISMISS IMMEDIATELY
+    if (mounted && Navigator.canPop(context)) Navigator.pop(context);
 
     final bool isUpdate = editingId != null;
     final url = isUpdate
@@ -260,7 +263,6 @@ class _RoleViewState extends State<RoleView>
         if (!mounted) return;
         _snack(isUpdate ? "Role updated!" : "Role created!");
         _resetForm();
-        if (Navigator.canPop(context)) Navigator.pop(context);
         fetchRoles();
       } else {
         if (!mounted) return;
@@ -430,7 +432,8 @@ class _RoleViewState extends State<RoleView>
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Padding(
+      body: SelectionArea(
+        child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Container(
           decoration: BoxDecoration(
@@ -493,6 +496,7 @@ class _RoleViewState extends State<RoleView>
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -766,9 +770,9 @@ class _RoleViewState extends State<RoleView>
                         vertical: 10,
                         horizontal: 32,
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                     shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
                       elevation: 0,
                     ),
                     child: isSubmitting
@@ -856,8 +860,8 @@ class _RoleViewState extends State<RoleView>
             ),
             const SizedBox(width: 6),
             SizedBox(
-              width: 70,
-              height: 38,
+              width: 75,
+              height: 35,
               child: DropdownButtonFormField<String>(
                 value: entriesValue,
                 dropdownColor: Colors.white,
@@ -865,31 +869,38 @@ class _RoleViewState extends State<RoleView>
                 decoration: InputDecoration(
                   isDense: true,
                   filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
+                  fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 8,
                   ),
                 ),
-                items: ["10", "25", "50"]
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                items: ["10", "25", "50", "100"]
+                    .map((v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(v),
+                        ))
                     .toList(),
-                onChanged: (v) => setState(() {
-                  entriesValue = v!;
-                  currentPage = 0;
-                }),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      entriesValue = v;
+                      currentPage = 0;
+                    });
+                  }
+                },
               ),
             ),
             const SizedBox(width: 6),

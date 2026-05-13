@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
+import '../../widgets/searchable_dropdown.dart';
 
 class AddUserView extends StatefulWidget {
   const AddUserView({super.key});
@@ -157,7 +158,7 @@ class _AddUserViewState extends State<AddUserView> {
               : "User added successfully!",
         );
         _resetForm();
-        fetchUserList();
+        await fetchUserList();
       } else {
         _showSnack(
           "Server error (${response.statusCode}). Try again.",
@@ -219,18 +220,23 @@ class _AddUserViewState extends State<AddUserView> {
 
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    try {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    } catch (e) {
+      debugPrint("Snackbar error: $e");
+    }
   }
 
-void _showFormDialog() {
+  void _showFormDialog() {
     StylishDialog.show(
       context: context,
       title: editingDatabaseId == null ? "Add User" : "Edit User",
@@ -238,33 +244,77 @@ void _showFormDialog() {
       icon: editingDatabaseId == null
           ? Icons.person_add_rounded
           : Icons.edit_note_rounded,
-      child: Form(
-        key: _formKey,
-        child: Column(
-          children: [
-            _buildUserIdInput(),
-            const SizedBox(height: 20),
-            _buildInput(
-              "User Name",
-              _userNameController,
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? "Enter user name" : null,
+      child: StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                _buildUserIdInput(),
+                const SizedBox(height: 20),
+                _buildInput(
+                  "User Name",
+                  _userNameController,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? "Enter user name" : null,
+                ),
+                const SizedBox(height: 20),
+                _buildInput(
+                  "Password",
+                  _passwordController,
+                  isPass: true,
+                  validator: (v) {
+                    if (editingDatabaseId != null) return null;
+                    if (v == null || v.trim().isEmpty) return "Enter password";
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  value: selectedRoleId,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 12,
+                    ),
+                    hintText: "Select Role",
+                    hintStyle: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                  items: allRoles.map((r) {
+                    return DropdownMenuItem<String>(
+                      value: r['id']?.toString() ?? '',
+                      child: Text(r['role_name']?.toString() ?? ''),
+                    );
+                  }).toList(),
+                  onChanged: (v) {
+                    setDialogState(() => selectedRoleId = v);
+                    setState(() => selectedRoleId = v);
+                  },
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            _buildInput(
-              "Password",
-              _passwordController,
-              isPass: true,
-              validator: (v) {
-                if (editingDatabaseId != null) return null;
-                if (v == null || v.trim().isEmpty) return "Enter password";
-                return null;
-              },
-            ),
-            const SizedBox(height: 20),
-            _buildRoleDrop(),
-          ],
-        ),
+          );
+        },
       ),
       actions: [
         TextButton(
@@ -297,9 +347,10 @@ void _showFormDialog() {
               onPressed: isSubmitting
                   ? null
                   : () async {
-                      setBtnState(() => isSubmitting = true);
-                      await handleSubmit();
-                      if (mounted) Navigator.pop(context);
+                      if (_formKey.currentState!.validate()) {
+                        Navigator.pop(context); // Close immediately
+                        await handleSubmit();
+                      }
                     },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0F172A),
@@ -309,9 +360,9 @@ void _showFormDialog() {
                   horizontal: 32,
                 ),
                 elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
+               shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
               ),
               child: isSubmitting
                   ? const SizedBox(
@@ -340,7 +391,7 @@ void _showFormDialog() {
 
   @override
   Widget build(BuildContext context) {
-    final int limit = int.parse(entriesValue);
+    final int limit = int.tryParse(entriesValue) ?? 10;
     final List<dynamic> filtered = searchQuery.isEmpty
         ? allUsers
         : allUsers.where((u) {
@@ -353,7 +404,7 @@ void _showFormDialog() {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SingleChildScrollView(
+      body: SelectionArea(child: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -414,6 +465,7 @@ void _showFormDialog() {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -612,49 +664,15 @@ Widget _buildInput(
   }
 
   Widget _buildRoleDrop() {
-    return DropdownButtonFormField<String>(
+    return SearchableDropdown<String>(
       value: selectedRoleId,
-      dropdownColor: Colors.white,
-      style: const TextStyle(
-        fontSize: 13,
-        color: Color(0xFF475569),
-      ),
-      decoration: InputDecoration(
-        hintText: "Select Role",
-        hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 16,
-        ),
-      ),
-      items: allRoles
-          .map(
-            (r) => DropdownMenuItem(
-              value: r['id'].toString(),
-              child: Text(
-                r['role_name'] ?? '',
-                style: const TextStyle(
-                  color: Color(0xFF475569),
-                  fontWeight: FontWeight.normal,
-                ),
-              ),
-            ),
-          )
-          .toList(),
+      hint: "Select Role",
+      items: allRoles.map((r) {
+        return SearchableDropdownItem<String>(
+          value: r['id'].toString(),
+          label: r['role_name'] ?? '',
+        );
+      }).toList(),
       onChanged: (v) => setState(() => selectedRoleId = v),
     );
   }
@@ -741,24 +759,47 @@ Widget _buildInput(
           children: [
             const Text("Show ", style: TextStyle(fontSize: 14)),
             // STYLED ENTRIES BOX
-            Container(
-              width: 70,
-              height: 36,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: entriesValue,
-                  isExpanded: true,
-                  style: const TextStyle(fontSize: 14, color: Colors.black),
-                  items: ["10", "25", "50"]
-                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                      .toList(),
-                  onChanged: (v) => setState(() => entriesValue = v!),
+            SizedBox(
+              width: 75,
+              height: 35,
+              child: DropdownButtonFormField<String>(
+                value: entriesValue,
+                dropdownColor: Colors.white,
+                style: const TextStyle(color: Colors.black87, fontSize: 13),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                 ),
+                items: ["10", "25", "50", "100"]
+                    .map((v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(v),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      entriesValue = v;
+                    });
+                  }
+                },
               ),
             ),
             const Text(" entries", style: TextStyle(fontSize: 14)),
