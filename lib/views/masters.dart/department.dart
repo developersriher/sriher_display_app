@@ -14,9 +14,9 @@ class DepartmentView extends StatefulWidget {
 
 class _DepartmentViewState extends State<DepartmentView> {
   // --- API CONFIGURATION ---
+  final String _baseUrl = "https://display.sriher.com";
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
-  final String _baseUrl = "https://display.sriher.com";
 
   // --- STATE MANAGEMENT ---
   List<dynamic> categoryList = [];
@@ -55,7 +55,7 @@ class _DepartmentViewState extends State<DepartmentView> {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/categoryview'),
-        headers: {"Content-Type": "application/json"},
+        headers: {"Content-Type": "application/json", "Accept": "application/json"},
         body: jsonEncode({"api_key": _apiKey}),
       );
 
@@ -95,7 +95,7 @@ class _DepartmentViewState extends State<DepartmentView> {
         Uri.parse(isUpdate
             ? '$_baseUrl/categoryUpdateview'
             : '$_baseUrl/insertCategoryview'),
-        headers: {"Content-Type": "application/json"},
+        headers: {"Content-Type": "application/json", "Accept": "application/json"},
         body: jsonEncode(isUpdate
             ? {"api_key": _apiKey, "id": editingId, "category_name": name}
             : {"api_key": _apiKey, "category_name": name}),

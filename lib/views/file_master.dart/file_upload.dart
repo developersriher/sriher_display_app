@@ -169,6 +169,7 @@ class _FileUploadViewState extends State<FileUploadView> {
       return;
     }
 
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => isSubmitting = true);
     // DISMISS IMMEDIATELY TO AVOID LATENCY
     if (mounted && Navigator.canPop(context)) Navigator.pop(context);
@@ -186,6 +187,8 @@ class _FileUploadViewState extends State<FileUploadView> {
         request.fields['valid_upto_date'] = _toDateController.text;
         request.fields['from_date'] = _fromDateController.text;
         request.fields['to_date'] = _toDateController.text;
+        request.fields['valid_from'] = _fromDateController.text;
+        request.fields['valid_upto'] = _toDateController.text;
       }
 
       String filename = _selectedFile!.name;
@@ -223,14 +226,14 @@ class _FileUploadViewState extends State<FileUploadView> {
       debugPrint("Insert response [${response.statusCode}]: ${response.body}");
 
       if (response.statusCode == 200) {
-        _showSnackBar("File uploaded successfully.");
+        messenger.showSnackBar(const SnackBar(content: Text("File uploaded successfully."), behavior: SnackBarBehavior.floating));
         _resetForm();
         await fetchFilesFromServer(); // Refresh immediately
       } else {
-        _showSnackBar("Upload Error: ${response.statusCode}");
+        messenger.showSnackBar(SnackBar(content: Text("Upload Error: ${response.statusCode}"), behavior: SnackBarBehavior.floating));
       }
     } catch (e) {
-      _showSnackBar("Insert failed: $e");
+      messenger.showSnackBar(SnackBar(content: Text("Insert failed: $e"), behavior: SnackBarBehavior.floating));
     } finally {
       if (mounted) setState(() => isSubmitting = false);
     }
@@ -296,6 +299,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   // API 4: UPDATE FILE (POST /fileUpdateview)
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> updateFileAction() async {
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => isSubmitting = true);
     try {
       final response = await http.post(
@@ -313,18 +317,20 @@ class _FileUploadViewState extends State<FileUploadView> {
             "valid_upto_date": _toDateController.text,
             "from_date": _fromDateController.text,
             "to_date": _toDateController.text,
+            "valid_from": _fromDateController.text,
+            "valid_upto": _toDateController.text,
           },
         }),
       );
 
       if (response.statusCode == 200) {
         if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-        _showSnackBar("Record metadata updated successfully.");
+        messenger.showSnackBar(const SnackBar(content: Text("Record updated successfully."), behavior: SnackBarBehavior.floating));
         _resetForm();
         fetchFilesFromServer();
       }
     } catch (e) {
-      _showSnackBar("Update Error.");
+      messenger.showSnackBar(const SnackBar(content: Text("Update Error."), behavior: SnackBarBehavior.floating));
     } finally {
       if (mounted) setState(() => isSubmitting = false);
     }
@@ -353,6 +359,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   // API 6: DELETE RECORD (POST /deleteFileview)
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> deleteFileAction(dynamic id) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/deleteFileview'),
@@ -360,10 +367,10 @@ class _FileUploadViewState extends State<FileUploadView> {
         body: jsonEncode({"api_key": _apiKey, "id": id}),
       );
       if (response.statusCode == 200) {
-        _showSnackBar("File deleted successfully.");
+        messenger.showSnackBar(const SnackBar(content: Text("File deleted successfully."), behavior: SnackBarBehavior.floating));
         await fetchFilesFromServer(); // Full refresh to ensure UI is in sync
       } else {
-        _showSnackBar("Delete failed.");
+        messenger.showSnackBar(const SnackBar(content: Text("Delete failed."), behavior: SnackBarBehavior.floating));
       }
     } catch (e) {
       _showSnackBar("Delete Protocol Failed.");
@@ -1055,7 +1062,7 @@ if (_selectedType == "Short Term") ...[
         ),
         DataCell(
           Text(
-            _formatDate(item['valid_from_date'] ?? item['from_date'],
+            _formatDate(item['valid_from_date'] ?? item['from_date'] ?? item['valid_from'],
                 item['type'] ?? item['group5'],
                 isFromDate: true),
             style: const TextStyle(color: Colors.black87, fontSize: 12),
@@ -1063,7 +1070,7 @@ if (_selectedType == "Short Term") ...[
         ),
         DataCell(
           Text(
-            _formatDate(item['valid_upto_date'] ?? item['to_date'],
+            _formatDate(item['valid_upto_date'] ?? item['to_date'] ?? item['valid_upto'],
                 item['type'] ?? item['group5'],
                 isFromDate: false),
             style: const TextStyle(color: Colors.black87, fontSize: 12),
