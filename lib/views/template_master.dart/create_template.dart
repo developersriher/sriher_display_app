@@ -1,3 +1,4 @@
+import '../../api_config.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -22,13 +23,14 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
   // ─── API CONFIGURATION ───────────────────────────────────────────────────
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
-  final String _baseUrl = "https://display.sriher.com";
+  String get _baseUrl => getBaseUrl();
 
   // ─── STATE PROPERTIES ────────────────────────────────────────────────────
   List<dynamic> templateList = [];
   bool isLoading = true;
   bool isSubmitting = false;
   int? editingId; // Track if we are updating an existing record
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   // Table Configuration
   String entriesValue = "10";
@@ -103,10 +105,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
 
   // API 2: INSERT DATA
   Future<void> insertTemplateAction() async {
-    if (_templateNameController.text.trim().isEmpty) {
-      _showSnackBar("Validation Error: Please enter a template name.");
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => isSubmitting = true);
     // DISMISS NOW HANDLED IN BUTTON PRESS
@@ -145,7 +144,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
 
   // API 4: UPDATE DATA
   Future<void> updateTemplateAction() async {
-    if (editingId == null) return;
+    if (editingId == null || !_formKey.currentState!.validate()) return;
     setState(() => isSubmitting = true);
     // DISMISS NOW HANDLED IN BUTTON PRESS
 
@@ -265,8 +264,13 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
       ? Icons.dashboard_customize_rounded
       : Icons.edit_note_rounded,
   width: 430,
-  child: TextFormField(
+  child: Form(
+    key: _formKey,
+    autovalidateMode: AutovalidateMode.onUserInteraction,
+    child: TextFormField(
         controller: _templateNameController,
+        validator: (v) => (v == null || v.isEmpty) ? 'Enter the template name' : null,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Enter the template name',
@@ -296,7 +300,8 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
           ),
         ),
       ),
-      actions: [
+    ),
+    actions: [
         TextButton(
           onPressed: () {
             setState(() {
@@ -322,15 +327,16 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: isSubmitting
+            onPressed: isSubmitting
               ? null
               : () async {
-                  // VALIDATE HERE IF NEEDED, THEN POP
-                  Navigator.pop(context);
-                  if (editingId == null) {
-                    await insertTemplateAction();
-                  } else {
-                    await updateTemplateAction();
+                  if (_formKey.currentState!.validate()) {
+                    Navigator.pop(context);
+                    if (editingId == null) {
+                      await insertTemplateAction();
+                    } else {
+                      await updateTemplateAction();
+                    }
                   }
                 },
           style: ElevatedButton.styleFrom(

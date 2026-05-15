@@ -1,3 +1,4 @@
+import '../../api_config.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -16,7 +17,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   // --- API CONFIGURATION ---
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
-  final String _baseUrl = "https://display.sriher.com";
+  String get _baseUrl => getBaseUrl();
 
   // --- STATE MANAGEMENT ---
   List<dynamic> locationList = [];
@@ -24,6 +25,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   String entriesValue = "10";
   int? editingId;
   final TextEditingController _searchController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   String searchQuery = "";
   int currentPage = 1;
 
@@ -88,9 +90,6 @@ class _LocationMasterViewState extends State<LocationMasterView> {
     };
 
     try {
-      // DISMISS IMMEDIATELY
-      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
@@ -148,9 +147,6 @@ class _LocationMasterViewState extends State<LocationMasterView> {
     };
 
     try {
-      // DISMISS IMMEDIATELY
-      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
@@ -208,77 +204,101 @@ class _LocationMasterViewState extends State<LocationMasterView> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
- void _showLocationDialog() {
+void _showLocationDialog() {
     StylishDialog.show(
       context: context,
       title: editingId == null ? "Add Location Master" : "Edit Location",
       subtitle: "Configure building areas and floor levels",
       icon: editingId == null ? Icons.add_location_alt_rounded : Icons.edit_location_alt_rounded,
       width: MediaQuery.of(context).size.width * 0.4,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildSmallTextField(
-            'Building/Area Name',
-            _buildingAreaController,
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.disabled, // ← disabled by default
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildSmallTextField(
+              'Building/Area Name',
+              _buildingAreaController,
+              validator: (v) => (v == null || v.isEmpty)
+                  ? 'Please enter the Building/Area Name'
+                  : null,
+            ),
+            const SizedBox(height: 20),
+            _buildSmallTextField(
+              'Floor Name',
+              _floorNameController,
+              validator: (v) => (v == null || v.isEmpty)
+                  ? 'Please enter the Floor Name'
+                  : null,
+            ),
+            const SizedBox(height: 20),
+            _buildSmallTextField(
+              'Sub Location Name',
+              _subLocationController,
+              validator: (v) => (v == null || v.isEmpty)
+                  ? 'Please enter the Sub Location Name'
+                  : null,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            _clearForm();
+            Navigator.pop(context);
+          },
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(
+              vertical: 12,
+              horizontal: 20,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
           ),
-          const SizedBox(height: 20),
-          _buildSmallTextField('Floor Name', _floorNameController),
-          const SizedBox(height: 20),
-          _buildSmallTextField(
-            'Sub Location Name',
-            _subLocationController,
+          child: const Text(
+            "Cancel",
+            style: TextStyle(
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
           ),
-        ],
-      ),
-     actions: [
-  TextButton(
-    onPressed: () {
-      _clearForm();
-      Navigator.pop(context);
-    },
-    style: TextButton.styleFrom(
-      padding: const EdgeInsets.symmetric(
-        vertical: 12,
-        horizontal: 20,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-    ),
-    child: const Text(
-      "Cancel",
-      style: TextStyle(
-        color: Color(0xFF64748B),
-        fontWeight: FontWeight.bold,
-        fontSize: 13,
-      ),
-    ),
-  ),
-  const SizedBox(width: 12),
-  ElevatedButton(
-    onPressed: editingId == null ? submitNewLocation : updateLocation,
-    style: ElevatedButton.styleFrom(
-      backgroundColor: const Color(0xFF0F172A),
-      foregroundColor: Colors.white,
-      padding: const EdgeInsets.symmetric(
-        vertical: 12,
-        horizontal: 32,
-      ),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-    ),
-    child: Text(
-      editingId == null ? "Submit" : "Update",
-      style: const TextStyle(
-        fontWeight: FontWeight.w900,
-        fontSize: 13,
-      ),
-    ),
-  ),
-
+        ),
+        const SizedBox(width: 12),
+        ElevatedButton(
+          onPressed: () async {
+            if (_formKey.currentState!.validate()) {
+              Navigator.pop(context); // ← close first before submit
+              if (editingId == null) {
+                await submitNewLocation();
+              } else {
+                await updateLocation();
+              }
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0F172A),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(
+              vertical: 12,
+              horizontal: 32,
+            ),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          child: Text(
+            editingId == null ? "Submit" : "Update",
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 13,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -448,9 +468,11 @@ class _LocationMasterViewState extends State<LocationMasterView> {
     );
   }
 
-Widget _buildSmallTextField(String hint, TextEditingController controller) {
+Widget _buildSmallTextField(String hint, TextEditingController controller, {String? Function(String?)? validator}) {
     return TextFormField(
       controller: controller,
+      validator: validator,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
       decoration: InputDecoration(
         hintText: hint,
@@ -474,8 +496,31 @@ Widget _buildSmallTextField(String hint, TextEditingController controller) {
             width: 1.6,
           ),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        errorStyle: const TextStyle(height: 0, fontSize: 0),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFFCBD5E1), // ← border stays visible on error
+            width: 1.2,
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFF334155), // ← dark when focused with error
+            width: 1.6,
+          ),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFFCBD5E1),
+            width: 1.2,
+          ),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 10,
+        ),
       ),
     );
   }

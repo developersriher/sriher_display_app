@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../api_config.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
@@ -16,7 +17,7 @@ class _MappingViewState extends State<MappingView> {
   // ─── API CONFIG ───────────────────────────────────────────────────────────
   final String _apiKey =
       '933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2';
-  final String _base = 'https://display.sriher.com';
+  String get _base => getBaseUrl();
 
   // ─── STATE ────────────────────────────────────────────────────────────────
   List<dynamic> _mappingList = [];
@@ -27,6 +28,7 @@ class _MappingViewState extends State<MappingView> {
   bool _dropsLoading = true;
   bool _submitting = false;
   int? _editingId;
+  GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   // Pagination & search
   String _entries = '10';
@@ -158,9 +160,6 @@ class _MappingViewState extends State<MappingView> {
   Future<void> _insert() async {
     if (!_validate()) return;
     setState(() => _submitting = true);
-    // DISMISS IMMEDIATELY
-    if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-
     try {
       // Find the device entry to get device_name and device_model
       final dev = _deviceList.firstWhere(
@@ -191,6 +190,7 @@ class _MappingViewState extends State<MappingView> {
       );
       if (res.statusCode == 200) {
         if (!mounted) return;
+        if (Navigator.canPop(context)) Navigator.pop(context);
         _snack('Mapping submitted successfully!');
         _clearForm();
         await _fetchMappings();
@@ -271,8 +271,6 @@ class _MappingViewState extends State<MappingView> {
   Future<void> _update() async {
     if (!_validate()) return;
     setState(() => _submitting = true);
-    // DISMISS IMMEDIATELY
-    if (mounted && Navigator.canPop(context)) Navigator.pop(context);
     try {
       final loc = _locationList.firstWhere(
         (l) => l['id'].toString() == _selLocationId,
@@ -295,6 +293,7 @@ class _MappingViewState extends State<MappingView> {
       );
       if (res.statusCode == 200) {
         if (!mounted) return;
+        if (Navigator.canPop(context)) Navigator.pop(context);
         _snack('Record updated!');
         _clearForm();
         await _fetchMappings();
@@ -395,7 +394,8 @@ class _MappingViewState extends State<MappingView> {
 
   // ──────────────────────────── POPUP DIALOG ────────────────────────────────
 
-  void _showMappingDialog() {
+ void _showMappingDialog() {
+    _formKey = GlobalKey<FormState>();
     StylishDialog.show(
       context: context,
       title: _editingId == null
@@ -405,106 +405,124 @@ class _MappingViewState extends State<MappingView> {
       icon: _editingId == null
           ? Icons.add_link_rounded
           : Icons.edit_note_rounded,
-      width: MediaQuery.of(context).size.width * 0.7,
+      width: MediaQuery.of(context).size.width * 0.6,
       builder: (context, setDialogState) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSectionHeader("DEVICE INFORMATION"),
-            Row(
-              children: [
-                Expanded(
-                  child: _dropsLoading
-                      ? const Center(
-                          child: SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+        return Form(
+          key: _formKey,
+          autovalidateMode: AutovalidateMode.disabled,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionHeader("DEVICE INFORMATION"),
+              Row(
+                children: [
+                  Expanded(
+                    child: _dropsLoading
+                        ? const Center(
+                            child: SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : _buildDropdownField(
+                            hint: "Select Device Code",
+                            value: _selDeviceId,
+                            items: _deviceList
+                                .map(
+                                  (d) => SearchableDropdownItem<String>(
+                                    value: d['id'].toString(),
+                                    label: d['device_code']?.toString() ??
+                                        d['id'].toString(),
+                                  ),
+                                )
+                                .toList(),
+                            validator: (v) => (v == null || v.isEmpty)
+                                ? 'Please select the Device Code'
+                                : null,
+                            onChanged: (v) {
+                              final dev = _deviceList.firstWhere(
+                                (d) => d['id'].toString() == v,
+                                orElse: () => <String, dynamic>{},
+                              );
+                              if ((dev as Map).isNotEmpty) {
+                                _devNameCtrl.text =
+                                    dev['device_name']?.toString() ?? '';
+                                _devModelCtrl.text =
+                                    dev['device_model']?.toString() ?? '';
+                              }
+                              setDialogState(() => _selDeviceId = v);
+                              setState(() => _selDeviceId = v);
+                            },
                           ),
-                        )
-                      : _buildDropdownField(
-                          hint: "Select Device Code",
-                          value: _selDeviceId,
-                          items: _deviceList
-                              .map(
-                                (d) => SearchableDropdownItem<String>(
-                                  value: d['id'].toString(),
-                                  label: d['device_code']?.toString() ??
-                                      d['id'].toString(),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) {
-                            final dev = _deviceList.firstWhere(
-                              (d) => d['id'].toString() == v,
-                              orElse: () => <String, dynamic>{},
-                            );
-                            if ((dev as Map).isNotEmpty) {
-                              _devNameCtrl.text =
-                                  dev['device_name']?.toString() ?? '';
-                              _devModelCtrl.text =
-                                  dev['device_model']?.toString() ?? '';
-                            }
-                            setDialogState(() => _selDeviceId = v);
-                            setState(() => _selDeviceId = v);
-                          },
-                        ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildTextField(
-                    "Device Name",
-                    _devNameCtrl,
-                    readOnly: true,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildTextField("Device Model", _devModelCtrl, readOnly: true),
-
-            const SizedBox(height: 32),
-            _buildSectionHeader("LOCATION ASSIGNMENT"),
-            _dropsLoading
-                ? const Center(
-                    child: SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildTextField(
+                      "Device Name",
+                      _devNameCtrl,
+                      readOnly: false,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Please enter the Device Name'
+                          : null,
                     ),
-                  )
-                : _buildDropdownField(
-                    hint: "Select Location Name",
-                    value: _selLocationId,
-                    items: _locationList
-                        .map(
-                          (l) => SearchableDropdownItem<String>(
-                            value: l['id'].toString(),
-                            label: l['location_name']?.toString() ??
-                                l['id'].toString(),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) {
-                      setDialogState(() => _selLocationId = v);
-                      setState(() => _selLocationId = v);
-                    },
                   ),
-
-            const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                SizedBox(
-                  width: 100,
-                  child: TextButton(
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                "Device Model",
+                _devModelCtrl,
+                readOnly: false,
+                validator: (v) => (v == null || v.isEmpty)
+                    ? 'Please enter the Device Model'
+                    : null,
+              ),
+              const SizedBox(height: 32),
+              _buildSectionHeader("LOCATION ASSIGNMENT"),
+              _dropsLoading
+                  ? const Center(
+                      child: SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : _buildDropdownField(
+                      hint: "Select Location Name",
+                      value: _selLocationId,
+                      items: _locationList
+                          .map(
+                            (l) => SearchableDropdownItem<String>(
+                              value: l['id'].toString(),
+                              label: l['location_name']?.toString() ??
+                                  l['id'].toString(),
+                            ),
+                          )
+                          .toList(),
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Please select the Location Name'
+                          : null,
+                      onChanged: (v) {
+                        setDialogState(() => _selLocationId = v);
+                        setState(() => _selLocationId = v);
+                      },
+                    ),
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
                     onPressed: () {
                       _clearForm();
                       Navigator.pop(context);
                     },
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 20,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -514,21 +532,31 @@ class _MappingViewState extends State<MappingView> {
                       style: TextStyle(
                         color: Color(0xFF64748B),
                         fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                SizedBox(
-                  width: 140,
-                  child: ElevatedButton(
+                  const SizedBox(width: 12),
+                  ElevatedButton(
                     onPressed: _submitting
                         ? null
-                        : (_editingId == null ? _insert : _update),
+                        : () async {
+                            if (_formKey.currentState!.validate()) {
+                              Navigator.pop(context);
+                              if (_editingId == null) {
+                                await _insert();
+                              } else {
+                                await _update();
+                              }
+                            }
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0F172A),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 32,
+                      ),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -536,24 +564,25 @@ class _MappingViewState extends State<MappingView> {
                     ),
                     child: _submitting
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 18,
+                            height: 18,
                             child: CircularProgressIndicator(
                               color: Colors.white,
                               strokeWidth: 2,
                             ),
                           )
                         : Text(
-                            _editingId == null
-                                ? "Save Mapping"
-                                : "Update Mapping",
-                            style: const TextStyle(fontWeight: FontWeight.w900),
+                            _editingId == null ? "Submit": "Update",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                            ),
                           ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         );
       },
     );
@@ -626,57 +655,61 @@ class _MappingViewState extends State<MappingView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SelectionArea(child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const AnimatedHeading(
-                  text: "Device Mapping",
-                  style: TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    _clearForm();
-                    _showMappingDialog();
-                  },
-                  icon: const Icon(Icons.add_link_rounded, size: 20),
-                  label: const Text(
-                    "CREATE MAPPING",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // List Card
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+      body: SelectionArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const AnimatedHeading(
+                    text: "Device Mapping",
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
                     ),
-                  ],
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: _buildTableCard(),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _clearForm();
+                      _showMappingDialog();
+                    },
+                    icon: const Icon(Icons.add_link_rounded, size: 20),
+                    label: const Text(
+                      "CREATE MAPPING",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+
+              // List Card
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: _buildTableCard(),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -717,7 +750,9 @@ class _MappingViewState extends State<MappingView> {
                         items: _deviceList.map((d) {
                           return SearchableDropdownItem<String>(
                             value: d['id'].toString(),
-                            label: d['device_code']?.toString() ?? d['id'].toString(),
+                            label:
+                                d['device_code']?.toString() ??
+                                d['id'].toString(),
                           );
                         }).toList(),
                         onChanged: (v) => setState(() => _selDeviceId = v),
@@ -763,7 +798,9 @@ class _MappingViewState extends State<MappingView> {
                         items: _locationList.map((l) {
                           return SearchableDropdownItem<String>(
                             value: l['id'].toString(),
-                            label: l['location_name']?.toString() ?? l['id'].toString(),
+                            label:
+                                l['location_name']?.toString() ??
+                                l['id'].toString(),
                           );
                         }).toList(),
                         onChanged: (v) => setState(() => _selLocationId = v),
@@ -808,7 +845,15 @@ class _MappingViewState extends State<MappingView> {
                       ),
                       onPressed: _submitting
                           ? null
-                          : (_editingId == null ? _insert : _update),
+                          : () {
+                              if (_formKey.currentState!.validate()) {
+                                if (_editingId == null) {
+                                  _insert();
+                                } else {
+                                  _update();
+                                }
+                              }
+                            },
                       child: _submitting
                           ? const SizedBox(
                               width: 20,
@@ -838,48 +883,60 @@ class _MappingViewState extends State<MappingView> {
 
   InputDecoration _inputDec(String label) => InputDecoration(
     hintText: label,
-    hintStyle: const TextStyle(
-      color: Color(0xFF94A3B8),
-      fontSize: 12,
-    ),
+    hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
     filled: true,
     fillColor: const Color(0xFFF8FAFC),
     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(
-        color: Color(0xFFCBD5E1),
-        width: 1.2,
-      ),
+      borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(
-        color: Color(0xFF334155),
-        width: 1.6,
-      ),
+      borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
     ),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-    ),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
   );
 
   InputDecoration _hintDec(String hint) => _inputDec(hint);
 
-  Widget _buildTextField(
-    String label,
-    TextEditingController controller, {
+ Widget _buildTextField(String hint, TextEditingController controller, {
     bool readOnly = false,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       readOnly: readOnly,
-      style: const TextStyle(
-        fontSize: 14,
-        color: Color(0xFF1E293B),
-        fontWeight: FontWeight.w600,
+      validator: validator,
+      autovalidateMode: AutovalidateMode.onUserInteraction, // ← clears red once typed
+      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       ),
-      decoration: _inputDec(label),
     );
   }
 
@@ -888,12 +945,15 @@ class _MappingViewState extends State<MappingView> {
     String? value,
     required List<SearchableDropdownItem<String>> items,
     required ValueChanged<String?> onChanged,
+    String? Function(String?)? validator,
   }) {
     return SearchableDropdown<String>(
       value: value,
       hint: hint,
       onChanged: onChanged,
       items: items,
+      validator: validator,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
     );
   }
 
@@ -939,7 +999,10 @@ class _MappingViewState extends State<MappingView> {
                     child: DropdownButtonFormField<String>(
                       value: _entries,
                       dropdownColor: Colors.white,
-                      style: const TextStyle(color: Colors.black87, fontSize: 13),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 13,
+                      ),
                       decoration: InputDecoration(
                         isDense: true,
                         filled: true,
@@ -962,10 +1025,9 @@ class _MappingViewState extends State<MappingView> {
                         ),
                       ),
                       items: ["10", "25", "50", "100"]
-                          .map((v) => DropdownMenuItem(
-                                value: v,
-                                child: Text(v),
-                              ))
+                          .map(
+                            (v) => DropdownMenuItem(value: v, child: Text(v)),
+                          )
                           .toList(),
                       onChanged: (v) {
                         if (v != null) {
@@ -1050,9 +1112,9 @@ class _MappingViewState extends State<MappingView> {
                     enabled: _page > 1,
                     onTap: () => setState(() => _page--),
                   ),
-                 
+
                   _pageNum('$_page / $_totalPages'),
- 
+
                   _pageBtn(
                     'Next',
                     enabled: _page < _totalPages,

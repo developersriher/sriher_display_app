@@ -9,6 +9,8 @@ class SearchableDropdown<T> extends StatefulWidget {
 
   final bool showSearch;
   final double? width;
+  final AutovalidateMode? autovalidateMode;
+  final String? helperText;
 
   const SearchableDropdown({
     super.key,
@@ -19,6 +21,8 @@ class SearchableDropdown<T> extends StatefulWidget {
     this.validator,
     this.showSearch = true,
     this.width,
+    this.autovalidateMode,
+    this.helperText,
   });
 
   @override
@@ -36,6 +40,7 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   final TextEditingController _searchController = TextEditingController();
+  final GlobalKey<FormFieldState<T>> _fieldKey = GlobalKey<FormFieldState<T>>();
   bool _isOpen = false;
 
   @override
@@ -45,15 +50,25 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
     super.dispose();
   }
 
-  void _toggleOverlay() {
-    if (_isOpen) {
-      _removeOverlay();
-    } else {
-      _showOverlay();
+  @override
+  void didUpdateWidget(covariant SearchableDropdown<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != oldWidget.value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fieldKey.currentState?.didChange(widget.value);
+      });
     }
   }
 
-  void _showOverlay() {
+  void _toggleOverlay(FormFieldState<T> state) {
+    if (_isOpen) {
+      _removeOverlay();
+    } else {
+      _showOverlay(state);
+    }
+  }
+
+  void _showOverlay(FormFieldState<T> state) {
     final overlay = Overlay.of(context);
     final renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
@@ -90,6 +105,7 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
                   hint: widget.hint,
                   showSearch: widget.showSearch,
                   onSelected: (val) {
+                    state.didChange(val);
                     widget.onChanged?.call(val);
                     _removeOverlay();
                   },
@@ -126,14 +142,16 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
     return CompositedTransformTarget(
       link: _layerLink,
       child: FormField<T>(
+        key: _fieldKey,
         validator: widget.validator,
+        autovalidateMode: widget.autovalidateMode,
         initialValue: widget.value,
         builder: (FormFieldState<T> state) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               InkWell(
-                onTap: widget.onChanged == null ? null : _toggleOverlay,
+                onTap: widget.onChanged == null ? null : () => _toggleOverlay(state),
                 borderRadius: BorderRadius.circular(10),
                 child: InputDecorator(
                   decoration: InputDecoration(
@@ -150,6 +168,7 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
                       borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
                     ),
                     errorText: state.errorText,
+                    helperText: widget.helperText,
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                     suffixIcon: Icon(
@@ -173,6 +192,7 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
     );
   }
 }
+
 
 class _DropdownContent<T> extends StatefulWidget {
   final List<SearchableDropdownItem<T>> items;

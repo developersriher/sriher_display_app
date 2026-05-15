@@ -1,3 +1,4 @@
+import '../../api_config.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -83,7 +84,7 @@ class _RoleViewState extends State<RoleView>
     try {
       final res = await http
           .post(
-            Uri.parse('https://display.sriher.com/roleview'),
+            Uri.parse('${getBaseUrl()}/roleview'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({"api_key": _apiKey}),
           )
@@ -155,7 +156,7 @@ class _RoleViewState extends State<RoleView>
     try {
       final res = await http
           .post(
-            Uri.parse('https://display.sriher.com/roleUpdateFormview'),
+            Uri.parse('${getBaseUrl()}/roleUpdateFormview'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({"api_key": _apiKey, "id": id}),
           )
@@ -240,8 +241,8 @@ class _RoleViewState extends State<RoleView>
 
     final bool isUpdate = editingId != null;
     final url = isUpdate
-        ? 'https://display.sriher.com/updateRoleview'
-        : 'https://display.sriher.com/createRoleview';
+        ? '${getBaseUrl()}/updateRoleview'
+        : '${getBaseUrl()}/createRoleview';
 
     final Map<String, dynamic> body = {
       "api_key": _apiKey,
@@ -349,7 +350,7 @@ class _RoleViewState extends State<RoleView>
     try {
       final res = await http
           .post(
-            Uri.parse('https://display.sriher.com/deleteRoleview'),
+            Uri.parse('${getBaseUrl()}/deleteRoleview'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({"api_key": _apiKey, "id": id}),
           )
@@ -434,69 +435,69 @@ class _RoleViewState extends State<RoleView>
       backgroundColor: Colors.white,
       body: SelectionArea(
         child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const AnimatedHeading(
-                      text: "Roles List",
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22,
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        _resetForm();
-                        _showRoleDialog();
-                      },
-                      icon: const Icon(Icons.add_moderator, size: 20),
-                      label: const Text(
-                        "CREATE ROLES",
+          padding: const EdgeInsets.all(16.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const AnimatedHeading(
+                        text: "Roles List",
                         style: TextStyle(
+                          color: Colors.blue,
                           fontWeight: FontWeight.bold,
-                          fontSize: 12,
+                          fontSize: 22,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                _buildListHeader(),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : paged.isEmpty
-                      ? const Center(child: Text("No roles found."))
-                      : _buildTableContainer(paged, filtered.length, limit),
-                ),
-                const SizedBox(height: 20),
-                _buildFooter(paged.length, filtered.length, limit),
-              ],
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          _resetForm();
+                          _showRoleDialog();
+                        },
+                        icon: const Icon(Icons.add_moderator, size: 20),
+                        label: const Text(
+                          "CREATE ROLES",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildListHeader(),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : paged.isEmpty
+                        ? const Center(child: Text("No roles found."))
+                        : _buildTableContainer(paged, filtered.length, limit),
+                  ),
+                  const SizedBox(height: 20),
+                  _buildFooter(paged.length, filtered.length, limit),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -635,6 +636,7 @@ class _RoleViewState extends State<RoleView>
 
     return Form(
       key: _formKey,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -645,8 +647,9 @@ class _RoleViewState extends State<RoleView>
           const SizedBox(height: 8),
           TextFormField(
             controller: _roleNameController,
-            validator: (v) =>
-                (v == null || v.trim().isEmpty) ? "Enter role name" : null,
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? "Please enter the Role Name"
+                : null,
             style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
             decoration: InputDecoration(
               hintText: 'Enter the Role Name',
@@ -770,9 +773,9 @@ class _RoleViewState extends State<RoleView>
                         vertical: 10,
                         horizontal: 32,
                       ),
-                     shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       elevation: 0,
                     ),
                     child: isSubmitting
@@ -844,7 +847,7 @@ class _RoleViewState extends State<RoleView>
     );
   }
 
- Widget _buildListHeader() {
+  Widget _buildListHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -888,10 +891,7 @@ class _RoleViewState extends State<RoleView>
                   ),
                 ),
                 items: ["10", "25", "50", "100"]
-                    .map((v) => DropdownMenuItem(
-                          value: v,
-                          child: Text(v),
-                        ))
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                     .toList(),
                 onChanged: (v) {
                   if (v != null) {

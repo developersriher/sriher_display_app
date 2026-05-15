@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../api_config.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
@@ -14,7 +15,7 @@ class DepartmentView extends StatefulWidget {
 
 class _DepartmentViewState extends State<DepartmentView> {
   // --- API CONFIGURATION ---
-  final String _baseUrl = "https://display.sriher.com";
+  String get _baseUrl => getBaseUrl();
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
 
@@ -26,6 +27,7 @@ class _DepartmentViewState extends State<DepartmentView> {
   String entriesValue = "10";
   int currentPage = 0;
   int? editingId;
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   // --- CONTROLLERS ---
   final TextEditingController _departmentNameController =
@@ -81,7 +83,10 @@ class _DepartmentViewState extends State<DepartmentView> {
 
   // 2 & 4. INSERT OR UPDATE (insertCategoryview / categoryUpdateview)
   Future<void> handleFormSubmit() async {
-    if (_departmentNameController.text.isEmpty) {
+    if (!_formKey.currentState!.validate()) return;
+    
+    final String name = _departmentNameController.text.trim();
+    if (name.isEmpty) {
       _showSnackBar("Department Name is required!");
       return;
     }
@@ -224,42 +229,69 @@ class _DepartmentViewState extends State<DepartmentView> {
           ? Icons.add_business_rounded
           : Icons.edit_note_rounded,
       width: MediaQuery.of(context).size.width * 0.4,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           TextFormField(
-            controller: _departmentNameController,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-            decoration: InputDecoration(
-              hintText: 'Department Name',
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF94A3B8),
-              ),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFCBD5E1),
-                  width: 1.2,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFF334155),
-                  width: 1.6,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 14,
-              ),
-            ),
-          ),
+  controller: _departmentNameController,
+  validator: (v) => (v == null || v.isEmpty) ? 'Please enter the Department Name' : null,
+  autovalidateMode: AutovalidateMode.onUserInteraction,
+  style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+  decoration: InputDecoration(
+    hintText: 'Department Name',
+    hintStyle: const TextStyle(
+      fontSize: 12,
+      color: Color(0xFF94A3B8),
+    ),
+    filled: true,
+    fillColor: const Color(0xFFF8FAFC),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(
+        color: Color(0xFFCBD5E1),
+        width: 1.2,
+      ),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(
+        color: Color(0xFF334155),
+        width: 1.6,
+      ),
+    ),
+    errorBorder: OutlineInputBorder(       // ← add this
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(
+        color: Color(0xFFCBD5E1),          // ← same grey, border stays
+        width: 1.2,
+      ),
+    ),
+    focusedErrorBorder: OutlineInputBorder( // ← add this
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(
+        color: Color(0xFF334155),           // ← dark when focused with error
+        width: 1.6,
+      ),
+    ),
+    border: OutlineInputBorder(             // ← add this as fallback
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(
+        color: Color(0xFFCBD5E1),
+        width: 1.2,
+      ),
+    ),
+    contentPadding: const EdgeInsets.symmetric(
+      horizontal: 14,
+      vertical: 14,
+    ),
+  ),
+),
         ],
+        ),
       ),
       actions: [
         TextButton(
@@ -284,7 +316,11 @@ class _DepartmentViewState extends State<DepartmentView> {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: isSubmitting ? null : handleFormSubmit,
+          onPressed: isSubmitting ? null : () {
+            if (_formKey.currentState!.validate()) {
+              handleFormSubmit();
+            }
+          },
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF0F172A),
             foregroundColor: Colors.white,

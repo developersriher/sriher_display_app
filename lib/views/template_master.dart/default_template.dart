@@ -1,3 +1,4 @@
+import '../../api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -16,7 +17,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   // ──────────────────────────────────────────────────────────────────────────
   // CONFIGURATION
   // ──────────────────────────────────────────────────────────────────────────
-  final String _baseUrl = "https://display.sriher.com";
+  String get _baseUrl => getBaseUrl();
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
 
@@ -29,6 +30,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   String? _selectedDeviceId;
   String? _selectedCategoryId;
   int? _editingId;
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isSubmitting = false;
 
@@ -123,10 +125,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   }
 
   Future<void> _submitAction() async {
-    if (_selectedDeviceId == null || _selectedCategoryId == null) {
-      _showSnackBar("Please select both Device Type and Template Name");
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSubmitting = true);
     // DISMISS NOW HANDLED IN BUTTON PRESS
@@ -309,9 +308,12 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       subtitleStyle: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
       maxWidth: 480,
       builder: (context, setDialogState) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        return Form(
+          key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             _buildDropdown(
               dialogDeviceId,
               _deviceDropdownList,
@@ -322,6 +324,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                 setDialogState(() => dialogDeviceId = val);
                 setState(() => _selectedDeviceId = val);
               },
+              validator: (v) => (v == null || v.isEmpty) ? 'Select the Device Type' : null,
             ),
             const SizedBox(height: 16),
             _buildDropdown(
@@ -334,6 +337,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                 setDialogState(() => dialogCategoryId = val);
                 setState(() => _selectedCategoryId = val);
               },
+              validator: (v) => (v == null || v.isEmpty) ? 'Select the Template Name' : null,
             ),
             const SizedBox(height: 24),
             Row(
@@ -367,8 +371,10 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                   onPressed: _isSubmitting
                       ? null
                       : () async {
-                          Navigator.pop(context);
-                          await _submitAction();
+                          if (_formKey.currentState!.validate()) {
+                            Navigator.pop(context);
+                            await _submitAction();
+                          }
                         },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0F172A),
@@ -403,7 +409,8 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                 ),
               ],
             ),
-          ],
+            ],
+          ),
         );
       },
     );
@@ -606,11 +613,14 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     String idKey,
     String nameKey,
     String hint,
-    Function(String?) onChanged,
-  ) {
+    Function(String?) onChanged, {
+    String? Function(String?)? validator,
+  }) {
     return SearchableDropdown<String>(
       value: items.any((i) => i[idKey].toString() == value) ? value : null,
       hint: hint,
+      validator: validator,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       items: items.map((item) {
         return SearchableDropdownItem<String>(
           value: item[idKey].toString(),

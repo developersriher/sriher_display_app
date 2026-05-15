@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'home_screen.dart';
 import 'widgets/animated_background.dart';
 import 'widgets/glass_card.dart';
+import 'api_config.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -127,7 +128,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     try {
       final response = await http
           .post(
-            Uri.parse('https://display.sriher.com/loginvalidationview'),
+            Uri.parse('${getBaseUrl()}/loginvalidationview'),
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',

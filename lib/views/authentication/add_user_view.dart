@@ -1,3 +1,4 @@
+import '../../api_config.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,7 +57,7 @@ class _AddUserViewState extends State<AddUserView> {
     try {
       final response = await http
           .post(
-            Uri.parse('https://display.sriher.com/Registerview'),
+            Uri.parse('${getBaseUrl()}/Registerview'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({"api_key": _apiKey}),
           )
@@ -88,7 +89,7 @@ class _AddUserViewState extends State<AddUserView> {
     try {
       final response = await http
           .post(
-            Uri.parse('https://display.sriher.com/regEditview'),
+            Uri.parse('${getBaseUrl()}/regEditview'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({"api_key": _apiKey, "id": id}),
           )
@@ -124,14 +125,12 @@ class _AddUserViewState extends State<AddUserView> {
   }
 
   Future<void> handleSubmit() async {
-    if (!_formKey.currentState!.validate()) return;
-
     setState(() => isSubmitting = true);
 
     final bool isUpdating = editingDatabaseId != null;
     final url = isUpdating
-        ? 'https://display.sriher.com/regUpdateview'
-        : 'https://display.sriher.com/insertRegisterview';
+        ? '${getBaseUrl()}/regUpdateview'
+        : '${getBaseUrl()}/insertRegisterview';
 
     final Map<String, dynamic> body = {
       "api_key": _apiKey,
@@ -141,6 +140,36 @@ class _AddUserViewState extends State<AddUserView> {
       "role_id": selectedRoleId ?? "1",
     };
     if (isUpdating) body["id"] = editingDatabaseId;
+
+    // Optimistic local update — show immediately in table
+    if (!isUpdating) {
+      setState(() {
+        allUsers.insert(0, {
+          'id': 'temp_${DateTime.now().millisecondsSinceEpoch}',
+          'user_id': _userIdController.text.trim(),
+          'user_name': _userNameController.text.trim(),
+          'role_id': selectedRoleId ?? '1',
+          'status': 1,
+        });
+      });
+    } else {
+      // Update existing row optimistically
+      setState(() {
+        final idx = allUsers.indexWhere(
+          (u) => u['id']?.toString() == editingDatabaseId.toString(),
+        );
+        if (idx != -1) {
+          allUsers[idx] = {
+            ...allUsers[idx],
+            'user_id': _userIdController.text.trim(),
+            'user_name': _userNameController.text.trim(),
+            'role_id': selectedRoleId ?? '1',
+          };
+        }
+      });
+    }
+
+    _resetForm();
 
     try {
       final response = await http
@@ -157,16 +186,19 @@ class _AddUserViewState extends State<AddUserView> {
               ? "User updated successfully!"
               : "User added successfully!",
         );
-        _resetForm();
-        await fetchUserList();
+        // Sync with server in background to get real IDs
+        fetchUserList();
       } else {
         _showSnack(
           "Server error (${response.statusCode}). Try again.",
           isError: true,
         );
+        // Revert optimistic update on failure
+        fetchUserList();
       }
     } catch (e) {
       _showSnack("Connection failed. Check network.", isError: true);
+      fetchUserList();
     } finally {
       if (mounted) setState(() => isSubmitting = false);
     }
@@ -187,7 +219,7 @@ class _AddUserViewState extends State<AddUserView> {
     try {
       await http
           .post(
-            Uri.parse('https://display.sriher.com/regUpdateview'),
+            Uri.parse('${getBaseUrl()}/regUpdateview'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({
               "api_key": _apiKey,
@@ -236,7 +268,7 @@ class _AddUserViewState extends State<AddUserView> {
     }
   }
 
-  void _showFormDialog() {
+void _showFormDialog() {
     StylishDialog.show(
       context: context,
       title: editingDatabaseId == null ? "Add User" : "Edit User",
@@ -248,6 +280,7 @@ class _AddUserViewState extends State<AddUserView> {
         builder: (context, setDialogState) {
           return Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.disabled, // ← no red until submit
             child: Column(
               children: [
                 _buildUserIdInput(),
@@ -256,7 +289,9 @@ class _AddUserViewState extends State<AddUserView> {
                   "User Name",
                   _userNameController,
                   validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? "Enter user name" : null,
+                      (v == null || v.trim().isEmpty)
+                          ? "Please enter the User Name"
+                          : null,
                 ),
                 const SizedBox(height: 20),
                 _buildInput(
@@ -265,13 +300,15 @@ class _AddUserViewState extends State<AddUserView> {
                   isPass: true,
                   validator: (v) {
                     if (editingDatabaseId != null) return null;
-                    if (v == null || v.trim().isEmpty) return "Enter password";
+                    if (v == null || v.trim().isEmpty)
+                      return "Please enter the Password";
                     return null;
                   },
                 ),
                 const SizedBox(height: 20),
                 DropdownButtonFormField<String>(
                   value: selectedRoleId,
+                  autovalidateMode: AutovalidateMode.onUserInteraction, // ← clears once selected
                   dropdownColor: Colors.white,
                   style: const TextStyle(color: Colors.black87, fontSize: 13),
                   decoration: InputDecoration(
@@ -287,6 +324,14 @@ class _AddUserViewState extends State<AddUserView> {
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(4),
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
@@ -306,6 +351,10 @@ class _AddUserViewState extends State<AddUserView> {
                       child: Text(r['role_name']?.toString() ?? ''),
                     );
                   }).toList(),
+                  validator: (v) =>
+                      (v == null || v.isEmpty)
+                          ? 'Please select the Role'
+                          : null,
                   onChanged: (v) {
                     setDialogState(() => selectedRoleId = v);
                     setState(() => selectedRoleId = v);
@@ -348,8 +397,8 @@ class _AddUserViewState extends State<AddUserView> {
                   ? null
                   : () async {
                       if (_formKey.currentState!.validate()) {
-                        Navigator.pop(context); // Close immediately
-                        await handleSubmit();
+                        Navigator.pop(context);
+                        handleSubmit();
                       }
                     },
               style: ElevatedButton.styleFrom(
@@ -360,9 +409,9 @@ class _AddUserViewState extends State<AddUserView> {
                   horizontal: 32,
                 ),
                 elevation: 0,
-               shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: isSubmitting
                   ? const SizedBox(
@@ -517,12 +566,13 @@ class _AddUserViewState extends State<AddUserView> {
   }
 
   // ── User ID field with up/down stepper ──────────────────────────────────
-  Widget _buildUserIdInput() {
+ Widget _buildUserIdInput() {
     return TextFormField(
       controller: _userIdController,
       keyboardType: TextInputType.number,
+      autovalidateMode: AutovalidateMode.onUserInteraction, // ← clears red once typed
       validator: (v) =>
-          (v == null || v.trim().isEmpty) ? "Enter user id" : null,
+          (v == null || v.trim().isEmpty) ? "Please enter the User ID" : null,
       style: const TextStyle(
         fontSize: 13,
         color: Color(0xFF475569),
@@ -547,13 +597,16 @@ class _AddUserViewState extends State<AddUserView> {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 16,
         ),
-        // Up / Down stepper arrows
         suffixIcon: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -603,7 +656,6 @@ class _AddUserViewState extends State<AddUserView> {
       ),
     );
   }
-
   // ── Generic text input ────────────────────────────────────────────────────
 Widget _buildInput(
     String hint,
@@ -615,45 +667,28 @@ Widget _buildInput(
       controller: c,
       obscureText: isPass,
       validator: validator,
-      style: const TextStyle(
-        fontSize: 13,
-        color: Color(0xFF475569),
-      ),
+      autovalidateMode: AutovalidateMode.onUserInteraction, // ← clears red once typed
+      style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(
-          fontSize: 13,
-          color: Color(0xFF94A3B8),
-        ),
+        hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
         filled: true,
         fillColor: const Color(0xFFF8FAFC),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: Color(0xFFCBD5E1),
-            width: 1.2,
-          ),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: Color(0xFF334155),
-            width: 1.6,
-          ),
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: Color(0xFFEF4444),
-            width: 1.2,
-          ),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
         ),
-        border: OutlineInputBorder(
+        focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: Color(0xFFCBD5E1),
-            width: 1.2,
-          ),
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,

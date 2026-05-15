@@ -1,3 +1,4 @@
+import '../../api_config.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -14,7 +15,7 @@ class SpecificRangesView extends StatefulWidget {
 }
 
 class _SpecificRangesViewState extends State<SpecificRangesView> {
-  final String _baseUrl = "https://display.sriher.com";
+  String get _baseUrl => getBaseUrl();
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
 
@@ -22,6 +23,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
   int? selectedScheduleId;
   int? selectedTemplateId;
   String entriesValue = "10";
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   List<dynamic> scheduleList = [];
   List<dynamic> templateList = [];
@@ -456,10 +458,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
   }
 
   Future<void> _handleInsertSlots() async {
-    if (selectedScheduleId == null ||
-        selectedTemplateId == null ||
-        _fromDateController.text.isEmpty ||
-        _toDateController.text.isEmpty) {
+    if (!_formKey.currentState!.validate()) {
       _showSnackBar("Please complete all required fields");
       return;
     }
@@ -562,6 +561,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
             TextFormField(
               controller: _scheduleNameController,
               autofocus: true,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               textInputAction: TextInputAction.done,
               onFieldSubmitted: (_) {
                 final name = _scheduleNameController.text.trim();
@@ -689,8 +689,11 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                   ],
                   border: Border.all(color: Colors.grey.shade200),
                 ),
-                child: Column(
-                  children: [
+                child: Form(
+                  key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: Column(
+                    children: [
                     // Row 1: Dropdowns
                     isNarrow
                         ? Column(
@@ -713,6 +716,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                     );
                                   }
                                 },
+                                validator: (v) => (v == null) ? 'Select the Schedule' : null,
                               ),
                               const SizedBox(height: 16),
                               _buildDropdown(
@@ -732,6 +736,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                     );
                                   }
                                 },
+                                validator: (v) => (v == null) ? 'Select the Template' : null,
                               ),
                             ],
                           )
@@ -756,6 +761,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                       );
                                     }
                                   },
+                                  validator: (v) => (v == null) ? 'Select the Schedule' : null,
                                 ),
                               ),
                               const SizedBox(width: 24),
@@ -777,6 +783,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                       );
                                     }
                                   },
+                                  validator: (v) => (v == null) ? 'Select the Template' : null,
                                 ),
                               ),
                             ],
@@ -786,9 +793,13 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                     isNarrow
                         ? Column(
                             children: [
-                              _buildDateField("From Date", _fromDateController),
+                              _buildDateField("From Date", _fromDateController,
+                                  validator: (v) => (v == null || v.isEmpty) ? 'Enter the from date' : null,
+                                ),
                               const SizedBox(height: 16),
-                              _buildDateField("To Date", _toDateController),
+                                _buildDateField("To Date", _toDateController,
+                                  validator: (v) => (v == null || v.isEmpty) ? 'Enter the to date' : null,
+                                ),
                               const SizedBox(height: 16),
                               _buildCheckboxRow(),
                               const SizedBox(height: 24),
@@ -796,37 +807,47 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                             ],
                           )
                         : Row(
-  crossAxisAlignment: CrossAxisAlignment.end,
-  mainAxisAlignment: MainAxisAlignment.start, // Keeps everything on the left
-  children: [
-    // Fixed width for From Date
-    SizedBox(
-      width: 180, // Half the usual size
-      child: _buildDateField(
-        "From Date",
-        _fromDateController,
-      ),
-    ),
-    const SizedBox(width: 12),
-    // Fixed width for To Date
-    SizedBox(
-      width: 180, // Half the usual size
-      child: _buildDateField(
-        "To Date",
-        _toDateController,
-      ),
-    ),
-    const SizedBox(width: 20),
-    _buildCheckboxRow(),
-    const SizedBox(width: 20),
-    _buildSubmitButton(),
-    // This is the secret: it pushes everything to the left
-    const Spacer(flex: 2), 
-  ],
-)
+                            crossAxisAlignment: CrossAxisAlignment.start, // Align to top
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: [
+                              // Fixed width for From Date
+                              SizedBox(
+                                width: 180,
+                                child: _buildDateField(
+                                  "From Date",
+                                  _fromDateController,
+                                  validator: (v) => (v == null || v.isEmpty) ? 'Enter the from date' : null,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // Fixed width for To Date
+                              SizedBox(
+                                width: 180,
+                                child: _buildDateField(
+                                  "To Date",
+                                  _toDateController,
+                                  validator: (v) => (v == null || v.isEmpty) ? 'Enter the to date' : null,
+                                ),
+                              ),
+                              const SizedBox(width: 20),
+                              // Align CheckboxRow with input box (Accounting for label + gap)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 28.0), // Label height + gap
+                                child: _buildCheckboxRow(),
+                              ),
+                              const SizedBox(width: 20),
+                              // Align SubmitButton with input box
+                              Padding(
+                                padding: const EdgeInsets.only(top: 28.0),
+                                child: _buildSubmitButton(),
+                              ),
+                              const Spacer(flex: 2),
+                            ],
+                          )
                   ],
                 ),
               ),
+            ),
               const SizedBox(height: 24),
               // Lower content shown after selection
               Expanded(
@@ -903,7 +924,11 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           borderRadius: BorderRadius.circular(8),
         ),
       ),
-      onPressed: _handleInsertSlots,
+      onPressed: () {
+        if (_formKey.currentState!.validate()) {
+          _handleInsertSlots();
+        }
+      },
       child: const Text(
         "SUBMIT",
         style: TextStyle(
@@ -1409,6 +1434,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     required List<dynamic> items,
     bool showAdd = false,
     required ValueChanged<int?> onChanged,
+    String? Function(int?)? validator,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1423,11 +1449,15 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
         ),
         const SizedBox(height: 8),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start, // Align top of dropdown with top of button
           children: [
             Expanded(
               child: SearchableDropdown<int>(
                 value: value,
                 hint: hint,
+                validator: validator,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                helperText: ' ', // Reserve space for error
                 items: items.map((item) {
                   return SearchableDropdownItem<int>(
                     value: int.tryParse(item['id']?.toString() ?? '') ?? 0,
@@ -1443,6 +1473,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
             if (showAdd) ...[
               const SizedBox(width: 8),
               Container(
+                margin: const EdgeInsets.only(top: 0), // Already aligned via CrossAxisAlignment.start
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
@@ -1459,7 +1490,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     );
   }
 
-  Widget _buildDateField(String label, TextEditingController controller) {
+  Widget _buildDateField(String label, TextEditingController controller, {String? Function(String?)? validator}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1472,9 +1503,11 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           ),
         ),
         const SizedBox(height: 8),
-        TextFormField(
+  TextFormField(
   controller: controller,
   readOnly: true,
+  validator: validator,
+  autovalidateMode: AutovalidateMode.onUserInteraction,
   style: const TextStyle(fontSize: 13), // Main text size
   decoration: InputDecoration(
     hintText: 'YYYY-MM-DD',
@@ -1494,6 +1527,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     
     // 2. REDUCE PADDING TO MATCH THE SMALLER TEXT
     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    helperText: ' ', // Reserve space for error
     
     border: OutlineInputBorder(
       borderRadius: BorderRadius.zero,

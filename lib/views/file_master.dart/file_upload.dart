@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
+import '../../api_config.dart';
 
 /**
  * FileUploadView - Master Module
@@ -31,7 +32,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   // ──────────────────────────────────────────────────────────────────────────
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
-  final String _baseUrl = "https://display.sriher.com";
+  String get _baseUrl => getBaseUrl();
 
   // ──────────────────────────────────────────────────────────────────────────
   List<dynamic> fileList = [];
@@ -43,6 +44,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   String entriesValue = "10";
   int currentPage = 1;
   int? editingId;
+  GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   // Form Selections
   String _selectedType = "Permanent";
@@ -50,17 +52,18 @@ class _FileUploadViewState extends State<FileUploadView> {
   String? _selectedFileName;
   PlatformFile? _selectedFile;
   String searchQuery = "";
+  bool _showDateError = false;
 
   // ──────────────────────────────────────────────────────────────────────────
   // TEXT CONTROLLERS
   // ──────────────────────────────────────────────────────────────────────────
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
+  final GlobalKey<FormState> _deptFormKey = GlobalKey<FormState>();
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _fromDateController = TextEditingController();
   final TextEditingController _toDateController = TextEditingController();
   final TextEditingController _newDeptController = TextEditingController();
-
 
   @override
   void initState() {
@@ -94,7 +97,7 @@ class _FileUploadViewState extends State<FileUploadView> {
     try {
       // 1. DISMISS DIALOG IMMEDIATELY
       if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-      
+
       final response = await http.post(
         Uri.parse('$_baseUrl/categoryview'),
         headers: {"Content-Type": "application/json"},
@@ -164,8 +167,10 @@ class _FileUploadViewState extends State<FileUploadView> {
   // API 2: INSERT FILE (POST /insertFileview) — plain JSON POST
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> insertFileAction() async {
-    if (_selectedDeptId == null || _nameController.text.trim().isEmpty || _selectedFile == null) {
-      _showSnackBar("Please select a Department, enter a File Name, and pick a File.");
+    if (!_formKey.currentState!.validate() || _selectedFile == null) {
+      if (_selectedFile == null) {
+        _showSnackBar("Please pick a file to upload.");
+      }
       return;
     }
 
@@ -174,47 +179,66 @@ class _FileUploadViewState extends State<FileUploadView> {
     // DISMISS IMMEDIATELY TO AVOID LATENCY
     if (mounted && Navigator.canPop(context)) Navigator.pop(context);
     try {
-      var request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/insertFileview'));
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_baseUrl/insertFileview'),
+      );
       request.fields['api_key'] = _apiKey;
       request.fields['category_id'] = _selectedDeptId!;
       request.fields['name'] = _nameController.text.trim();
       request.fields['desc'] = _descController.text.trim();
-      request.fields['group5'] = _selectedType == "Short Term" ? "Temporary" : _selectedType;
+      request.fields['group5'] = _selectedType == "Short Term"
+          ? "Temporary"
+          : _selectedType;
       request.fields['file_duration'] = '25';
-      
+
       if (_selectedType == "Short Term") {
+        // Short Term / Temporary → send both from and to dates
         request.fields['valid_from_date'] = _fromDateController.text;
         request.fields['valid_upto_date'] = _toDateController.text;
         request.fields['from_date'] = _fromDateController.text;
         request.fields['to_date'] = _toDateController.text;
         request.fields['valid_from'] = _fromDateController.text;
         request.fields['valid_upto'] = _toDateController.text;
+      } else {
+        // Permanent → send today's date as valid_from, no valid_upto
+        final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        request.fields['valid_from_date'] = today;
+        request.fields['from_date'] = today;
+        request.fields['valid_from'] = today;
       }
 
       String filename = _selectedFile!.name;
       String extension = filename.split('.').last.toLowerCase();
       MediaType? contentType;
-      
+
       if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(extension)) {
-        contentType = MediaType('image', extension == 'jpg' ? 'jpeg' : extension);
+        contentType = MediaType(
+          'image',
+          extension == 'jpg' ? 'jpeg' : extension,
+        );
       } else if (['mp4', 'mov', 'avi', 'mkv'].contains(extension)) {
         contentType = MediaType('video', extension);
       }
 
       if (_selectedFile!.bytes != null) {
-        request.files.add(http.MultipartFile.fromBytes(
-          'file', 
-          _selectedFile!.bytes!, 
-          filename: filename,
-          contentType: contentType,
-        ));
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            _selectedFile!.bytes!,
+            filename: filename,
+            contentType: contentType,
+          ),
+        );
       } else if (_selectedFile!.path != null) {
-        request.files.add(await http.MultipartFile.fromPath(
-          'file', 
-          _selectedFile!.path!,
-          filename: filename,
-          contentType: contentType,
-        ));
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'file',
+            _selectedFile!.path!,
+            filename: filename,
+            contentType: contentType,
+          ),
+        );
       }
 
       // REMOVED: Moved to start for zero latency
@@ -226,14 +250,29 @@ class _FileUploadViewState extends State<FileUploadView> {
       debugPrint("Insert response [${response.statusCode}]: ${response.body}");
 
       if (response.statusCode == 200) {
-        messenger.showSnackBar(const SnackBar(content: Text("File uploaded successfully."), behavior: SnackBarBehavior.floating));
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text("File uploaded successfully."),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         _resetForm();
         await fetchFilesFromServer(); // Refresh immediately
       } else {
-        messenger.showSnackBar(SnackBar(content: Text("Upload Error: ${response.statusCode}"), behavior: SnackBarBehavior.floating));
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text("Upload Error: ${response.statusCode}"),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text("Insert failed: $e"), behavior: SnackBarBehavior.floating));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text("Insert failed: $e"),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
       if (mounted) setState(() => isSubmitting = false);
     }
@@ -302,6 +341,7 @@ class _FileUploadViewState extends State<FileUploadView> {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => isSubmitting = true);
     try {
+      if (!_formKey.currentState!.validate()) return;
       final response = await http.post(
         Uri.parse('$_baseUrl/fileUpdateview'),
         headers: {"Content-Type": "application/json"},
@@ -325,12 +365,22 @@ class _FileUploadViewState extends State<FileUploadView> {
 
       if (response.statusCode == 200) {
         if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-        messenger.showSnackBar(const SnackBar(content: Text("Record updated successfully."), behavior: SnackBarBehavior.floating));
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text("Record updated successfully."),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         _resetForm();
         fetchFilesFromServer();
       }
     } catch (e) {
-      messenger.showSnackBar(const SnackBar(content: Text("Update Error."), behavior: SnackBarBehavior.floating));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("Update Error."),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
       if (mounted) setState(() => isSubmitting = false);
     }
@@ -340,6 +390,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   // API 5: STATUS TOGGLE (POST /fileStatusUpdateview)
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> toggleFileStatus(dynamic id, dynamic currentStatus) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       final int newStatus = (currentStatus == 1 || currentStatus == "1")
           ? 0
@@ -349,7 +400,15 @@ class _FileUploadViewState extends State<FileUploadView> {
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"api_key": _apiKey, "id": id, "status": newStatus}),
       );
-      if (response.statusCode == 200) fetchFilesFromServer();
+      if (response.statusCode == 200) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(newStatus == 1 ? "File activated." : "File deactivated."),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        await fetchFilesFromServer();
+      }
     } catch (e) {
       debugPrint("Status Shift Error: $e");
     }
@@ -367,10 +426,20 @@ class _FileUploadViewState extends State<FileUploadView> {
         body: jsonEncode({"api_key": _apiKey, "id": id}),
       );
       if (response.statusCode == 200) {
-        messenger.showSnackBar(const SnackBar(content: Text("File deleted successfully."), behavior: SnackBarBehavior.floating));
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text("File deleted successfully."),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         await fetchFilesFromServer(); // Full refresh to ensure UI is in sync
       } else {
-        messenger.showSnackBar(const SnackBar(content: Text("Delete failed."), behavior: SnackBarBehavior.floating));
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text("Delete failed."),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } catch (e) {
       _showSnackBar("Delete Protocol Failed.");
@@ -388,6 +457,7 @@ class _FileUploadViewState extends State<FileUploadView> {
       _selectedType = "Permanent";
       _selectedFileName = null;
       _selectedFile = null;
+      _showDateError = false;
     });
     _nameController.clear();
     _descController.clear();
@@ -443,6 +513,7 @@ class _FileUploadViewState extends State<FileUploadView> {
 
   // ─── POPUP DIALOG FOR UPLOAD ───────────────────────────────────────────
   void _showUploadDialog() {
+    _formKey = GlobalKey<FormState>();
     StylishDialog.show(
       context: context,
       title: editingId == null ? "Upload File" : "Edit File",
@@ -451,71 +522,400 @@ class _FileUploadViewState extends State<FileUploadView> {
           ? Icons.cloud_upload_rounded
           : Icons.edit_note_rounded,
       width: MediaQuery.of(context).size.width * 0.6,
-      builder: (context, setDialogState) =>
-          _buildFormCardInDialog(setDialogState),
+      builder: (context, setDialogState) => Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: _buildFormCardInDialog(setDialogState),
+      ),
     );
   }
 
   void _showAddDepartmentPopup() {
+    final GlobalKey<FormState> dialogFormKey = GlobalKey<FormState>();
     StylishDialog.show(
       context: context,
       title: "Create Department",
       subtitle: "Define a new category for file organization",
       icon: Icons.add_business_rounded,
-      maxWidth: 380,
-      builder: (ctx, setPopupState) => Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextFormField(
-            controller: _newDeptController,
-            onChanged: (val) => setPopupState(() {}),
-            style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-            decoration: InputDecoration(
-              hintText: "Enter the category name",
-              hintStyle: const TextStyle(
-                color: Color(0xFF94A3B8),
-                fontSize: 12,
-              ),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFCBD5E1),
-                  width: 1.2,
+      maxWidth: 340,
+      builder: (ctx, setPopupState) {
+        return Form(
+          key: dialogFormKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _newDeptController,
+                onChanged: (val) => setPopupState(() {}),
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Please enter the category name' : null,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+                decoration: InputDecoration(
+                  helperText: ' ', // Reserve space
+                  hintText: "Enter the category name",
+                  hintStyle: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 12,
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF334155),
+                      width: 1.6,
+                    ),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFF334155),
-                  width: 1.6,
+              if (_newDeptController.text.trim().isNotEmpty &&
+                  _deptList.any(
+                    (d) =>
+                        d['category_name']?.toString().toLowerCase() ==
+                        _newDeptController.text.trim().toLowerCase(),
+                  ))
+                const Padding(
+                  padding: EdgeInsets.only(top: 4, left: 4),
+                  child: Text(
+                    "Already exists",
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (dialogFormKey.currentState!.validate()) {
+                        if (!_deptList.any(
+                          (d) =>
+                              d['category_name']?.toString().toLowerCase() ==
+                              _newDeptController.text.trim().toLowerCase(),
+                        )) {
+                          insertDepartmentAction();
+                          Navigator.pop(ctx);
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 24,
+                      ),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      "Save",
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                ],
               ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFCBD5E1),
-                  width: 1.2,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 12,
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFormCardInDialog(StateSetter setDialogState) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                Row(
+  crossAxisAlignment: CrossAxisAlignment.center, // ← changed from start
+  children: [
+    Expanded(
+      child: SearchableDropdown<String>(
+        value: _selectedDeptId,
+        hint: "Select Department Name",
+        validator: (v) => (v == null || v.isEmpty)
+            ? 'Please select the Department Name'
+            : null,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        helperText: ' ',
+        items: _deptList.map((dept) {
+          return SearchableDropdownItem<String>(
+            value: dept['id']?.toString() ?? '',
+            label: dept['category_name']?.toString() ?? '-',
+          );
+        }).toList(),
+        onChanged: (val) =>
+            setDialogState(() => _selectedDeptId = val),
+      ),
+    ),
+    const SizedBox(width: 8),
+    Padding(
+      padding: const EdgeInsets.only(bottom: 20), // ← pushes down to align with dropdown
+      child: InkWell(
+        onTap: _showAddDepartmentPopup,
+        child: Container(
+          width: 25,
+          height: 25,
+          decoration: const BoxDecoration(
+            color: Colors.blue,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.add,
+            color: Colors.white,
+            size: 20,
+          ),
+        ),
+      ),
+    ),
+  ],
+),
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment
+                        .center, // Keeps everything perfectly aligned
+                    children: [
+                      // 1. Added the Label Text on the left
+                      const Text(
+                        "Selected File: ",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Color(
+                            0xFF0F172A,
+                          ), // Matching your dashboard dark theme
+                        ),
+                      ),
+                      const SizedBox(width: 8), // Small gap before the button
+
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade100,
+                          foregroundColor: Colors.blue.shade900,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.zero, // Keeping your sharp edges
+                          ),
+                        ),
+                        onPressed: () async {
+                          await _pickFile();
+                          setDialogState(() {});
+                        },
+                        icon: const Icon(Icons.upload_file, size: 18),
+                        label: const Text("Choose File"),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _selectedFileName ?? "No file selected",
+                          style: TextStyle(
+                            color: _selectedFileName != null
+                                ? Colors.black87
+                                : Colors.grey,
+                            fontSize: 13,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
+            const SizedBox(width: 30),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  // "Enter file name" is now strictly a hint inside the box
+                  _buildTextField(
+                    "Enter file name",
+                    _nameController,
+                    onChanged: (val) => setDialogState(() {}),
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? 'Please enter the file name'
+                        : null,
+                  ),
+
+                  // Validation message logic
+                  if (_nameController.text.trim().isNotEmpty &&
+                      fileList.any(
+                        (f) =>
+                            f['user_filename']?.toString().toLowerCase() ==
+                                _nameController.text.trim().toLowerCase() &&
+                            f['id']?.toString() != editingId?.toString(),
+                      ))
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4, left: 4),
+                      child: Text(
+                        "Already exists",
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(
+                    height: 20,
+                  ), // Adjusted from 30 to 20 for a tighter look
+                  // "Description" is now strictly a hint inside the box
+                  _buildTextField(
+                    "Enter the description",
+                    _descController,
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? 'Please enter the description'
+                        : null,
+                  ),
+
+                  const SizedBox(height: 5),
+                ],
+              ),
+            ),
+          ],
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Text(
+              "Type: ",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+                fontSize: 13,
+              ),
+            ),
+            Radio<String>(
+              value: "Permanent",
+              groupValue: _selectedType,
+              activeColor: Colors.blue,
+              onChanged: (v) => setDialogState(() {
+                _selectedType = v!;
+                _showDateError = false;
+              }),
+            ),
+            const Text(
+              "Permanent",
+              style: TextStyle(color: Colors.black87, fontSize: 13),
+            ),
+            const SizedBox(width: 10),
+            Radio<String>(
+              value: "Short Term",
+              groupValue: _selectedType,
+              activeColor: Colors.blue,
+              onChanged: (v) => setDialogState(() {
+                _selectedType = v!;
+                _showDateError = false;
+              }),
+            ),
+            const Text(
+              "Short Term",
+              style: TextStyle(color: Colors.black87, fontSize: 13),
+            ),
+          ],
+        ),
+        // Date fields in a SEPARATE fixed row — only visible for Short Term
+        if (_selectedType == "Short Term") ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDateField(
+                  "From Date",
+                  _fromDateController,
+                  context,
+                  validator: (v) => (v == null || v.isEmpty)
+                      ? 'Enter the from date'
+                      : null,
+                  onDatePicked: () =>
+                      setDialogState(() => _showDateError = false),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildDateField(
+                  "To Date",
+                  _toDateController,
+                  context,
+                  validator: (v) => (v == null || v.isEmpty)
+                      ? 'Enter the to date'
+                      : null,
+                  onDatePicked: () =>
+                      setDialogState(() => _showDateError = false),
+                ),
+              ),
+            ],
           ),
-          if (_newDeptController.text.trim().isNotEmpty &&
-              _deptList.any(
-                (d) =>
-                    d['category_name']?.toString().toLowerCase() ==
-                    _newDeptController.text.trim().toLowerCase(),
-              ))
+          if (_showDateError &&
+              (_fromDateController.text.isEmpty ||
+                  _toDateController.text.isEmpty))
             const Padding(
-              padding: EdgeInsets.only(top: 4, left: 4),
+              padding: EdgeInsets.only(top: 4.0),
               child: Text(
-                "Already exists",
+                "Both dates are required for Short Term files.",
                 style: TextStyle(
                   color: Colors.red,
                   fontSize: 11,
@@ -523,329 +923,84 @@ class _FileUploadViewState extends State<FileUploadView> {
                 ),
               ),
             ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 10,
-                    horizontal: 16,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  "Cancel",
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: () {
-                  if (_newDeptController.text.trim().isNotEmpty &&
-                      !_deptList.any(
-                        (d) =>
-                            d['category_name']?.toString().toLowerCase() ==
-                            _newDeptController.text.trim().toLowerCase(),
-                      )) {
-                    insertDepartmentAction();
-                    Navigator.pop(ctx);
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 10,
-                    horizontal: 24,
-                  ),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  "Save",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ],
-          ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildFormCardInDialog(StateSetter setDialogState) {
-    return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SearchableDropdown<String>(
-                            value: _selectedDeptId,
-                            hint: "Select Department Name",
-                            items: _deptList.map((dept) {
-                              return SearchableDropdownItem<String>(
-                                value: dept['id']?.toString() ?? '',
-                                label: dept['category_name']?.toString() ?? '-',
-                              );
-                            }).toList(),
-                            onChanged: (val) =>
-                                setDialogState(() => _selectedDeptId = val),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        InkWell(
-                          onTap: _showAddDepartmentPopup,
-                          child: Container(
-                            width: 25,
-                            height: 25,
-                            decoration: const BoxDecoration(
-                              color: Colors.blue,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.add, color: Colors.white, size: 20),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                   Row(
-  crossAxisAlignment: CrossAxisAlignment.center, // Keeps everything perfectly aligned
-  children: [
-    // 1. Added the Label Text on the left
-    const Text(
-      "Selected File: ",
-      style: TextStyle(
-        fontWeight: FontWeight.bold,
-        fontSize: 13,
-        color: Color(0xFF0F172A), // Matching your dashboard dark theme
-      ),
-    ),
-    const SizedBox(width: 8), // Small gap before the button
-    
-    ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blue.shade100,
-        foregroundColor: Colors.blue.shade900,
-        padding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 12,
-        ),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero, // Keeping your sharp edges
-        ),
-      ),
-      onPressed: () async {
-        await _pickFile();
-        setDialogState(() {});
-      },
-      icon: const Icon(Icons.upload_file, size: 18),
-      label: const Text("Choose File"),
-    ),
-    const SizedBox(width: 12),
-    Expanded(
-      child: Text(
-        _selectedFileName ?? "No file selected",
-        style: TextStyle(
-          color: _selectedFileName != null
-              ? Colors.black87
-              : Colors.grey,
-          fontSize: 13,
-        ),
-        overflow: TextOverflow.ellipsis,
-      ),
-    ),
-  ],
-)
-                  ],
-                ),
-              ),
-            const SizedBox(width: 30),
-Expanded(
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const SizedBox(height: 8),
-      // "Enter file name" is now strictly a hint inside the box
-    _buildTextField(
-  "Enter file name", 
-  _nameController, 
-  onChanged: (val) => setDialogState(() {}),
-),
-      
-      // Validation message logic
-      if (_nameController.text.trim().isNotEmpty && 
-          fileList.any((f) => 
-            f['user_filename']?.toString().toLowerCase() == _nameController.text.trim().toLowerCase() && 
-            f['id']?.toString() != editingId?.toString()))
-        const Padding(
-          padding: EdgeInsets.only(top: 4, left: 4),
-          child: Text(
-            "Already exists",
-            style: TextStyle(
-              color: Colors.red, 
-              fontSize: 11, 
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-
-      const SizedBox(height: 20), // Adjusted from 30 to 20 for a tighter look
-      
-      // "Description" is now strictly a hint inside the box
-   _buildTextField(
-  "Enter the description", 
-  _descController,
-),
-      
-      const SizedBox(height: 5),
-    ],
-  ),
-),
-            ],
-          ),
-Row(
-  crossAxisAlignment: CrossAxisAlignment.center,
-  children: [
-    const Text(
-      "Type: ",
-      style: TextStyle(
-        fontWeight: FontWeight.bold,
-        color: Colors.black87,
-        fontSize: 13,
-      ),
-    ),
-    Radio<String>(
-      value: "Permanent",
-      groupValue: _selectedType,
-      activeColor: Colors.blue,
-      onChanged: (v) => setDialogState(() => _selectedType = v!),
-    ),
-    const Text("Permanent", style: TextStyle(color: Colors.black87, fontSize: 13)),
-    const SizedBox(width: 10),
-    Radio<String>(
-      value: "Short Term",
-      groupValue: _selectedType,
-      activeColor: Colors.blue,
-      onChanged: (v) => setDialogState(() => _selectedType = v!),
-    ),
-    const Text("Short Term", style: TextStyle(color: Colors.black87, fontSize: 13)),
-
-    // ← Expanded pushes dates to the far right
-    if (_selectedType == "Short Term")
-      Expanded(
-        child: Row(
+        const SizedBox(height: 32),
+        Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            SizedBox(
-              width: 160,
-              child: _buildDateField("From Date", _fromDateController, context),
+            TextButton(
+              onPressed: () => Navigator.pop(context), // ← ctx → context
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                "Cancel",
+                style: TextStyle(
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
             ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 160,
-              child: _buildDateField("To Date", _toDateController, context),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () {
+                      if (_formKey.currentState!.validate()) {
+                        if (_selectedType == "Short Term") {
+                          if (_fromDateController.text.isEmpty ||
+                              _toDateController.text.isEmpty) {
+                            setDialogState(() => _showDateError = true);
+                            return;
+                          }
+                        }
+                        if (editingId == null) {
+                          insertFileAction();
+                        } else {
+                          updateFileAction();
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 24,
+                ),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Text(
+                      editingId == null ? "Submit" : "Update",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
             ),
           ],
         ),
-      ),
-  ],
-),
-if (_selectedType == "Short Term") ...[
-  const SizedBox(height: 16),
-  
-],
-          const SizedBox(height: 32),
-        Row(
-  mainAxisAlignment: MainAxisAlignment.end,
-  children: [
-    TextButton(
-      onPressed: () => Navigator.pop(context), // ← ctx → context
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(
-          vertical: 10,
-          horizontal: 16,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-      child: const Text(
-        "Cancel",
-        style: TextStyle(
-          color: Color(0xFF64748B),
-          fontWeight: FontWeight.bold,
-          fontSize: 13,
-        ),
-      ),
-    ),
-    const SizedBox(width: 8),
-    ElevatedButton(
-      onPressed: isSubmitting
-          ? null
-          : () {
-              if (editingId == null) {
-                insertFileAction();
-              } else {
-                updateFileAction();
-              }
-            },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(
-          vertical: 10,
-          horizontal: 24,
-        ),
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-      child: isSubmitting
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-            )
-          : Text(
-              editingId == null ? "Submit" : "Update",
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
-    ),
-  ],
-),
-        ],
-      );
+      ],
+    );
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -854,60 +1009,64 @@ if (_selectedType == "Short Term") ...[
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SelectionArea(child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const AnimatedHeading(
-                  text: "Uploaded Files List",
-                  style: TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    _resetForm();
-                    _showUploadDialog();
-                  },
-                  icon: const Icon(Icons.cloud_upload_rounded, size: 20),
-                  label: const Text(
-                    "UPLOAD FILE",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Repository List Card
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+      body: SelectionArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const AnimatedHeading(
+                    text: "Uploaded Files List",
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
                     ),
-                  ],
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: _buildTableCard(),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _resetForm();
+                      _showUploadDialog();
+                    },
+                    icon: const Icon(Icons.cloud_upload_rounded, size: 20),
+                    label: const Text(
+                      "UPLOAD FILE",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Repository List Card
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: _buildTableCard(),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -976,10 +1135,14 @@ if (_selectedType == "Short Term") ...[
   // ──────────────────────────────────────────────────────────────────────────
 
   String _formatDate(dynamic d, dynamic type, {bool isFromDate = true}) {
-    String typeStr = type?.toString() ?? "";
+    String typeStr = type?.toString().trim() ?? "";
+
+    // ── Permanent files ──
+    // Valid From: show the stored date or today's date
+    // Valid Upto: always show "-"
     if (typeStr == "Permanent" || typeStr == "Permanent File") {
       if (isFromDate) {
-        String s = d?.toString() ?? "";
+        String s = d?.toString().trim() ?? "";
         if (s.isNotEmpty &&
             !s.startsWith("1900") &&
             !s.startsWith("1970") &&
@@ -993,15 +1156,19 @@ if (_selectedType == "Short Term") ...[
       }
     }
 
-    // For Temporary/Short Term
-    if (d == null || d.toString().isEmpty) return "-";
-    String s = d.toString();
-    if (s.startsWith("1900") ||
-        s.startsWith("1970") ||
-        s.startsWith("0000")) {
+    // ── Temporary / Short Term files ──
+    // Both Valid From and Valid Upto should show the actual dates
+    if (d == null || d.toString().trim().isEmpty) return "-";
+
+    String s = d.toString().trim();
+    // Only suppress truly invalid placeholder dates
+    if (s == "1900-01-01" || s.startsWith("0000")) {
       return "-";
     }
+
+    // Handle "YYYY-MM-DD HH:MM:SS" by taking just the date part
     if (s.contains(" ")) return s.split(" ")[0];
+
     return s;
   }
 
@@ -1023,20 +1190,31 @@ if (_selectedType == "Short Term") ...[
               border: Border.all(color: Colors.grey.shade200),
               color: Colors.grey.shade100,
             ),
-            child: (item['file_name'] != null &&
+            child:
+                (item['file_name'] != null &&
                     item['file_name'].toString().trim().isNotEmpty)
                 ? (['mp4', 'mov', 'avi', 'mkv'].contains(
-                    item['file_name'].toString().split('.').last.toLowerCase()))
-                    ? const Icon(Icons.movie, size: 24, color: Colors.blueGrey)
-                    : Image.network(
-                        "$_baseUrl/uploads/${item['file_name']}",
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => const Icon(
-                          Icons.broken_image,
-                          size: 20,
-                          color: Colors.grey,
-                        ),
-                      )
+                        item['file_name']
+                            .toString()
+                            .split('.')
+                            .last
+                            .toLowerCase(),
+                      ))
+                      ? const Icon(
+                          Icons.movie,
+                          size: 24,
+                          color: Colors.blueGrey,
+                        )
+                      : Image.network(
+                          "$_baseUrl/uploads/${item['file_name']}",
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(
+                                Icons.broken_image,
+                                size: 20,
+                                color: Colors.grey,
+                              ),
+                        )
                 : const Icon(Icons.image, size: 20, color: Colors.grey),
           ),
         ),
@@ -1054,25 +1232,38 @@ if (_selectedType == "Short Term") ...[
         ),
         DataCell(
           Text(
-            (item['type'] ?? item['group5']) == "Short Term"
-                ? "Temporary"
-                : (item['type'] ?? item['group5'] ?? "-"),
+            () {
+              final t = (item['type'] ?? item['group5'] ?? '-').toString();
+              if (t == 'Short Term' || t == 'Temporary') return 'Temporary';
+              return t;
+            }(),
             style: const TextStyle(color: Colors.black87, fontSize: 12),
           ),
         ),
         DataCell(
           Text(
-            _formatDate(item['valid_from_date'] ?? item['from_date'] ?? item['valid_from'],
-                item['type'] ?? item['group5'],
-                isFromDate: true),
+            _formatDate(
+              item['valid_from_date'] ??
+                  item['from_date'] ??
+                  item['valid_from'] ??
+                  item['from_date_valid'],
+              item['type'] ?? item['group5'],
+              isFromDate: true,
+            ),
             style: const TextStyle(color: Colors.black87, fontSize: 12),
           ),
         ),
         DataCell(
           Text(
-            _formatDate(item['valid_upto_date'] ?? item['to_date'] ?? item['valid_upto'],
-                item['type'] ?? item['group5'],
-                isFromDate: false),
+            _formatDate(
+              item['valid_upto_date'] ??
+                  item['to_date'] ??
+                  item['valid_upto'] ??
+                  item['upto_date'] ??
+                  item['to_date_valid'],
+              item['type'] ?? item['group5'],
+              isFromDate: false,
+            ),
             style: const TextStyle(color: Colors.black87, fontSize: 12),
           ),
         ),
@@ -1097,55 +1288,52 @@ if (_selectedType == "Short Term") ...[
     );
   }
 
- Widget _buildTextField(
+  Widget _buildTextField(
     String hint, // Changed name from 'label' to 'hint' for clarity
     TextEditingController ctrl, {
     int maxLines = 1,
     ValueChanged<String>? onChanged,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: ctrl,
       maxLines: maxLines,
       onChanged: onChanged,
+      validator: validator,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
       decoration: InputDecoration(
         // 1. USE HINT INSTEAD OF LABEL
         hintText: hint,
-        hintStyle: const TextStyle(
-          fontSize: 12,
-          color: Color(0xFF94A3B8),
-        ),
-        
+        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+
         // 2. DISABLE THE FLOATING BEHAVIOR (STOPS TEXT FROM JUMPING UP)
         labelText: null,
         floatingLabelBehavior: FloatingLabelBehavior.never,
-        
+
         filled: true,
         fillColor: const Color(0xFFF8FAFC),
-        
+
         // 3. UPDATED TO SHARP EDGES (BORDERRADIUS.ZERO)
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero, 
-          borderSide: const BorderSide(
-            color: Color(0xFFCBD5E1),
-            width: 1.2,
-          ),
+          borderRadius: BorderRadius.zero,
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.zero,
-          borderSide: const BorderSide(
-            color: Color(0xFF334155),
-            width: 1.6,
-          ),
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
         ),
-        border: const OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
+        border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 10,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        helperText: ' ', // Reserve space for error
         alignLabelWithHint: true,
       ),
     );
   }
+
   Widget _buildNavBtn(
     String label, {
     required bool enabled,
@@ -1228,10 +1416,7 @@ if (_selectedType == "Short Term") ...[
                   ),
                 ),
                 items: ["10", "25", "50", "100"]
-                    .map((v) => DropdownMenuItem(
-                          value: v,
-                          child: Text(v),
-                        ))
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                     .toList(),
                 onChanged: (v) {
                   if (v != null) {
@@ -1342,18 +1527,21 @@ if (_selectedType == "Short Term") ...[
       ],
     );
   }
+
   Widget _buildDateField(
     String label,
     TextEditingController controller,
-    BuildContext context,
-  ) {
+    BuildContext context, {
+    VoidCallback? onDatePicked,
+    String? Function(String?)? validator,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: TextStyle(
-          color: Color(0xFF64748B),
+            color: Color(0xFF64748B),
             fontSize: 12,
             fontWeight: FontWeight.w500,
           ),
@@ -1362,6 +1550,8 @@ if (_selectedType == "Short Term") ...[
         TextFormField(
           controller: controller,
           readOnly: true,
+          validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
           decoration: InputDecoration(
             hintText: "YYYY-MM-DD",
@@ -1371,14 +1561,22 @@ if (_selectedType == "Short Term") ...[
             fillColor: const Color(0xFFF8FAFC),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+              borderSide: const BorderSide(
+                color: Color(0xFFCBD5E1),
+                width: 1.2,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+              borderSide: const BorderSide(
+                color: Color(0xFF334155),
+                width: 1.6,
+              ),
             ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 10,
+            ),
           ),
           onTap: () async {
             DateTime? picked = await showDatePicker(
@@ -1390,6 +1588,7 @@ if (_selectedType == "Short Term") ...[
             if (picked != null) {
               controller.text =
                   "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+              if (onDatePicked != null) onDatePicked();
             }
           },
         ),

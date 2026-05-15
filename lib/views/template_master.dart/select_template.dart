@@ -1,3 +1,4 @@
+import '../../api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -25,7 +26,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   int? selectedCategoryId;
   String? fileType;
 
-  final String _baseUrl = "https://display.sriher.com";
+  String get _baseUrl => getBaseUrl();
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
 
@@ -50,6 +51,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
   // Map to store controllers for each available file to prevent recreation
   final Map<int, TextEditingController> _availableFileControllers = {};
+
+  final GlobalKey<FormState> _templateFormKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _deptFormKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -983,6 +987,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         ),
         const SizedBox(height: 8),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: SearchableDropdown<int>(
@@ -995,6 +1000,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   );
                 }).toList(),
                 onChanged: onChanged,
+                helperText: ' ', // Reserve space
               ),
             ),
             const SizedBox(width: 8),
@@ -1112,96 +1118,102 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       subtitle: "Define a new template for your display layout.",
       maxWidth: 480,
       builder: (ctx, setPopupState) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextFormField(
-              controller: _newTemplateNameController,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-              decoration: InputDecoration(
-                hintText: "Enter the template name",
-                hintStyle: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF94A3B8),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Color(0xFFCBD5E1),
-                    width: 1.2,
+        return Form(
+          key: _templateFormKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _newTemplateNameController,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Please enter the template name' : null,
+                decoration: InputDecoration(
+                  hintText: "Enter the template name",
+                  hintStyle: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
                   ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF334155),
-                    width: 1.6,
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
                   ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 14,
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF334155),
+                      width: 1.6,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 20,
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 20,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    final name = _newTemplateNameController.text.trim();
-                    if (name.isNotEmpty) {
-                      Navigator.pop(context);
-                      _addNewTemplate(name);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 32,
-                    ),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                  child: const Text(
-                    "Submit",
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (_templateFormKey.currentState!.validate()) {
+                        final name = _newTemplateNameController.text.trim();
+                        Navigator.pop(context);
+                        _addNewTemplate(name);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 32,
+                      ),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      "Submit",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         );
       },
     );
@@ -1215,96 +1227,102 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       subtitle: "Define a new department for your organization.",
       maxWidth: 480,
       builder: (ctx, setPopupState) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextFormField(
-              controller: _newDepartmentNameController,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-              decoration: InputDecoration(
-                hintText: "Enter the department name",
-                hintStyle: const TextStyle(
-                  fontSize: 12, 
-                  color: Color(0xFF94A3B8),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Color(0xFFCBD5E1),
-                    width: 1.2,
+        return Form(
+          key: _deptFormKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _newDepartmentNameController,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Please enter the department name' : null,
+                decoration: InputDecoration(
+                  hintText: "Enter the department name",
+                  hintStyle: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
                   ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF334155),
-                    width: 1.6,
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
                   ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 14,
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF334155),
+                      width: 1.6,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 20,
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 20,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    final name = _newDepartmentNameController.text.trim();
-                    if (name.isNotEmpty) {
-                      Navigator.pop(context);
-                      _addNewDepartment(name);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 32,
-                    ),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                  child: const Text(
-                    "Submit",
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (_deptFormKey.currentState!.validate()) {
+                        final name = _newDepartmentNameController.text.trim();
+                        Navigator.pop(context);
+                        _addNewDepartment(name);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 32,
+                      ),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      "Submit",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         );
       },
     );
@@ -1529,12 +1547,10 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
       final player = Player();
       final controller = VideoController(player);
 
-      // Performance properties for thumbnails
+      // Let mpv auto-select the best decoder for the platform.
+      // 'auto' enables VAAPI/VDPAU on Linux, VideoToolbox on macOS.
       if (!kIsWeb && player.platform is NativePlayer) {
-        (player.platform as dynamic).setProperty(
-          'hwdec',
-          'no',
-        ); // Fallback to software decoding if CUDA fails
+        (player.platform as dynamic).setProperty('hwdec', 'auto');
         (player.platform as dynamic).setProperty('cache', 'yes');
         (player.platform as dynamic).setProperty(
           'demuxer-max-bytes',
@@ -1575,11 +1591,13 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
         children: [
           Container(color: Colors.black),
           if (_initialized && _controller != null)
-            Video(
-              controller: _controller!,
-              controls: NoVideoControls,
-              fit: BoxFit.cover,
-              fill: Colors.black,
+            SizedBox.expand(
+              child: Video(
+                controller: _controller!,
+                controls: NoVideoControls,
+                fit: BoxFit.cover,
+                fill: Colors.black,
+              ),
             ),
           if (!_initialized)
             Container(

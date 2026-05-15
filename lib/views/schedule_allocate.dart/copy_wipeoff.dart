@@ -1,3 +1,4 @@
+import '../../api_config.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
@@ -13,7 +14,7 @@ class CopyWipeoffView extends StatefulWidget {
 }
 
 class _CopyWipeoffViewState extends State<CopyWipeoffView> {
-  final String _baseUrl = "https://display.sriher.com";
+  String get _baseUrl => getBaseUrl();
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
 
