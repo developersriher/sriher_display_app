@@ -143,7 +143,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   // ──────────────────────────────────────────────────────────────────────────
   // API 1: FETCH FILES (GET /fileview)
   // ──────────────────────────────────────────────────────────────────────────
-  Future<void> fetchFilesFromServer() async {
+ Future<void> fetchFilesFromServer() async {
     setState(() => isLoading = true);
     try {
       final response = await http.post(
@@ -155,6 +155,13 @@ class _FileUploadViewState extends State<FileUploadView> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> decoded = jsonDecode(response.body);
         final data = decoded['data'] ?? [];
+
+        // ← DEBUG: print first item keys and values
+        if (data.isNotEmpty) {
+          debugPrint("=== FILEVIEW FIRST ITEM KEYS: ${data[0].keys.toList()}");
+          debugPrint("=== FILEVIEW FIRST ITEM: ${data[0]}");
+        }
+
         setState(() {
           fileList = data;
         });
@@ -165,7 +172,6 @@ class _FileUploadViewState extends State<FileUploadView> {
       if (mounted) setState(() => isLoading = false);
     }
   }
-
   // ──────────────────────────────────────────────────────────────────────────
   // API 2: INSERT FILE (POST /insertFileview) — plain JSON POST
   // ──────────────────────────────────────────────────────────────────────────
@@ -1305,6 +1311,9 @@ class _FileUploadViewState extends State<FileUploadView> {
   }
 
   DataRow _getRow(dynamic item) {
+    // ← DEBUG: print every item to see exact field names
+    debugPrint("=== ROW ITEM: $item");
+    
     return DataRow(
       cells: [
         DataCell(
@@ -1322,8 +1331,7 @@ class _FileUploadViewState extends State<FileUploadView> {
               border: Border.all(color: Colors.grey.shade200),
               color: Colors.grey.shade100,
             ),
-            child:
-                (item['file_name'] != null &&
+            child: (item['file_name'] != null &&
                     item['file_name'].toString().trim().isNotEmpty)
                 ? (['mp4', 'mov', 'avi', 'mkv'].contains(
                         item['file_name']
@@ -1332,21 +1340,21 @@ class _FileUploadViewState extends State<FileUploadView> {
                             .last
                             .toLowerCase(),
                       ))
-                      ? const Icon(
-                          Icons.movie,
-                          size: 24,
-                          color: Colors.blueGrey,
-                        )
-                      : Image.network(
-                          "$_baseUrl/uploads/${item['file_name']}",
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(
-                                Icons.broken_image,
-                                size: 20,
-                                color: Colors.grey,
-                              ),
-                        )
+                    ? const Icon(
+                        Icons.movie,
+                        size: 24,
+                        color: Colors.blueGrey,
+                      )
+                    : Image.network(
+                        "$_baseUrl/uploads/${item['file_name']}",
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(
+                          Icons.broken_image,
+                          size: 20,
+                          color: Colors.grey,
+                        ),
+                      )
                 : const Icon(Icons.image, size: 20, color: Colors.grey),
           ),
         ),
@@ -1363,18 +1371,23 @@ class _FileUploadViewState extends State<FileUploadView> {
           ),
         ),
         DataCell(
-          Text(() {
-            final t = (item['type'] ?? item['group5'] ?? '-').toString();
-            if (t == 'Short Term' || t == 'Temporary') return 'Temporary';
-            return t;
-          }(), style: const TextStyle(color: Colors.black87, fontSize: 12)),
+          Text(
+            () {
+              final t = (item['type'] ?? item['group5'] ?? '-').toString();
+              if (t == 'Short Term' || t == 'Temporary') return 'Temporary';
+              return t;
+            }(),
+            style: const TextStyle(color: Colors.black87, fontSize: 12),
+          ),
         ),
         DataCell(
           Text(
             _formatDate(
               item['valid_from_date'] ??
                   item['from_date'] ??
-                  item['valid_from'],
+                  item['valid_from'] ??
+                  item['validfrom'] ??
+                  item['date_from'],
               item['type'] ?? item['group5'],
               isFromDate: true,
             ),
@@ -1388,7 +1401,9 @@ class _FileUploadViewState extends State<FileUploadView> {
                   item['to_date'] ??
                   item['valid_upto'] ??
                   item['upto_date'] ??
-                  item['to_date_valid'],
+                  item['valid_to'] ??
+                  item['date_to'] ??
+                  item['validupto'],
               item['type'] ?? item['group5'],
               isFromDate: false,
             ),

@@ -58,8 +58,10 @@ class _RoleViewState extends State<RoleView>
 
   // ── form state ──
   int? editingId; // null = create, non-null = update
+  bool isFetchingDetails = false;
   bool isSubmitting = false;
   final _formKey = GlobalKey<FormState>();
+  StateSetter? _dialogSetState;
   final TextEditingController _roleNameController = TextEditingController();
   final Set<String> _selectedPrivs = {}; // e.g. {"1,1", "3,2"}
 
@@ -152,7 +154,18 @@ class _RoleViewState extends State<RoleView>
     final id = int.tryParse(role['id']?.toString() ?? '');
     if (id == null) return;
 
-    setState(() => isLoading = true);
+    // 1. Initialize with local data immediately
+    setState(() {
+      editingId = id;
+      _roleNameController.text = role['role_name']?.toString() ?? '';
+      _selectedPrivs.clear();
+      isFetchingDetails = true;
+    });
+
+    // 2. Open dialog immediately
+    _showRoleDialog();
+
+    // 3. Fetch full details (privileges) in the background
     try {
       final res = await http
           .post(
@@ -201,30 +214,29 @@ class _RoleViewState extends State<RoleView>
         }
 
         if (!mounted) return;
-        setState(() {
-          editingId = id;
-          _roleNameController.text =
-              r['role_name']?.toString() ?? role['role_name']?.toString() ?? '';
-          _selectedPrivs
-            ..clear()
-            ..addAll(privSet);
-          isLoading = false;
-        });
-        _showRoleDialog();
+        
+        // Update both main state and dialog state
+        _selectedPrivs.clear();
+        _selectedPrivs.addAll(privSet);
+        
+        if (mounted) {
+          setState(() => isFetchingDetails = false);
+          // Trigger dialog rebuild to show newly fetched privileges
+          if (_dialogSetState != null) {
+            _dialogSetState!(() {});
+          }
+        }
       } else {
-        if (!mounted) return;
-        setState(() => isLoading = false);
+        if (mounted) setState(() => isFetchingDetails = false);
       }
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        editingId = id;
-        _roleNameController.text = role['role_name']?.toString() ?? '';
-        _selectedPrivs.clear();
-        isLoading = false;
-      });
-      _showRoleDialog();
-      _snack("Could not load role details.", isError: true);
+      if (mounted) {
+        setState(() => isFetchingDetails = false);
+        if (_dialogSetState != null) {
+          _dialogSetState!(() {});
+        }
+        _snack("Could not load full privileges.", isError: true);
+      }
     }
   }
 
@@ -392,8 +404,6 @@ class _RoleViewState extends State<RoleView>
   }
 
   void _showRoleDialog() {
-    final Set<String> snapPrivs = Set<String>.from(_selectedPrivs);
-
     StylishDialog.show(
       context: context,
       title: editingId == null ? "Create Roles" : "Edit Role Details",
@@ -402,7 +412,9 @@ class _RoleViewState extends State<RoleView>
       icon: editingId == null ? Icons.add_moderator : Icons.edit_note_rounded,
       width: MediaQuery.of(context).size.width * 0.6,
       builder: (context, setDialogState) {
-        return _buildRoleFormDialog(setDialogState, snapPrivs);
+        _dialogSetState = setDialogState;
+        // Use the main set directly for perfect sync
+        return _buildRoleFormDialog(setDialogState, _selectedPrivs);
       },
     );
   }
@@ -445,6 +457,7 @@ class _RoleViewState extends State<RoleView>
                   color: Colors.black.withOpacity(0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
+                  
                 ),
               ],
               border: Border.all(color: Colors.grey.shade200),
@@ -604,9 +617,6 @@ class _RoleViewState extends State<RoleView>
         } else {
           localPrivs.remove(id);
         }
-        _selectedPrivs
-          ..clear()
-          ..addAll(localPrivs);
       });
     }
 
@@ -617,9 +627,6 @@ class _RoleViewState extends State<RoleView>
         } else {
           localPrivs.clear();
         }
-        _selectedPrivs
-          ..clear()
-          ..addAll(localPrivs);
       });
     }
 
@@ -738,23 +745,40 @@ class _RoleViewState extends State<RoleView>
 
           SizedBox(
             height: 400,
-            child: SingleChildScrollView(
-              child: Table(
-                border: TableBorder.all(color: Colors.grey.shade200),
-                columnWidths: const {
-                  0: FlexColumnWidth(1.2),
-                  1: FlexColumnWidth(2.5),
-                },
-                children: [
-                  buildPrivRow("Dashboard", [_allPrivileges[0]]),
-                  buildPrivRow("Users", [_allPrivileges[1]]),
-                  buildPrivRow("System", _allPrivileges.sublist(2, 7)),
-                  buildPrivRow("Files", [_allPrivileges[7]]),
-                  buildPrivRow("Templates", _allPrivileges.sublist(8, 11)),
-                  buildPrivRow("Scheduling", _allPrivileges.sublist(11, 16)),
-                ],
-              ),
-            ),
+            child: isFetchingDetails
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: Color(0xFF0F172A)),
+                        SizedBox(height: 16),
+                        Text(
+                          "Loading privileges...",
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : SingleChildScrollView(
+                    child: Table(
+                      border: TableBorder.all(color: Colors.grey.shade200),
+                      columnWidths: const {
+                        0: FlexColumnWidth(1.2),
+                        1: FlexColumnWidth(2.5),
+                      },
+                      children: [
+                        buildPrivRow("Dashboard", [_allPrivileges[0]]),
+                        buildPrivRow("Users", [_allPrivileges[1]]),
+                        buildPrivRow("System", _allPrivileges.sublist(2, 7)),
+                        buildPrivRow("Files", [_allPrivileges[7]]),
+                        buildPrivRow("Templates", _allPrivileges.sublist(8, 11)),
+                        buildPrivRow("Scheduling", _allPrivileges.sublist(11, 16)),
+                      ],
+                    ),
+                  ),
           ),
           const SizedBox(height: 24),
 
