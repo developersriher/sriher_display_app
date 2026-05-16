@@ -58,6 +58,19 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     for (int i = 0; i < 48; i++) {
       slotSelection[i] = false;
     }
+    _searchController.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Filtered template files based on search query
+  List<dynamic> get _filteredTemplateFiles {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) return templateFiles;
+    return templateFiles.where((file) {
+      final fileName = (file['user_filename'] ?? file['file_name'] ?? '').toString().toLowerCase();
+      return fileName.contains(query);
+    }).toList();
   }
 
   List<String> _generateTimeSlots() {
@@ -1063,13 +1076,34 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                     ),
                   ),
                 )
+              else if (_filteredTemplateFiles.isEmpty)
+                const SizedBox(
+                  height: 200,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off_rounded, size: 40, color: Colors.grey),
+                        SizedBox(height: 8),
+                        Text(
+                          "No matching files found",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontWeight: FontWeight.bold,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               else
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: templateFiles.length,
+                  itemCount: _filteredTemplateFiles.length,
                   itemBuilder: (context, index) {
-                    final file = templateFiles[index];
+                    final file = _filteredTemplateFiles[index];
                     return Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -1324,6 +1358,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                 height: 38,
                 child: TextField(
                   controller: _searchController,
+                  onChanged: (_) => setState(() {}),
                   style: const TextStyle(fontSize: 12, color: Colors.black87),
                   decoration: InputDecoration(
                     hintText: "Search files...",
@@ -1373,7 +1408,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            "Total Files: ${templateFiles.length}",
+            "Total Files: ${_filteredTemplateFiles.length}",
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,

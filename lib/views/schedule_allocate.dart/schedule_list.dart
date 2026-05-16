@@ -534,21 +534,32 @@ class _ScheduleListViewState extends State<ScheduleListView> {
             ),
             if (rows.isEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 48),
+                padding: const EdgeInsets.symmetric(vertical: 60),
                 child: Center(
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.calendar_today_outlined,
-                          size: 64, color: Colors.grey.shade300),
-                      const SizedBox(height: 16),
+                      Icon(
+                        Icons.search_off_rounded,
+                        size: 48,
+                        color: Colors.blue.shade200,
+                      ),
+                      const SizedBox(height: 12),
                       Text(
-                        scheduleData.isEmpty
-                            ? "No schedules found"
-                            : "No results match your search",
+                        "No matching schedules found",
                         style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade500,
-                            fontStyle: FontStyle.italic),
+                          color: Colors.blue.shade900,
+                          fontSize: 16.0,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        "Try a different search term",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 13.0,
+                        ),
                       ),
                     ],
                   ),

@@ -53,6 +53,8 @@ class _FileUploadViewState extends State<FileUploadView> {
   PlatformFile? _selectedFile;
   String searchQuery = "";
   bool _showDateError = false;
+  // Controls when validation errors appear: disabled until Submit is clicked
+  AutovalidateMode _dialogAutoValidate = AutovalidateMode.disabled;
 
   // ──────────────────────────────────────────────────────────────────────────
   // TEXT CONTROLLERS
@@ -152,8 +154,9 @@ class _FileUploadViewState extends State<FileUploadView> {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> decoded = jsonDecode(response.body);
+        final data = decoded['data'] ?? [];
         setState(() {
-          fileList = decoded['data'] ?? [];
+          fileList = data;
         });
       }
     } catch (e) {
@@ -312,13 +315,16 @@ class _FileUploadViewState extends State<FileUploadView> {
           _descController.text = data['description']?.toString() ?? '';
           // category_id dropdown
           _selectedDeptId = data['category_id']?.toString();
-          // group5 is the type field used by insert/update APIs
-          _selectedType =
-              data['group5']?.toString() ??
+          // API returns "Temporary" but radio button uses "Short Term"; map accordingly
+          final rawType =
               data['type']?.toString() ??
+              data['group5']?.toString() ??
               'Permanent';
+          _selectedType = (rawType == 'Temporary') ? 'Short Term' : 'Permanent';
+          // Date fields — API keys confirmed as valid_from_date / valid_upto_date
           _fromDateController.text = data['valid_from_date']?.toString() ?? '';
           _toDateController.text = data['valid_upto_date']?.toString() ?? '';
+          _dialogAutoValidate = AutovalidateMode.disabled; // Reset validation mode
         });
 
         // Open the edit dialog after state is set
@@ -403,7 +409,9 @@ class _FileUploadViewState extends State<FileUploadView> {
       if (response.statusCode == 200) {
         messenger.showSnackBar(
           SnackBar(
-            content: Text(newStatus == 1 ? "File activated." : "File deactivated."),
+            content: Text(
+              newStatus == 1 ? "File activated." : "File deactivated.",
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -419,6 +427,23 @@ class _FileUploadViewState extends State<FileUploadView> {
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> deleteFileAction(dynamic id) async {
     final messenger = ScaffoldMessenger.of(context);
+
+    // Capture the item to restore if delete fails
+    final deletedItem = fileList.firstWhere(
+      (item) => item['id']?.toString() == id.toString(),
+      orElse: () => null,
+    );
+    final deletedIndex = fileList.indexWhere(
+      (item) => item['id']?.toString() == id.toString(),
+    );
+
+    // 1. IMMEDIATE UI FEEDBACK: Remove from local list
+    if (deletedIndex != -1) {
+      setState(() {
+        fileList.removeAt(deletedIndex);
+      });
+    }
+
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/deleteFileview'),
@@ -432,8 +457,15 @@ class _FileUploadViewState extends State<FileUploadView> {
             behavior: SnackBarBehavior.floating,
           ),
         );
-        await fetchFilesFromServer(); // Full refresh to ensure UI is in sync
+        // Sync with server to be safe, but UI is already updated
+        fetchFilesFromServer();
       } else {
+        // Rollback if failed
+        if (deletedItem != null && deletedIndex != -1) {
+          setState(() {
+            fileList.insert(deletedIndex, deletedItem);
+          });
+        }
         messenger.showSnackBar(
           const SnackBar(
             content: Text("Delete failed."),
@@ -442,6 +474,12 @@ class _FileUploadViewState extends State<FileUploadView> {
         );
       }
     } catch (e) {
+      // Rollback if error
+      if (deletedItem != null && deletedIndex != -1) {
+        setState(() {
+          fileList.insert(deletedIndex, deletedItem);
+        });
+      }
       _showSnackBar("Delete Protocol Failed.");
     }
   }
@@ -458,6 +496,8 @@ class _FileUploadViewState extends State<FileUploadView> {
       _selectedFileName = null;
       _selectedFile = null;
       _showDateError = false;
+      _dialogAutoValidate =
+          AutovalidateMode.disabled; // reset for next dialog open
     });
     _nameController.clear();
     _descController.clear();
@@ -524,7 +564,8 @@ class _FileUploadViewState extends State<FileUploadView> {
       width: MediaQuery.of(context).size.width * 0.6,
       builder: (context, setDialogState) => Form(
         key: _formKey,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
+        // Validation only starts after the user clicks Submit
+        autovalidateMode: _dialogAutoValidate,
         child: _buildFormCardInDialog(setDialogState),
       ),
     );
@@ -550,8 +591,9 @@ class _FileUploadViewState extends State<FileUploadView> {
                 controller: _newDeptController,
                 onChanged: (val) => setPopupState(() {}),
                 autovalidateMode: AutovalidateMode.onUserInteraction,
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Please enter the category name' : null,
+                validator: (v) => (v == null || v.isEmpty)
+                    ? 'Please enter the category name'
+                    : null,
                 style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
                 decoration: InputDecoration(
                   helperText: ' ', // Reserve space
@@ -658,7 +700,10 @@ class _FileUploadViewState extends State<FileUploadView> {
                     ),
                     child: const Text(
                       "Save",
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ],
@@ -683,50 +728,53 @@ class _FileUploadViewState extends State<FileUploadView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 8),
-                Row(
-  crossAxisAlignment: CrossAxisAlignment.center, // ← changed from start
-  children: [
-    Expanded(
-      child: SearchableDropdown<String>(
-        value: _selectedDeptId,
-        hint: "Select Department Name",
-        validator: (v) => (v == null || v.isEmpty)
-            ? 'Please select the Department Name'
-            : null,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        helperText: ' ',
-        items: _deptList.map((dept) {
-          return SearchableDropdownItem<String>(
-            value: dept['id']?.toString() ?? '',
-            label: dept['category_name']?.toString() ?? '-',
-          );
-        }).toList(),
-        onChanged: (val) =>
-            setDialogState(() => _selectedDeptId = val),
-      ),
-    ),
-    const SizedBox(width: 8),
-    Padding(
-      padding: const EdgeInsets.only(bottom: 20), // ← pushes down to align with dropdown
-      child: InkWell(
-        onTap: _showAddDepartmentPopup,
-        child: Container(
-          width: 25,
-          height: 25,
-          decoration: const BoxDecoration(
-            color: Colors.blue,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.add,
-            color: Colors.white,
-            size: 20,
-          ),
-        ),
-      ),
-    ),
-  ],
-),
+                  Row(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.center, // ← changed from start
+                    children: [
+                      Expanded(
+                        child: SearchableDropdown<String>(
+                          value: _selectedDeptId,
+                          hint: "Select Department Name",
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Please select the Department Name'
+                              : null,
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          helperText: ' ',
+                          items: _deptList.map((dept) {
+                            return SearchableDropdownItem<String>(
+                              value: dept['id']?.toString() ?? '',
+                              label: dept['category_name']?.toString() ?? '-',
+                            );
+                          }).toList(),
+                          onChanged: (val) =>
+                              setDialogState(() => _selectedDeptId = val),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: 20,
+                        ), // ← pushes down to align with dropdown
+                        child: InkWell(
+                          onTap: _showAddDepartmentPopup,
+                          child: Container(
+                            width: 25,
+                            height: 25,
+                            decoration: const BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 20),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment
@@ -837,6 +885,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             ),
           ],
         ),
+        // Radio buttons + compact date fields in the SAME row
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -875,55 +924,107 @@ class _FileUploadViewState extends State<FileUploadView> {
               "Short Term",
               style: TextStyle(color: Colors.black87, fontSize: 13),
             ),
-          ],
-        ),
-        // Date fields in a SEPARATE fixed row — only visible for Short Term
-        if (_selectedType == "Short Term") ...[
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildDateField(
-                  "From Date",
-                  _fromDateController,
-                  context,
-                  validator: (v) => (v == null || v.isEmpty)
-                      ? 'Enter the from date'
-                      : null,
-                  onDatePicked: () =>
-                      setDialogState(() => _showDateError = false),
+            const Spacer(),
+            // Compact date fields on the right — only visible for Short Term
+            if (_selectedType == "Short Term") ...[
+              SizedBox(
+                width: 150,
+                height: 36,
+                child: TextFormField(
+                  controller: _fromDateController,
+                  readOnly: true,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
+                  decoration: InputDecoration(
+                    hintText: "From Date",
+                    hintStyle: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                    suffixIcon: const Icon(Icons.calendar_today_rounded, size: 15),
+                    isDense: true,
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
+                  onTap: () async {
+                    DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2101),
+                    );
+                    if (picked != null) {
+                      _fromDateController.text =
+                          "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                      setDialogState(() => _showDateError = false);
+                    }
+                  },
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildDateField(
-                  "To Date",
-                  _toDateController,
-                  context,
-                  validator: (v) => (v == null || v.isEmpty)
-                      ? 'Enter the to date'
-                      : null,
-                  onDatePicked: () =>
-                      setDialogState(() => _showDateError = false),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 150,
+                height: 36,
+                child: TextFormField(
+                  controller: _toDateController,
+                  readOnly: true,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
+                  decoration: InputDecoration(
+                    hintText: "To Date",
+                    hintStyle: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                    suffixIcon: const Icon(Icons.calendar_today_rounded, size: 15),
+                    isDense: true,
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
+                  onTap: () async {
+                    DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2101),
+                    );
+                    if (picked != null) {
+                      _toDateController.text =
+                          "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                      setDialogState(() => _showDateError = false);
+                    }
+                  },
                 ),
               ),
             ],
-          ),
-          if (_showDateError &&
-              (_fromDateController.text.isEmpty ||
-                  _toDateController.text.isEmpty))
-            const Padding(
-              padding: EdgeInsets.only(top: 4.0),
-              child: Text(
-                "Both dates are required for Short Term files.",
-                style: TextStyle(
-                  color: Colors.red,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
+          ],
+        ),
+        SizedBox(height: 5),
+        if (_showDateError &&
+            _selectedType == "Short Term" &&
+            (_fromDateController.text.isEmpty ||
+                _toDateController.text.isEmpty))
+          const Padding(
+            padding: EdgeInsets.only(top: 4.0),
+            child: Text(
+              "Both dates are required for Short Term files.",
+              style: TextStyle(
+                color: Colors.red,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
               ),
             ),
-        ],
+          ),
         const SizedBox(height: 32),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
@@ -953,6 +1054,11 @@ class _FileUploadViewState extends State<FileUploadView> {
               onPressed: isSubmitting
                   ? null
                   : () {
+                      // Switch to onUserInteraction so errors clear as user types
+                      setDialogState(() {
+                        _dialogAutoValidate =
+                            AutovalidateMode.onUserInteraction;
+                      });
                       if (_formKey.currentState!.validate()) {
                         if (_selectedType == "Short Term") {
                           if (_fromDateController.text.isEmpty ||
@@ -1095,6 +1201,39 @@ class _FileUploadViewState extends State<FileUploadView> {
   }
 
   Widget _buildDataTable(List<dynamic> data) {
+    if (fileList.isNotEmpty && data.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(height: 60),
+            Icon(
+              Icons.search_off_rounded,
+              size: 48,
+              color: Colors.blue.shade200,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "No matching files found",
+              style: TextStyle(
+                color: Colors.blue.shade900,
+                fontSize: 16.0,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              "Try a different search term",
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 13.0,
+              ),
+            ),
+            const SizedBox(height: 60),
+          ],
+        ),
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         return SelectionArea(
@@ -1138,8 +1277,6 @@ class _FileUploadViewState extends State<FileUploadView> {
     String typeStr = type?.toString().trim() ?? "";
 
     // ── Permanent files ──
-    // Valid From: show the stored date or today's date
-    // Valid Upto: always show "-"
     if (typeStr == "Permanent" || typeStr == "Permanent File") {
       if (isFromDate) {
         String s = d?.toString().trim() ?? "";
@@ -1157,18 +1294,13 @@ class _FileUploadViewState extends State<FileUploadView> {
     }
 
     // ── Temporary / Short Term files ──
-    // Both Valid From and Valid Upto should show the actual dates
+    // Show the actual stored date; only suppress truly invalid sentinel values
     if (d == null || d.toString().trim().isEmpty) return "-";
-
     String s = d.toString().trim();
-    // Only suppress truly invalid placeholder dates
-    if (s == "1900-01-01" || s.startsWith("0000")) {
-      return "-";
-    }
-
-    // Handle "YYYY-MM-DD HH:MM:SS" by taking just the date part
+    // Suppress DB sentinel / epoch-zero placeholders
+    if (s == "1900-01-01" || s.startsWith("0000")) return "-";
+    // Handle "YYYY-MM-DD HH:MM:SS" → take just the date part
     if (s.contains(" ")) return s.split(" ")[0];
-
     return s;
   }
 
@@ -1231,22 +1363,18 @@ class _FileUploadViewState extends State<FileUploadView> {
           ),
         ),
         DataCell(
-          Text(
-            () {
-              final t = (item['type'] ?? item['group5'] ?? '-').toString();
-              if (t == 'Short Term' || t == 'Temporary') return 'Temporary';
-              return t;
-            }(),
-            style: const TextStyle(color: Colors.black87, fontSize: 12),
-          ),
+          Text(() {
+            final t = (item['type'] ?? item['group5'] ?? '-').toString();
+            if (t == 'Short Term' || t == 'Temporary') return 'Temporary';
+            return t;
+          }(), style: const TextStyle(color: Colors.black87, fontSize: 12)),
         ),
         DataCell(
           Text(
             _formatDate(
               item['valid_from_date'] ??
                   item['from_date'] ??
-                  item['valid_from'] ??
-                  item['from_date_valid'],
+                  item['valid_from'],
               item['type'] ?? item['group5'],
               isFromDate: true,
             ),
@@ -1289,7 +1417,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   }
 
   Widget _buildTextField(
-    String hint, // Changed name from 'label' to 'hint' for clarity
+    String hint,
     TextEditingController ctrl, {
     int maxLines = 1,
     ValueChanged<String>? onChanged,
@@ -1300,21 +1428,15 @@ class _FileUploadViewState extends State<FileUploadView> {
       maxLines: maxLines,
       onChanged: onChanged,
       validator: validator,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
+      // No field-level autovalidateMode — inherits from the parent Form
       style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
       decoration: InputDecoration(
-        // 1. USE HINT INSTEAD OF LABEL
         hintText: hint,
         hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-
-        // 2. DISABLE THE FLOATING BEHAVIOR (STOPS TEXT FROM JUMPING UP)
         labelText: null,
         floatingLabelBehavior: FloatingLabelBehavior.never,
-
         filled: true,
         fillColor: const Color(0xFFF8FAFC),
-
-        // 3. UPDATED TO SHARP EDGES (BORDERRADIUS.ZERO)
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.zero,
           borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
@@ -1328,7 +1450,7 @@ class _FileUploadViewState extends State<FileUploadView> {
           horizontal: 10,
           vertical: 10,
         ),
-        helperText: ' ', // Reserve space for error
+        helperText: ' ', // Reserve space so errors don't cause layout jump
         alignLabelWithHint: true,
       ),
     );
@@ -1540,7 +1662,7 @@ class _FileUploadViewState extends State<FileUploadView> {
       children: [
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             color: Color(0xFF64748B),
             fontSize: 12,
             fontWeight: FontWeight.w500,
@@ -1551,7 +1673,8 @@ class _FileUploadViewState extends State<FileUploadView> {
           controller: controller,
           readOnly: true,
           validator: validator,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
+          // No field-level autovalidateMode — inherits from the parent Form.
+          // This prevents the red error from firing while the date picker is open.
           style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
           decoration: InputDecoration(
             hintText: "YYYY-MM-DD",
@@ -1577,6 +1700,7 @@ class _FileUploadViewState extends State<FileUploadView> {
               horizontal: 10,
               vertical: 10,
             ),
+            helperText: ' ', // Reserve space so errors don't cause layout jump
           ),
           onTap: () async {
             DateTime? picked = await showDatePicker(

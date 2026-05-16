@@ -370,6 +370,14 @@ void _showLocationDialog() {
   }
 
   Widget _buildDataTableContainer() {
+    final filteredList = locationList.where((loc) {
+      final name = (loc['location_name'] ?? "").toString().toLowerCase();
+      final floor = (loc['floor'] ?? "").toString().toLowerCase();
+      final sub = (loc['sublocation'] ?? "").toString().toLowerCase();
+      final query = searchQuery.toLowerCase();
+      return name.contains(query) || floor.contains(query) || sub.contains(query);
+    }).toList();
+
     return Expanded(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -377,91 +385,121 @@ void _showLocationDialog() {
             decoration: BoxDecoration(
               border: Border.all(color: Colors.grey.shade300),
             ),
-            child: Column(
-              children: [
-                if (isLoading)
-                  const LinearProgressIndicator(color: Colors.blue),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minWidth: constraints.maxWidth,
+            child: (locationList.isNotEmpty && filteredList.isEmpty)
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: 48,
+                          color: Colors.blue.shade200,
                         ),
-                        child: DataTable(
-                          columnSpacing: 20,
-                          border: TableBorder.all(color: Colors.grey.shade200),
-                          headingRowHeight: 45,
-                          headingRowColor: WidgetStateProperty.all(
-                            Colors.blue.shade50,
+                        const SizedBox(height: 12),
+                        Text(
+                          "No matching locations found",
+                          style: TextStyle(
+                            color: Colors.blue.shade900,
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.bold,
                           ),
-                          columns: [
-                            _buildSortableColumn('Location Name'),
-                            _buildSortableColumn('Floor'),
-                            _buildSortableColumn('Sub Location'),
-                            _buildSortableColumn('Edit'),
-                            _buildSortableColumn('Action'),
-                          ],
-                          rows: locationList.map((loc) {
-                            return DataRow(
-                              cells: [
-                                DataCell(
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 8.0),
-                                    child: Text(
-                                      loc['location_name']?.toString() ?? "-",
-                                    ),
-                                  ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          "Try a different search term",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 13.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    children: [
+                      if (isLoading)
+                        const LinearProgressIndicator(color: Colors.blue),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.vertical,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minWidth: constraints.maxWidth,
+                              ),
+                              child: DataTable(
+                                columnSpacing: 20,
+                                border: TableBorder.all(color: Colors.grey.shade200),
+                                headingRowHeight: 45,
+                                headingRowColor: WidgetStateProperty.all(
+                                  Colors.blue.shade50,
                                 ),
-                                DataCell(Text(loc['floor']?.toString() ?? "-")),
-                                DataCell(
-                                  Text(loc['sublocation']?.toString() ?? "-"),
-                                ),
-                                DataCell(
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.edit,
-                                      color: Colors.blue,
-                                      size: 18,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        editingId = int.tryParse(loc['id'].toString());
-                                        _buildingAreaController.text = loc['location_name']?.toString() ?? "";
-                                        _floorNameController.text = loc['floor']?.toString() ?? "";
-                                        _subLocationController.text = loc['sublocation']?.toString() ?? "";
-                                      });
-                                      _showLocationDialog();
-                                    },
-                                  ),
-                                ),
-                                DataCell(
-                                  Transform.scale(
-                                    scale: 0.7,
-                                    child: Switch(
-                                      value:
-                                          loc['status'] == 1 ||
-                                          loc['status'] == "1",
-                                      activeColor: Colors.blue,
-                                      onChanged: (val) => toggleLocationStatus(
-                                        loc['id'],
-                                        loc['status'],
+                                columns: [
+                                  _buildSortableColumn('Location Name'),
+                                  _buildSortableColumn('Floor'),
+                                  _buildSortableColumn('Sub Location'),
+                                  _buildSortableColumn('Edit'),
+                                  _buildSortableColumn('Action'),
+                                ],
+                                rows: filteredList.map((loc) {
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: Text(
+                                            loc['location_name']?.toString() ?? "-",
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
+                                      DataCell(Text(loc['floor']?.toString() ?? "-")),
+                                      DataCell(
+                                        Text(loc['sublocation']?.toString() ?? "-"),
+                                      ),
+                                      DataCell(
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.edit,
+                                            color: Colors.blue,
+                                            size: 18,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              editingId = int.tryParse(loc['id'].toString());
+                                              _buildingAreaController.text = loc['location_name']?.toString() ?? "";
+                                              _floorNameController.text = loc['floor']?.toString() ?? "";
+                                              _subLocationController.text = loc['sublocation']?.toString() ?? "";
+                                            });
+                                            _showLocationDialog();
+                                          },
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Transform.scale(
+                                          scale: 0.7,
+                                          child: Switch(
+                                            value:
+                                                loc['status'] == 1 ||
+                                                loc['status'] == "1",
+                                            activeColor: Colors.blue,
+                                            onChanged: (val) => toggleLocationStatus(
+                                              loc['id'],
+                                              loc['status'],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           );
         },
       ),

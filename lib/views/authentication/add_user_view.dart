@@ -533,11 +533,37 @@ void _showFormDialog() {
               height: 400,
               child: Center(child: CircularProgressIndicator()),
             )
-          : pagedUsers.isEmpty
-          ? const SizedBox(
+          : (allUsers.isNotEmpty && pagedUsers.isEmpty)
+          ? SizedBox(
               height: 400,
               child: Center(
-                child: Text("No users found.", style: TextStyle(fontSize: 16)),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.search_off_rounded,
+                      size: 48,
+                      color: Colors.blue.shade200,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      "No matching users found",
+                      style: TextStyle(
+                        color: Colors.blue.shade900,
+                        fontSize: 16.0,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      "Try a different search term",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 13.0,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             )
           : LayoutBuilder(

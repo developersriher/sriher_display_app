@@ -434,7 +434,37 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
                         ),
                         child: isLoading
                             ? const Center(child: CircularProgressIndicator())
-                            : _buildDataTable(),
+                            : (templateList.isNotEmpty && _filteredList.isEmpty)
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.search_off_rounded,
+                                          size: 48,
+                                          color: Colors.blue.shade200,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          "No matching templates found",
+                                          style: TextStyle(
+                                            color: Colors.blue.shade900,
+                                            fontSize: 16.0,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        const Text(
+                                          "Try a different search term",
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 13.0,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : _buildDataTable(),
                       ),
                     ),
                     const SizedBox(height: 15),

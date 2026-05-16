@@ -26,6 +26,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   int? editingId;
   bool isSubmitting = false;
   GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  String searchQuery = "";
+  final TextEditingController _searchController = TextEditingController();
 
   // --- FORM CONTROLLERS ---
   final TextEditingController _deviceCodeController = TextEditingController();
@@ -58,6 +60,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     _warrantyController.dispose();
     _serialNoController.dispose();
     _manufacturerController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -600,47 +603,62 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                           ),
 
                         Expanded(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.vertical,
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  minWidth: constraints.maxWidth,
-                                ),
-                                child: DataTable(
-                                  columnSpacing: 20,
-                                  headingRowHeight: 45,
-                                  headingRowColor: WidgetStateProperty.all(
-                                    Colors.blue.shade50,
+                          child: (deviceList.isNotEmpty && _filteredList.isEmpty)
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.search_off_rounded,
+                                        size: 48,
+                                        color: Colors.blue.shade200,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        "No matching devices found",
+                                        style: TextStyle(
+                                          color: Colors.blue.shade900,
+                                          fontSize: 16.0,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        "Try a different search term",
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 13.0,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  border: TableBorder.all(
-                                    color: Colors.white10,
+                                )
+                              : SingleChildScrollView(
+                                  scrollDirection: Axis.vertical,
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        minWidth: constraints.maxWidth,
+                                      ),
+                                      child: DataTable(
+                                        columnSpacing: 20,
+                                        headingRowHeight: 45,
+                                        headingRowColor: WidgetStateProperty.all(
+                                          Colors.blue.shade50,
+                                        ),
+                                        border: TableBorder.all(
+                                          color: Colors.white10,
+                                        ),
+                                        columns: _getColumns(),
+                                        rows: _filteredList
+                                            .map((device) => _getDataRow(device))
+                                            .toList(),
+                                      ),
+                                    ),
                                   ),
-                                  columns: _getColumns(),
-                                  rows: deviceList
-                                      .map((device) => _getDataRow(device))
-                                      .toList(),
                                 ),
-                              ),
-                            ),
-                          ),
                         ),
-
-                        if (!isLoading && deviceList.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(40.0),
-                            child: Center(
-                              child: Text(
-                                "No devices found.",
-                                style: TextStyle(
-                                  color: Colors.white38,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   );
@@ -654,6 +672,17 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
         ),
       ),
     );
+  }
+
+  List<dynamic> get _filteredList {
+    if (searchQuery.isEmpty) return deviceList;
+    return deviceList.where((device) {
+      final code = (device['device_code'] ?? '').toString().toLowerCase();
+      final name = (device['device_name'] ?? '').toString().toLowerCase();
+      final model = (device['device_model'] ?? '').toString().toLowerCase();
+      final q = searchQuery.toLowerCase();
+      return code.contains(q) || name.contains(q) || model.contains(q);
+    }).toList();
   }
 
   List<DataColumn> _getColumns() {
@@ -937,9 +966,10 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           width: 250,
           height: 40,
           child: TextField(
+            controller: _searchController,
             onChanged: (val) {
               setState(() {
-                // TODO: Implement actual filtering
+                searchQuery = val;
               });
             },
             style: const TextStyle(fontSize: 12, color: Colors.black87),

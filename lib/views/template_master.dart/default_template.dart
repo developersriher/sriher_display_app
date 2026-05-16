@@ -504,90 +504,119 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
               borderRadius: BorderRadius.circular(8),
             ),
             clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-
-              children: [
-                if (_isLoading)
-                  const LinearProgressIndicator(color: Colors.blue),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minWidth: constraints.maxWidth,
-                            ),
-                            child: DataTable(
-                              headingRowHeight: 45,
-                              headingRowColor: WidgetStateProperty.all(
-                                Colors.blue.shade50,
-                              ),
-                              border: TableBorder.all(
-                                color: Colors.grey.shade100,
-                              ),
-                              columns: [
-                                _buildTableCol('Device Name'),
-                                _buildTableCol('Template Name'),
-                                _buildTableCol('Edit'),
-                              ],
-                              rows: paginated.map((item) {
-                                final devId =
-                                    item['device_id']?.toString() ??
-                                    item['id']?.toString();
-                                String? resolvedName;
-
-                                // 1. Try Lookup from master list first if ID is available
-                                if (devId != null) {
-                                  final dev = _deviceDropdownList.firstWhere(
-                                    (d) =>
-                                        d['id'].toString() == devId ||
-                                        d['device_id']?.toString() == devId,
-                                    orElse: () => null,
-                                  );
-                                  if (dev != null) {
-                                    resolvedName =
-                                        dev['device_name'] ??
-                                        dev['device_code'];
-                                  }
-                                }
-
-                                // 2. Fallback to item's own fields if lookup failed or no ID
-                                resolvedName ??=
-                                    item['device_name'] ??
-                                    item['Device_name'] ??
-                                    item['device_code'] ??
-                                    "-";
-
-                                return DataRow(
-                                  cells: [
-                                    DataCell(Text(resolvedName ?? "-")),
-                                    DataCell(Text(item['temp_name'] ?? "-")),
-                                    DataCell(
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.edit,
-                                          color: Colors.blue,
-                                          size: 20,
-                                        ),
-                                        onPressed: () => _editItem(item),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
+            child: (_templateList.isNotEmpty && filtered.isEmpty)
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: 48,
+                          color: Colors.blue.shade200,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "No matching devices found",
+                          style: TextStyle(
+                            color: Colors.blue.shade900,
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      );
-                    },
+                        const SizedBox(height: 4),
+                        const Text(
+                          "Try a different search term",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 13.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_isLoading)
+                        const LinearProgressIndicator(color: Colors.blue),
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              scrollDirection: Axis.vertical,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    minWidth: constraints.maxWidth,
+                                  ),
+                                  child: DataTable(
+                                    headingRowHeight: 45,
+                                    headingRowColor: WidgetStateProperty.all(
+                                      Colors.blue.shade50,
+                                    ),
+                                    border: TableBorder.all(
+                                      color: Colors.grey.shade100,
+                                    ),
+                                    columns: [
+                                      _buildTableCol('Device Name'),
+                                      _buildTableCol('Template Name'),
+                                      _buildTableCol('Edit'),
+                                    ],
+                                    rows: paginated.map((item) {
+                                      final devId =
+                                          item['device_id']?.toString() ??
+                                          item['id']?.toString();
+                                      String? resolvedName;
+
+                                      // 1. Try Lookup from master list first if ID is available
+                                      if (devId != null) {
+                                        final dev = _deviceDropdownList.firstWhere(
+                                          (d) =>
+                                              d['id'].toString() == devId ||
+                                              d['device_id']?.toString() == devId,
+                                          orElse: () => null,
+                                        );
+                                        if (dev != null) {
+                                          resolvedName =
+                                              dev['device_name'] ??
+                                              dev['device_code'];
+                                        }
+                                      }
+
+                                      // 2. Fallback to item's own fields if lookup failed or no ID
+                                      resolvedName ??=
+                                          item['device_name'] ??
+                                          item['Device_name'] ??
+                                          item['device_code'] ??
+                                          "-";
+
+                                      return DataRow(
+                                        cells: [
+                                          DataCell(Text(resolvedName ?? "-")),
+                                          DataCell(Text(item['temp_name'] ?? "-")),
+                                          DataCell(
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.edit,
+                                                color: Colors.blue,
+                                                size: 20,
+                                              ),
+                                              onPressed: () => _editItem(item),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ),
         _buildTableFooter(filtered.length),

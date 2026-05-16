@@ -1131,6 +1131,37 @@ class _MappingViewState extends State<MappingView> {
 
   Widget _buildTable() {
     final rows = _paged;
+    if (_mappingList.isNotEmpty && _filtered.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search_off_rounded,
+              size: 48,
+              color: Colors.blue.shade200,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "No matching mappings found",
+              style: TextStyle(
+                color: Colors.blue.shade900,
+                fontSize: 16.0,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              "Try a different search term",
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 13.0,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return LayoutBuilder(
       builder: (ctx, constraints) {
         return SingleChildScrollView(

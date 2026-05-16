@@ -486,8 +486,36 @@ class _RoleViewState extends State<RoleView>
                   Expanded(
                     child: isLoading
                         ? const Center(child: CircularProgressIndicator())
-                        : paged.isEmpty
-                        ? const Center(child: Text("No roles found."))
+                        : (allRoles.isNotEmpty && paged.isEmpty)
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.search_off_rounded,
+                                  size: 48,
+                                  color: Colors.blue.shade200,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  "No matching roles found",
+                                  style: TextStyle(
+                                    color: Colors.blue.shade900,
+                                    fontSize: 16.0,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  "Try a different search term",
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 13.0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
                         : _buildTableContainer(paged, filtered.length, limit),
                   ),
                   const SizedBox(height: 20),

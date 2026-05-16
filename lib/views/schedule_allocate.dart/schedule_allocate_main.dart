@@ -13,7 +13,6 @@ class ScheduleAllocateView extends StatefulWidget {
   final VoidCallback? onBack;
 
   const ScheduleAllocateView({
-    
     super.key,
     this.editData,
     this.isExtend = false,
@@ -47,6 +46,19 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
   final TextEditingController _toDateController = TextEditingController();
   final TextEditingController _fromTimeController = TextEditingController();
   final TextEditingController _newScheduleController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
+
+  /// Filtered template files based on search query
+  List<dynamic> get _filteredTemplateFiles {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) return templateFiles;
+    return templateFiles.where((file) {
+      final fileName = (file['user_filename'] ?? file['file_name'] ?? '')
+          .toString()
+          .toLowerCase();
+      return fileName.contains(query);
+    }).toList();
+  }
 
   late AnimationController _durationPanelController;
   bool _wasSelectionComplete = false;
@@ -99,6 +111,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     _toDateController.dispose();
     _fromTimeController.dispose();
     _newScheduleController.dispose();
+    _searchController.dispose();
     _durationPanelController.dispose();
     super.dispose();
   }
@@ -252,116 +265,131 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     if (name.isEmpty) return;
     setState(() {
       final newId = DateTime.now().millisecondsSinceEpoch % 10000;
-      scheduleList = List.from(scheduleList)..add({
-        "id": newId.toString(),
-        "schedule_name": name,
-      });
+      scheduleList = List.from(scheduleList)
+        ..add({"id": newId.toString(), "schedule_name": name});
       selectedScheduleId = newId;
       _newScheduleController.clear();
     });
   }
 
   void _showSchedulePopup() {
-  StylishDialog.show(
-    context: context,
-    title: "NEW SCHEDULE",
-    // Adding the subtitle here ensures it stays directly under the heading
-    subtitle: "Define a new department or purpose for scheduling.",
-    maxWidth: 480,
-    builder: (context, setPopupState) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Subtitle is now handled by StylishDialog.show, 
-          // so we start directly with the input field
-          const SizedBox(height: 8), 
-          TextFormField(
-            controller: _newScheduleController,
-            autofocus: true,
-            style: const TextStyle(fontSize: 14),
-            textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) {
-              final name = _newScheduleController.text.trim();
-              if (name.isNotEmpty) {
-                Navigator.pop(context);
-                _addNewSchedule(name);
-              }
-            },
-            decoration: InputDecoration(
-              // Added "Enter the schedule name" as requested
-              hintText: "Enter the schedule name (e.g., Cardiology OPD)",
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              
-              // Added your signature sharp borders
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(color: Colors.grey.shade400),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(0),
-                borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 18,
-              ),
-            ),
-          ),
-          const SizedBox(height: 32),
-          Row(
+    final GlobalKey<FormState> _popupFormKey = GlobalKey<FormState>();
+    StylishDialog.show(
+      context: context,
+      title: "NEW SCHEDULE",
+      subtitle: "Define a new department or purpose for scheduling.",
+      maxWidth: 480,
+      builder: (context, setPopupState) {
+        return Form(
+          key: _popupFormKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _newScheduleController,
+                autofocus: true,
+                style: const TextStyle(fontSize: 14),
+                textInputAction: TextInputAction.done,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return "Enter the schedule";
+                  }
+                  return null;
+                },
+                onFieldSubmitted: (_) {
+                  if (_popupFormKey.currentState!.validate()) {
+                    final name = _newScheduleController.text.trim();
+                    Navigator.pop(context);
+                    _addNewSchedule(name);
+                  }
+                },
+                decoration: InputDecoration(
+                  hintText: "Enter the schedule name",
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(color: Colors.grey.shade400),
+                  ),
+                  focusedBorder: const OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(
+                      color: Color(0xFF0F172A),
+                      width: 1.5,
                     ),
                   ),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.bold,
-                    ),
+                  errorBorder: const OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(color: Colors.red, width: 1.0),
+                  ),
+                  focusedErrorBorder: const OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(color: Colors.red, width: 1.5),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 18,
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: () {
-                    final name = _newScheduleController.text.trim();
-                    if (name.isNotEmpty) {
-                      Navigator.pop(context);
-                      _addNewSchedule(name);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
-                  child: const Text(
-                    "Create Schedule",
-                    style: TextStyle(fontWeight: FontWeight.w900),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (_popupFormKey.currentState!.validate()) {
+                          final name = _newScheduleController.text.trim();
+                          Navigator.pop(context);
+                          _addNewSchedule(name);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        "Create Schedule",
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ],
           ),
-        ],
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isSelectionComplete && !_wasSelectionComplete) {
@@ -375,58 +403,58 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       backgroundColor: Colors.white,
       body: SelectionArea(
         child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth < 1100;
-          return Padding(
-            padding: EdgeInsets.all(isNarrow ? 12.0 : 24.0),
-            child: isNarrow
-                ? SingleChildScrollView(
-                    child: Column(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 1100;
+            return Padding(
+              padding: EdgeInsets.all(isNarrow ? 12.0 : 24.0),
+              child: isNarrow
+                  ? SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          _buildLeftColumn(),
+                          const SizedBox(height: 20),
+                          const Divider(),
+                          const SizedBox(height: 20),
+                          if (isSelectionComplete) _buildRightColumn(),
+                        ],
+                      ),
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildLeftColumn(),
-                        const SizedBox(height: 20),
-                        const Divider(),
-                        const SizedBox(height: 20),
-                        if (isSelectionComplete) _buildRightColumn(),
+                        Expanded(flex: 7, child: _buildLeftColumn()),
+                        const SizedBox(width: 32),
+                        Expanded(
+                          flex: 5,
+                          child: isSelectionComplete
+                              ? _buildRightColumn()
+                              : Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.auto_awesome_mosaic_rounded,
+                                        size: 64,
+                                        color: const Color(0xFFE2E8F0),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      const Text(
+                                        "Select a template to view details",
+                                        style: TextStyle(
+                                          color: Color(0xFF94A3B8),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                        ),
                       ],
                     ),
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 7, child: _buildLeftColumn()),
-                      const SizedBox(width: 32),
-                      Expanded(
-                        flex: 5,
-                        child: isSelectionComplete
-                            ? _buildRightColumn()
-                            : Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.auto_awesome_mosaic_rounded,
-                                      size: 64,
-                                      color: const Color(0xFFE2E8F0),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    const Text(
-                                      "Select a template to view details",
-                                      style: TextStyle(
-                                        color: Color(0xFF94A3B8),
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
-          );
-        },
+            );
+          },
+        ),
       ),
-    ),
     );
   }
 
@@ -531,7 +559,6 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                         "From Time",
                         _fromTimeController,
                         enabled: _fromDateController.text.isNotEmpty,
-                        
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -646,169 +673,201 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         Expanded(
           child: Container(
             clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  _buildListHeader(),
-                  const Divider(height: 1),
-                  const SizedBox(height: 16),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      if (isLoadingFiles) {
-                        return const SizedBox(
-                          height: 300,
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                _buildListHeader(),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (isLoadingFiles) {
+                      return const SizedBox(
+                        height: 300,
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
 
-                      if (templateFiles.isEmpty) {
-                        return const SizedBox(
-                          height: 200,
-                          child: Center(
-                            child: Text(
-                              "No files found for this template",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 16.0,
-                                fontStyle: FontStyle.italic,
-                              ),
+                    if (templateFiles.isEmpty) {
+                      return const SizedBox(
+                        height: 200,
+                        child: Center(
+                          child: Text(
+                            "No files found for this template",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 16.0,
+                              fontStyle: FontStyle.italic,
                             ),
-                          ),
-                        );
-                      }
-
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minWidth: constraints.maxWidth,
-                          ),
-                          child: DataTable(
-                            columnSpacing: 25,
-                            horizontalMargin: 20,
-                            dataRowMinHeight: 70,
-                            dataRowMaxHeight: 85,
-                            headingRowHeight: 45,
-                            headingRowColor: WidgetStateProperty.all(
-                              Colors.blue.shade50,
-                            ),
-                            columns: [
-                              _buildSortableColumn('Play order'),
-                              _buildSortableColumn('File'),
-                              _buildSortableColumn('File Name'),
-                              _buildSortableColumn('Duration'),
-                            ],
-                            rows: templateFiles.map((file) {
-                              final index = templateFiles.indexOf(file) + 1;
-                              return DataRow(
-                                cells: [
-                                  DataCell(
-                                    Text(
-                                      index.toString(),
-                                      style: const TextStyle(
-                                        fontSize: 12.0,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 8.0,
-                                      ),
-                                      child: Container(
-                                        clipBehavior: Clip.antiAlias,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.grey.shade300,
-                                          ),
-                                        ),
-                                        child: (file['file_name'] != null && file['file_name'].toString().trim().isNotEmpty)
-                                            ? Image.network(
-                                                "$_baseUrl/uploads/${file['file_name']}",
-                                                height: 65,
-                                                width: 50,
-                                                fit: BoxFit.cover,
-                                                errorBuilder:
-                                                    (
-                                                      context,
-                                                      error,
-                                                      stackTrace,
-                                                    ) => const Icon(
-                                                      Icons.broken_image,
-                                                      size: 30,
-                                                      color: Colors.grey,
-                                                    ),
-                                              )
-                                            : const Icon(
-                                                Icons.image,
-                                                size: 20,
-                                                color: Colors.grey,
-                                              ),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      file['user_filename'] ??
-                                          file['file_name'] ??
-                                          '-',
-                                      style: const TextStyle(
-                                        fontSize: 12.0,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue.shade50,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        "${file['duration'] ?? '30'}s",
-                                        style: TextStyle(
-                                          fontSize: 12.0,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.blue.shade900,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
                           ),
                         ),
                       );
-                    },
-                  ),
-                  const Divider(height: 1),
-                  _buildPagination(),
-                ],
-              ),
+                    }
+
+                    if (_filteredTemplateFiles.isEmpty) {
+                      return const SizedBox(
+                        height: 200,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.search_off_rounded,
+                                size: 40,
+                                color: Colors.grey,
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                "No matching files found",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 16.0,
+                                  fontWeight: FontWeight.bold,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minWidth: constraints.maxWidth,
+                        ),
+                        child: DataTable(
+                          columnSpacing: 25,
+                          horizontalMargin: 20,
+                          dataRowMinHeight: 70,
+                          dataRowMaxHeight: 85,
+                          headingRowHeight: 45,
+                          headingRowColor: WidgetStateProperty.all(
+                            Colors.blue.shade50,
+                          ),
+                          columns: [
+                            _buildSortableColumn('Play order'),
+                            _buildSortableColumn('File'),
+                            _buildSortableColumn('File Name'),
+                            _buildSortableColumn('Duration'),
+                          ],
+                          rows: _filteredTemplateFiles.map((file) {
+                            final index =
+                                _filteredTemplateFiles.indexOf(file) + 1;
+                            return DataRow(
+                              cells: [
+                                DataCell(
+                                  Text(
+                                    index.toString(),
+                                    style: const TextStyle(
+                                      fontSize: 12.0,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8.0,
+                                    ),
+                                    child: Container(
+                                      clipBehavior: Clip.antiAlias,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      child:
+                                          (file['file_name'] != null &&
+                                              file['file_name']
+                                                  .toString()
+                                                  .trim()
+                                                  .isNotEmpty)
+                                          ? Image.network(
+                                              "$_baseUrl/uploads/${file['file_name']}",
+                                              height: 65,
+                                              width: 50,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) => const Icon(
+                                                    Icons.broken_image,
+                                                    size: 30,
+                                                    color: Colors.grey,
+                                                  ),
+                                            )
+                                          : const Icon(
+                                              Icons.image,
+                                              size: 20,
+                                              color: Colors.grey,
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    file['user_filename'] ??
+                                        file['file_name'] ??
+                                        '-',
+                                    style: const TextStyle(
+                                      fontSize: 12.0,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      "${file['duration'] ?? '30'}s",
+                                      style: TextStyle(
+                                        fontSize: 12.0,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                _buildPagination(),
+              ],
             ),
           ),
+        ),
       ],
     );
   }
@@ -855,7 +914,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                 items: items.map((item) {
                   return SearchableDropdownItem<int>(
                     value: int.tryParse(item['id']?.toString() ?? '') ?? 0,
-                    label: item['schedule_name']?.toString() ??
+                    label:
+                        item['schedule_name']?.toString() ??
                         item['template_name']?.toString() ??
                         item['temp_name']?.toString() ??
                         item['name']?.toString() ??
@@ -873,11 +933,11 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               const SizedBox(width: 8),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: Colors.blue.shade100,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.add, color: Colors.blue),
+                  icon: Icon(Icons.add, color: Colors.blue.shade700),
                   onPressed: () => _showSchedulePopup(),
                 ),
               ),
@@ -894,7 +954,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     bool enabled = true,
   }) {
     final List<String> slots = _generateTimeSlots();
-    final String? currentValue = (slots.contains(controller.text) && controller.text.isNotEmpty)
+    final String? currentValue =
+        (slots.contains(controller.text) && controller.text.isNotEmpty)
         ? controller.text
         : null;
 
@@ -930,8 +991,6 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       ],
     );
   }
-
-
 
   Widget _buildDateField(String label, TextEditingController controller) {
     return Column(
@@ -1040,10 +1099,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                     ),
                   ),
                   items: ["10", "25", "50", "100"]
-                      .map((v) => DropdownMenuItem(
-                            value: v,
-                            child: Text(v),
-                          ))
+                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                       .toList(),
                   onChanged: (v) => setState(() {
                     entriesValue = v!;
@@ -1065,6 +1121,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             width: 180,
             height: 38,
             child: TextField(
+              controller: _searchController,
+              onChanged: (_) => setState(() {}),
               style: const TextStyle(fontSize: 12, color: Colors.black87),
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search, size: 16),

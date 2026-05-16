@@ -478,43 +478,73 @@ class _DepartmentViewState extends State<DepartmentView> {
               borderRadius: BorderRadius.circular(8),
             ),
             clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: [
-                if (isLoading)
-                  const LinearProgressIndicator(
-                    backgroundColor: Colors.transparent,
-                    color: Colors.blue,
-                  ),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minWidth: constraints.maxWidth,
-                            ),
-                            child: DataTable(
-                              headingRowHeight: 45,
-                              headingRowColor: WidgetStateProperty.all(
-                                Colors.blue.shade50,
-                              ),
-                              border: TableBorder.all(
-                                color: Colors.grey.shade100,
-                              ),
-                              columns: _getColumns(),
-                              rows: _getCurrentPageRows(),
-                            ),
+            child: (categoryList.isNotEmpty && filteredList.isEmpty)
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: 48,
+                          color: Colors.blue.shade200,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "No matching departments found",
+                          style: TextStyle(
+                            color: Colors.blue.shade900,
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      );
-                    },
+                        const SizedBox(height: 4),
+                        const Text(
+                          "Try a different search term",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 13.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    children: [
+                      if (isLoading)
+                        const LinearProgressIndicator(
+                          backgroundColor: Colors.transparent,
+                          color: Colors.blue,
+                        ),
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              scrollDirection: Axis.vertical,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    minWidth: constraints.maxWidth,
+                                  ),
+                                  child: DataTable(
+                                    headingRowHeight: 45,
+                                    headingRowColor: WidgetStateProperty.all(
+                                      Colors.blue.shade50,
+                                    ),
+                                    border: TableBorder.all(
+                                      color: Colors.grey.shade100,
+                                    ),
+                                    columns: _getColumns(),
+                                    rows: _getCurrentPageRows(),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ),
         const SizedBox(height: 16),
