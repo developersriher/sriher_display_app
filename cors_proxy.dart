@@ -27,8 +27,14 @@ void main() async {
       request.response
         ..statusCode = 200
         ..headers.set('Access-Control-Allow-Origin', '*')
-        ..headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        ..headers.set('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization')
+        ..headers.set(
+          'Access-Control-Allow-Methods',
+          'GET, POST, PUT, DELETE, OPTIONS',
+        )
+        ..headers.set(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Accept, Authorization',
+        )
         ..headers.set('Access-Control-Max-Age', '86400')
         ..close();
       continue;
@@ -36,25 +42,36 @@ void main() async {
 
     try {
       // Read the incoming request body
-      final bodyBytes = await request.fold<List<int>>([], (prev, chunk) => prev..addAll(chunk));
+      final bodyBytes = await request.fold<List<int>>(
+        [],
+        (prev, chunk) => prev..addAll(chunk),
+      );
       final bodyStr = utf8.decode(bodyBytes);
 
       // Forward to the real server
       final client = HttpClient();
-      final targetUri = Uri.https(targetHost, request.uri.path, request.uri.queryParameters.isEmpty ? null : request.uri.queryParameters);
-      
+      final targetUri = Uri.https(
+        targetHost,
+        request.uri.path,
+        request.uri.queryParameters.isEmpty
+            ? null
+            : request.uri.queryParameters,
+      );
+
       final proxyRequest = await client.openUrl(request.method, targetUri);
 
       // Copy headers from original request
       request.headers.forEach((name, values) {
-        if (name.toLowerCase() != 'host' && name.toLowerCase() != 'origin' && name.toLowerCase() != 'referer') {
+        if (name.toLowerCase() != 'host' &&
+            name.toLowerCase() != 'origin' &&
+            name.toLowerCase() != 'referer') {
           for (final v in values) {
             proxyRequest.headers.set(name, v);
           }
         }
       });
       proxyRequest.headers.set('Host', targetHost);
-      
+
       // Forward content-type properly for multipart
       if (bodyBytes.isNotEmpty) {
         proxyRequest.contentLength = bodyBytes.length;
@@ -62,20 +79,34 @@ void main() async {
       }
 
       final proxyResponse = await proxyRequest.close();
-      final responseBody = await proxyResponse.fold<List<int>>([], (prev, chunk) => prev..addAll(chunk));
+      final responseBody = await proxyResponse.fold<List<int>>(
+        [],
+        (prev, chunk) => prev..addAll(chunk),
+      );
 
       // Send back to the Flutter app with CORS headers
       request.response
         ..statusCode = proxyResponse.statusCode
         ..headers.set('Access-Control-Allow-Origin', '*')
-        ..headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        ..headers.set('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization')
-        ..headers.set('Content-Type', proxyResponse.headers.contentType?.toString() ?? 'application/json');
-      
+        ..headers.set(
+          'Access-Control-Allow-Methods',
+          'GET, POST, PUT, DELETE, OPTIONS',
+        )
+        ..headers.set(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Accept, Authorization',
+        )
+        ..headers.set(
+          'Content-Type',
+          proxyResponse.headers.contentType?.toString() ?? 'application/json',
+        );
+
       request.response.add(responseBody);
       await request.response.close();
 
-      print('[${request.method}] ${request.uri.path} → ${proxyResponse.statusCode}');
+      print(
+        '[${request.method}] ${request.uri.path} → ${proxyResponse.statusCode}',
+      );
       client.close();
     } catch (e) {
       print('[ERROR] ${request.uri.path}: $e');
