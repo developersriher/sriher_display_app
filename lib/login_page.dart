@@ -25,7 +25,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   late AnimationController _entryController;
   late AnimationController _buttonController;
-  
+
   // Staggered Animations
   late Animation<double> _logoFade;
   late Animation<Offset> _logoSlide;
@@ -63,10 +63,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
     );
     _logoSlide = Tween<Offset>(begin: const Offset(0, -0.1), end: Offset.zero)
-        .animate(CurvedAnimation(
-          parent: _entryController,
-          curve: const Interval(0.0, 0.4, curve: Curves.easeOutCubic),
-        ));
+        .animate(
+          CurvedAnimation(
+            parent: _entryController,
+            curve: const Interval(0.0, 0.4, curve: Curves.easeOutCubic),
+          ),
+        );
 
     // Sequence 2: Title
     _titleFade = CurvedAnimation(
@@ -74,10 +76,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       curve: const Interval(0.2, 0.6, curve: Curves.easeOut),
     );
     _titleSlide = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
-        .animate(CurvedAnimation(
-          parent: _entryController,
-          curve: const Interval(0.2, 0.6, curve: Curves.easeOutCubic),
-        ));
+        .animate(
+          CurvedAnimation(
+            parent: _entryController,
+            curve: const Interval(0.2, 0.6, curve: Curves.easeOutCubic),
+          ),
+        );
 
     // Sequence 3: Form Fields
     _formFade = CurvedAnimation(
@@ -85,10 +89,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       curve: const Interval(0.4, 0.8, curve: Curves.easeOut),
     );
     _formSlide = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero)
-        .animate(CurvedAnimation(
-          parent: _entryController,
-          curve: const Interval(0.4, 0.8, curve: Curves.easeOutCubic),
-        ));
+        .animate(
+          CurvedAnimation(
+            parent: _entryController,
+            curve: const Interval(0.4, 0.8, curve: Curves.easeOutCubic),
+          ),
+        );
 
     // Sequence 4: Button
     _buttonFade = CurvedAnimation(
@@ -141,6 +147,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             }),
           )
           .timeout(const Duration(seconds: 15));
+      print(getBaseUrl());
+      print(response.body);
 
       if (!mounted) return;
 
@@ -187,13 +195,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           );
         } else {
           setState(() {
-            _errorMessage = data['message'] ?? "Invalid credentials. Please try again.";
+            _errorMessage =
+                data['message'] ?? "Invalid credentials. Please try again.";
           });
         }
       } else {
         setState(() {
           if (response.statusCode == 0) {
-            _errorMessage = "Network error or CORS policy blocking the request. Please check your connection.";
+            _errorMessage =
+                "Network error or CORS policy blocking the request. Please check your connection.";
           } else {
             _errorMessage = "Server error: ${response.statusCode}";
           }
@@ -202,7 +212,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     } catch (e) {
       String msg = e.toString();
       if (msg.contains('Failed to fetch') || msg.contains('XMLHttpRequest')) {
-        _showError('Connection blocked by CORS or Network issue. Ensure you are using the HTML renderer.');
+        _showError(
+          'Connection blocked by CORS or Network issue. Ensure you are using the HTML renderer.',
+        );
       } else {
         _showError('Connection failed: $e');
       }
@@ -249,7 +261,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               ),
             ),
           ),
-          
+
           // Enhanced Interactive Background
           const AnimatedBackground(),
 
@@ -257,12 +269,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           Positioned(
             top: MediaQuery.of(context).size.height * 0.2,
             left: -100,
-            child: _buildAmbientGlow(400, const Color(0xFF3B82F6).withOpacity(0.08)),
+            child: _buildAmbientGlow(
+              400,
+              const Color(0xFF3B82F6).withOpacity(0.08),
+            ),
           ),
           Positioned(
             bottom: 100,
             right: -100,
-            child: _buildAmbientGlow(500, const Color(0xFF10B981).withOpacity(0.05)),
+            child: _buildAmbientGlow(
+              500,
+              const Color(0xFF10B981).withOpacity(0.05),
+            ),
           ),
 
           Center(
@@ -282,9 +300,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [color, Colors.transparent],
-        ),
+        gradient: RadialGradient(colors: [color, Colors.transparent]),
       ),
     );
   }
@@ -335,9 +351,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 30),
-            
+
             // Title Staggered
             FadeTransition(
               opacity: _titleFade,
@@ -368,7 +384,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 40),
 
             // Form Fields Staggered
@@ -412,9 +428,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 40),
-            
+
             // Button Staggered
             FadeTransition(
               opacity: _buttonFade,
@@ -439,7 +455,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: Color(0xFFF87171), size: 20),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Color(0xFFF87171),
+            size: 20,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -551,13 +571,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           focusNode: focusNode,
           obscureText: isPassword && _isObscure,
           textInputAction: textInputAction,
-          onFieldSubmitted: onSubmitted ?? (nextFocusNode != null
-              ? (_) => FocusScope.of(context).requestFocus(nextFocusNode)
-              : null),
-          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+          onFieldSubmitted:
+              onSubmitted ??
+              (nextFocusNode != null
+                  ? (_) => FocusScope.of(context).requestFocus(nextFocusNode)
+                  : null),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 15),
+            hintStyle: TextStyle(
+              color: Colors.white.withOpacity(0.2),
+              fontSize: 15,
+            ),
             prefixIcon: Container(
               margin: const EdgeInsets.only(right: 8),
               child: Icon(icon, color: Colors.white.withOpacity(0.4), size: 22),
@@ -565,7 +594,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             suffixIcon: isPassword
                 ? IconButton(
                     icon: Icon(
-                      _isObscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                      _isObscure
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
                       color: Colors.white.withOpacity(0.3),
                       size: 20,
                     ),
@@ -586,11 +617,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               borderRadius: BorderRadius.circular(16),
               borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 20,
+            ),
           ),
         ),
       ],
     );
   }
 }
-
