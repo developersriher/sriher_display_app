@@ -8,6 +8,8 @@ import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
 import '../../api_config.dart';
+import '../../widgets/web_compat_image.dart';
+import '../../widgets/web_video_thumbnail.dart';
 
 /**
  * FileUploadView - Master Module
@@ -141,145 +143,186 @@ class _FileUploadViewState extends State<FileUploadView> {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // API 1: FETCH FILES (GET /fileview)
+  // API 1: FETCH FILES (POST /fileview)
   // ──────────────────────────────────────────────────────────────────────────
- Future<void> fetchFilesFromServer() async {
-    setState(() => isLoading = true);
+  Future<void> fetchFilesFromServer() async {
+    if (mounted) setState(() => isLoading = true);
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/fileview'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"api_key": _apiKey}),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/fileview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"api_key": _apiKey}),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> decoded = jsonDecode(response.body);
-        final data = decoded['data'] ?? [];
-
-        // ← DEBUG: print first item keys and values
-        if (data.isNotEmpty) {
-          debugPrint("=== FILEVIEW FIRST ITEM KEYS: ${data[0].keys.toList()}");
-          debugPrint("=== FILEVIEW FIRST ITEM: ${data[0]}");
+        if ((decoded['status']?.toString() ?? '') == 'Success') {
+          final List<dynamic> data = decoded['data'] ?? [];
+          if (mounted) setState(() => fileList = data);
         }
-
-        setState(() {
-          fileList = data;
-        });
       }
     } catch (e) {
+      debugPrint("fetchFilesFromServer error: $e");
       _showSnackBar("Connectivity Error: Unable to sync with repository.");
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
   }
+
   // ──────────────────────────────────────────────────────────────────────────
-  // API 2: INSERT FILE (POST /insertFileview) — plain JSON POST
+  // API 2: INSERT FILE (POST /insertFileview) — multipart form upload
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> insertFileAction() async {
     if (!_formKey.currentState!.validate() || _selectedFile == null) {
-      if (_selectedFile == null) {
-        _showSnackBar("Please pick a file to upload.");
-      }
+      if (_selectedFile == null) _showSnackBar("Please pick a file to upload.");
       return;
     }
 
     final messenger = ScaffoldMessenger.of(context);
     setState(() => isSubmitting = true);
-    // DISMISS IMMEDIATELY TO AVOID LATENCY
+    // DISMISS DIALOG IMMEDIATELY before the upload begins
     if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+
     try {
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$_baseUrl/insertFileview'),
-      );
-      request.fields['api_key'] = _apiKey;
-      request.fields['category_id'] = _selectedDeptId!;
-      request.fields['name'] = _nameController.text.trim();
-      request.fields['desc'] = _descController.text.trim();
-      request.fields['group5'] = _selectedType == "Short Term"
-          ? "Temporary"
-          : _selectedType;
-      request.fields['file_duration'] = '25';
+      final String filename = _selectedFile!.name;
+      final String extension = filename.split('.').last.toLowerCase();
 
-      if (_selectedType == "Short Term") {
-        // Short Term / Temporary → send both from and to dates
-        request.fields['valid_from_date'] = _fromDateController.text;
-        request.fields['valid_upto_date'] = _toDateController.text;
-        request.fields['from_date'] = _fromDateController.text;
-        request.fields['to_date'] = _toDateController.text;
-        request.fields['valid_from'] = _fromDateController.text;
-        request.fields['valid_upto'] = _toDateController.text;
+      // Determine MIME type
+      MediaType contentType;
+      if (['jpg', 'jpeg'].contains(extension)) {
+        contentType = MediaType('image', 'jpeg');
+      } else if (extension == 'png') {
+        contentType = MediaType('image', 'png');
+      } else if (extension == 'gif') {
+        contentType = MediaType('image', 'gif');
+      } else if (extension == 'webp') {
+        contentType = MediaType('image', 'webp');
+      } else if (extension == 'mp4') {
+        contentType = MediaType('video', 'mp4');
+      } else if (extension == 'mov') {
+        contentType = MediaType('video', 'quicktime');
+      } else if (extension == 'avi') {
+        contentType = MediaType('video', 'x-msvideo');
+      } else if (extension == 'mkv') {
+        contentType = MediaType('video', 'x-matroska');
       } else {
-        // Permanent → send today's date as valid_from, no valid_upto
-        final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-        request.fields['valid_from_date'] = today;
-        request.fields['from_date'] = today;
-        request.fields['valid_from'] = today;
+        contentType = MediaType('application', 'octet-stream');
       }
 
-      String filename = _selectedFile!.name;
-      String extension = filename.split('.').last.toLowerCase();
-      MediaType? contentType;
-
-      if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(extension)) {
-        contentType = MediaType(
-          'image',
-          extension == 'jpg' ? 'jpeg' : extension,
+      final client = http.Client();
+      try {
+        final request = http.MultipartRequest(
+          'POST',
+          Uri.parse('$_baseUrl/insertFileview'),
         );
-      } else if (['mp4', 'mov', 'avi', 'mkv'].contains(extension)) {
-        contentType = MediaType('video', extension);
-      }
 
-      if (_selectedFile!.bytes != null) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            _selectedFile!.bytes!,
-            filename: filename,
-            contentType: contentType,
-          ),
+        // ── Form fields ──
+        request.fields['api_key'] = _apiKey;
+        request.fields['category_id'] = _selectedDeptId!;
+        request.fields['name'] = _nameController.text.trim();
+        request.fields['desc'] = _descController.text.trim();
+        request.fields['group5'] = _selectedType == 'Short Term'
+            ? 'Temporary'
+            : _selectedType;
+        request.fields['file_duration'] = '25';
+
+        if (_selectedType == 'Short Term') {
+          request.fields['valid_from_date'] = _fromDateController.text;
+          request.fields['valid_upto_date'] = _toDateController.text;
+          request.fields['from_date'] = _fromDateController.text;
+          request.fields['to_date'] = _toDateController.text;
+          request.fields['valid_from'] = _fromDateController.text;
+          request.fields['valid_upto'] = _toDateController.text;
+        } else {
+          final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+          request.fields['valid_from_date'] = today;
+          request.fields['from_date'] = today;
+          request.fields['valid_from'] = today;
+        }
+
+        // ── Attach file (prefer bytes for web, fall back to path for mobile) ──
+        if (_selectedFile!.bytes != null && _selectedFile!.bytes!.isNotEmpty) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'file',
+              _selectedFile!.bytes!,
+              filename: filename,
+              contentType: contentType,
+            ),
+          );
+        } else if (_selectedFile!.path != null) {
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'file',
+              _selectedFile!.path!,
+              filename: filename,
+              contentType: contentType,
+            ),
+          );
+        } else {
+          throw Exception(
+            'No file data available. Please pick the file again.',
+          );
+        }
+
+        // Send with a generous timeout for large video files
+        final streamedResponse = await client
+            .send(request)
+            .timeout(const Duration(minutes: 10));
+        final response = await http.Response.fromStream(streamedResponse);
+
+        debugPrint(
+          'Insert response [${response.statusCode}]: ${response.body}',
         );
-      } else if (_selectedFile!.path != null) {
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'file',
-            _selectedFile!.path!,
-            filename: filename,
-            contentType: contentType,
-          ),
-        );
-      }
 
-      // REMOVED: Moved to start for zero latency
-      // if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
-
-      debugPrint("Insert response [${response.statusCode}]: ${response.body}");
-
-      if (response.statusCode == 200) {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text("File uploaded successfully."),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        _resetForm();
-        await fetchFilesFromServer(); // Refresh immediately
-      } else {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text("Upload Error: ${response.statusCode}"),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        if (response.statusCode == 200) {
+          // Server always returns 200; check body status field
+          final Map<String, dynamic> body = jsonDecode(response.body);
+          if ((body['status']?.toString() ?? '').toLowerCase() == 'success') {
+            messenger.showSnackBar(
+              const SnackBar(
+                content: Text('File uploaded successfully.'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            _resetForm();
+            await fetchFilesFromServer(); // Refresh table (latest first)
+          } else {
+            // Server returned 200 but with a failure message
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(body['Message']?.toString() ?? 'Upload failed.'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        } else {
+          // HTTP-level error (413 = file too large, 500 = server error, etc.)
+          String hint = '';
+          if (response.statusCode == 413) {
+            hint =
+                ' (File too large — contact server admin to increase upload limit)';
+          }
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Upload Error: HTTP ${response.statusCode}$hint'),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        }
+      } finally {
+        client.close();
       }
     } catch (e) {
+      debugPrint('insertFileAction error: $e');
       messenger.showSnackBar(
         SnackBar(
-          content: Text("Insert failed: $e"),
+          content: Text('Upload failed: $e'),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 6),
         ),
       );
     } finally {
@@ -330,7 +373,8 @@ class _FileUploadViewState extends State<FileUploadView> {
           // Date fields — API keys confirmed as valid_from_date / valid_upto_date
           _fromDateController.text = data['valid_from_date']?.toString() ?? '';
           _toDateController.text = data['valid_upto_date']?.toString() ?? '';
-          _dialogAutoValidate = AutovalidateMode.disabled; // Reset validation mode
+          _dialogAutoValidate =
+              AutovalidateMode.disabled; // Reset validation mode
         });
 
         // Open the edit dialog after state is set
@@ -512,9 +556,22 @@ class _FileUploadViewState extends State<FileUploadView> {
   }
 
   Future<void> _pickFile() async {
+    // withData: true ensures bytes are loaded on web; path is used on mobile.
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.media,
+      type: FileType.custom,
+      allowedExtensions: [
+        'jpg',
+        'jpeg',
+        'png',
+        'gif',
+        'webp',
+        'mp4',
+        'mov',
+        'avi',
+        'mkv',
+      ],
       allowMultiple: false,
+      withData: true, // Always load bytes (critical for web)
     );
     if (result != null && result.files.isNotEmpty) {
       setState(() {
@@ -939,23 +996,41 @@ class _FileUploadViewState extends State<FileUploadView> {
                 child: TextFormField(
                   controller: _fromDateController,
                   readOnly: true,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF1E293B),
+                  ),
                   decoration: InputDecoration(
                     hintText: "From Date",
-                    hintStyle: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                    suffixIcon: const Icon(Icons.calendar_today_rounded, size: 15),
+                    hintStyle: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    suffixIcon: const Icon(
+                      Icons.calendar_today_rounded,
+                      size: 15,
+                    ),
                     isDense: true,
                     filled: true,
                     fillColor: const Color(0xFFF8FAFC),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFCBD5E1),
+                        width: 1.2,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF334155),
+                        width: 1.6,
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                   ),
                   onTap: () async {
                     DateTime? picked = await showDatePicker(
@@ -979,23 +1054,41 @@ class _FileUploadViewState extends State<FileUploadView> {
                 child: TextFormField(
                   controller: _toDateController,
                   readOnly: true,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF1E293B),
+                  ),
                   decoration: InputDecoration(
                     hintText: "To Date",
-                    hintStyle: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                    suffixIcon: const Icon(Icons.calendar_today_rounded, size: 15),
+                    hintStyle: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    suffixIcon: const Icon(
+                      Icons.calendar_today_rounded,
+                      size: 15,
+                    ),
                     isDense: true,
                     filled: true,
                     fillColor: const Color(0xFFF8FAFC),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFCBD5E1),
+                        width: 1.2,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF334155),
+                        width: 1.6,
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                   ),
                   onTap: () async {
                     DateTime? picked = await showDatePicker(
@@ -1230,10 +1323,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             const SizedBox(height: 4),
             const Text(
               "Try a different search term",
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 13.0,
-              ),
+              style: TextStyle(color: Colors.grey, fontSize: 13.0),
             ),
             const SizedBox(height: 60),
           ],
@@ -1310,15 +1400,29 @@ class _FileUploadViewState extends State<FileUploadView> {
     return s;
   }
 
+  // Returns true if the file_name is a video file
+  bool _isVideoFile(String? fileName) {
+    if (fileName == null || fileName.isEmpty) return false;
+    return [
+      'mp4',
+      'mov',
+      'avi',
+      'mkv',
+      'webm',
+    ].contains(fileName.split('.').last.toLowerCase());
+  }
+
   DataRow _getRow(dynamic item) {
-    // ← DEBUG: print every item to see exact field names
-    debugPrint("=== ROW ITEM: $item");
-    
+    final String? fileName = item['file_name']?.toString().trim();
+    final bool isVideo = _isVideoFile(fileName);
+    // Image URL: https://display.sriher.com/uploads/{file_name}
+    final String imageUrl = '$_baseUrl/uploads/$fileName';
+
     return DataRow(
       cells: [
         DataCell(
           Text(
-            item['id']?.toString() ?? "-",
+            item['id']?.toString() ?? '-',
             style: const TextStyle(color: Colors.black87, fontSize: 12),
           ),
         ),
@@ -1331,31 +1435,23 @@ class _FileUploadViewState extends State<FileUploadView> {
               border: Border.all(color: Colors.grey.shade200),
               color: Colors.grey.shade100,
             ),
-            child: (item['file_name'] != null &&
-                    item['file_name'].toString().trim().isNotEmpty)
-                ? (['mp4', 'mov', 'avi', 'mkv'].contains(
-                        item['file_name']
-                            .toString()
-                            .split('.')
-                            .last
-                            .toLowerCase(),
-                      ))
-                    ? const Icon(
-                        Icons.movie,
-                        size: 24,
-                        color: Colors.blueGrey,
-                      )
-                    : Image.network(
-                        "$_baseUrl/uploads/${item['file_name']}",
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                          Icons.broken_image,
-                          size: 20,
-                          color: Colors.grey,
-                        ),
-                      )
-                : const Icon(Icons.image, size: 20, color: Colors.grey),
+            child: fileName != null && fileName.isNotEmpty
+                ? isVideo
+                      // ── Video: show first-frame thumbnail ──
+                      ? WebVideoThumbnail(
+                          url: imageUrl,
+                          fit: BoxFit.cover,
+                        )
+                      // ── Image: load thumbnail via WebCompatImage (CORS-safe for Chrome) ──
+                      : WebCompatImage(
+                          url: imageUrl,
+                          fit: BoxFit.cover,
+                        )
+                : const Icon(
+                    Icons.image_not_supported_rounded,
+                    size: 22,
+                    color: Colors.grey,
+                  ),
           ),
         ),
         DataCell(
@@ -1371,14 +1467,11 @@ class _FileUploadViewState extends State<FileUploadView> {
           ),
         ),
         DataCell(
-          Text(
-            () {
-              final t = (item['type'] ?? item['group5'] ?? '-').toString();
-              if (t == 'Short Term' || t == 'Temporary') return 'Temporary';
-              return t;
-            }(),
-            style: const TextStyle(color: Colors.black87, fontSize: 12),
-          ),
+          Text(() {
+            final t = (item['type'] ?? item['group5'] ?? '-').toString();
+            if (t == 'Short Term' || t == 'Temporary') return 'Temporary';
+            return t;
+          }(), style: const TextStyle(color: Colors.black87, fontSize: 12)),
         ),
         DataCell(
           Text(
@@ -1575,38 +1668,42 @@ class _FileUploadViewState extends State<FileUploadView> {
             ),
           ],
         ),
-        SizedBox(
-          width: 250,
-          height: 40,
-          child: TextField(
-            controller: _searchController,
-            onChanged: (v) => setState(() {
-              searchQuery = v;
-              currentPage = 1;
-            }),
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-            decoration: InputDecoration(
-              hintText: "Search files...",
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF94A3B8),
-              ),
-              prefixIcon: const Icon(Icons.search, size: 16),
-              isDense: true,
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+        Flexible(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 250),
+            child: SizedBox(
+              height: 40,
+              child: TextField(
+                controller: _searchController,
+                onChanged: (v) => setState(() {
+                  searchQuery = v;
+                  currentPage = 1;
+                }),
+                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                decoration: InputDecoration(
+                  hintText: "Search files...",
+                  hintStyle: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  prefixIcon: const Icon(Icons.search, size: 16),
+                  isDense: true,
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                ),
               ),
             ),
           ),

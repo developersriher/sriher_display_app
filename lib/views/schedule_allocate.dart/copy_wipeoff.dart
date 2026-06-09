@@ -372,351 +372,355 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
 
   @override
   Widget build(BuildContext context) {
-    return SelectionArea(child: SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ── COPY SECTION ──────────────────────────────────────────────────
-          const AnimatedHeading(text: "Copy Schedule - Devices"),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 20,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-              border: Border.all(color: Colors.blue.shade50),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Row: Source | Target | Copy button ──────────────────────
-                isLoadingDevices
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: CircularProgressIndicator(),
-                        ),
-                      )
-                 : Row(
-  // 1. Align all items to the center vertically
-  crossAxisAlignment: CrossAxisAlignment.center, 
-  children: [
-    // Source device dropdown
-    Expanded(
-      child: _buildDropdown(
-        hintText: "Choose source device…",
-        value: selectedSourceDeviceId,
-        items: deviceList,
-        onChanged: (val) {
-          if (val == null) return;
-          setState(() {
-            selectedSourceDeviceId = val;
-            hasConflict = null;
-            conflictMessage = null;
-          });
-          _fetchDeviceSchedules(val);
-        },
-      ),
-    ),
-    const SizedBox(width: 24),
-    // Target device dropdown
-    Expanded(
-      child: _buildDropdown(
-        hintText: selectedSourceDeviceId == null
-            ? "Select source device first…"
-            : "Choose assign device…",
-        value: selectedTargetDeviceId,
-        items: assignDeviceList,
-        onChanged: selectedSourceDeviceId == null
-            ? null
-            : (val) {
-                setState(() {
-                  selectedTargetDeviceId = val;
-                  hasConflict = null;
-                  conflictMessage = null;
-                });
-                if (val != null) _checkConflicts();
-              },
-      ),
-    ),
-    const SizedBox(width: 24),
-    // 2. Removed the Padding(top: 30) wrapper
-    ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(
-          horizontal: 40,
-          vertical: 20, // Match the height to your dropdown
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        elevation: 0,
-      ),
-      onPressed:
-          (isSubmittingCopy || isCheckingConflicts)
-          ? null
-          : _copySchedule,
-      child: isSubmittingCopy
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
+    return SelectionArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── COPY SECTION ──────────────────────────────────────────────────
+            const AnimatedHeading(text: "Copy Schedule - Devices"),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
                 color: Colors.white,
-                strokeWidth: 2,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+                border: Border.all(color: Colors.blue.shade50),
               ),
-            )
-          : const Text(
-              "COPY SCHEDULE",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-    ),
-  ],
-),
-
-                // ── Conflict banner ──────────────────────────────────────────
-                if (isCheckingConflicts)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 16),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        SizedBox(width: 10),
-                        Text(
-                          "Checking for conflicts…",
-                          style: TextStyle(
-                            color: Colors.blueGrey,
-                            fontSize: 13,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Row: Source | Target | Copy button ──────────────────────
+                  isLoadingDevices
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: CircularProgressIndicator(),
                           ),
+                        )
+                      : Row(
+                          // 1. Align all items to the center vertically
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Source device dropdown
+                            Expanded(
+                              child: _buildDropdown(
+                                hintText: "Choose source device…",
+                                value: selectedSourceDeviceId,
+                                items: deviceList,
+                                onChanged: (val) {
+                                  if (val == null) return;
+                                  setState(() {
+                                    selectedSourceDeviceId = val;
+                                    hasConflict = null;
+                                    conflictMessage = null;
+                                  });
+                                  _fetchDeviceSchedules(val);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+                            // Target device dropdown
+                            Expanded(
+                              child: _buildDropdown(
+                                hintText: selectedSourceDeviceId == null
+                                    ? "Select source device first…"
+                                    : "Choose assign device…",
+                                value: selectedTargetDeviceId,
+                                items: assignDeviceList,
+                                onChanged: selectedSourceDeviceId == null
+                                    ? null
+                                    : (val) {
+                                        setState(() {
+                                          selectedTargetDeviceId = val;
+                                          hasConflict = null;
+                                          conflictMessage = null;
+                                        });
+                                        if (val != null) _checkConflicts();
+                                      },
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+                            // 2. Removed the Padding(top: 30) wrapper
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0F172A),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 40,
+                                  vertical:
+                                      20, // Match the height to your dropdown
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 0,
+                              ),
+                              onPressed:
+                                  (isSubmittingCopy || isCheckingConflicts)
+                                  ? null
+                                  : _copySchedule,
+                              child: isSubmittingCopy
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text(
+                                      "COPY SCHEDULE",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  )
-                else if (conflictMessage != null) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: (hasConflict == true)
-                          ? Colors.red.shade50
-                          : Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: (hasConflict == true)
-                            ? Colors.red.shade200
-                            : Colors.green.shade200,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          (hasConflict == true)
-                              ? Icons.warning_amber_rounded
-                              : Icons.check_circle_outline,
-                          color: (hasConflict == true)
-                              ? Colors.red.shade700
-                              : Colors.green.shade700,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            conflictMessage!,
+
+                  // ── Conflict banner ──────────────────────────────────────────
+                  if (isCheckingConflicts)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            "Checking for conflicts…",
                             style: TextStyle(
-                              color: (hasConflict == true)
-                                  ? Colors.red.shade900
-                                  : Colors.green.shade900,
+                              color: Colors.blueGrey,
                               fontSize: 13,
-                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                // ── Schedule list (from source device) ───────────────────────
-                if (isLoadingSchedules)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (sourceSchedules.isNotEmpty) ...[
-                  const SizedBox(height: 32),
-                  Text(
-                    "Schedules on selected device:",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: Colors.blue.shade900,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 220),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade200),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: sourceSchedules.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final s = sourceSchedules[index];
-                        final name =
-                            s['schedule_name'] ??
-                            s['name'] ??
-                            'Unnamed Schedule';
-                        final fromDate =
-                            s['from_date'] ?? s['start_date'] ?? '-';
-                        final toDate = s['to_date'] ?? s['end_date'] ?? '-';
-                        final fromTime =
-                            s['from_time'] ?? s['start_time'] ?? '-';
-                        final toTime = s['to_time'] ?? s['end_time'] ?? '-';
-                        return ListTile(
-                          dense: true,
-                          leading: const Icon(
-                            Icons.calendar_today,
-                            size: 16,
-                            color: Colors.blueGrey,
-                          ),
-                          title: Text(
-                            name,
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          subtitle: Text(
-                            "$fromDate → $toDate  |  $fromTime – $toTime",
-                          ),
-                          trailing: const Icon(
-                            Icons.check_circle,
-                            color: Colors.green,
-                            size: 16,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ] else if (selectedSourceDeviceId != null &&
-                    !isLoadingSchedules) ...[
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: Colors.orange.shade700,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          "No schedules found on the selected source device.",
-                          style: TextStyle(
-                            color: Colors.orange.shade900,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 48),
-
-          // ── WIPE OFF SECTION ──────────────────────────────────────────────
-          const AnimatedHeading(text: "Wipe Off Devices"),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 20,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-              border: Border.all(color: Colors.red.shade50),
-            ),
-            child: isLoadingDevices
-                ? const Center(child: CircularProgressIndicator())
-                : Row(
-                    // 1. CHANGE THIS TO CENTER
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: _buildDropdown(
-                          hintText: "Choose device to wipe…",
-                          value: selectedWipeDeviceId,
-                          items: deviceList,
-                          onChanged: (val) =>
-                              setState(() => selectedWipeDeviceId = val),
+                        ],
+                      ),
+                    )
+                  else if (conflictMessage != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: (hasConflict == true)
+                            ? Colors.red.shade50
+                            : Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: (hasConflict == true)
+                              ? Colors.red.shade200
+                              : Colors.green.shade200,
                         ),
                       ),
-                      const SizedBox(width: 24),
-                      // 2. REMOVED THE PADDING(TOP: 30) WRAPPER
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade600,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 40,
-                            vertical: 20,
+                      child: Row(
+                        children: [
+                          Icon(
+                            (hasConflict == true)
+                                ? Icons.warning_amber_rounded
+                                : Icons.check_circle_outline,
+                            color: (hasConflict == true)
+                                ? Colors.red.shade700
+                                : Colors.green.shade700,
+                            size: 20,
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: isSubmittingWipe ? null : _wipeOff,
-                        child: isSubmittingWipe
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text(
-                                "WIPE OFF DEVICE",
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              conflictMessage!,
+                              style: TextStyle(
+                                color: (hasConflict == true)
+                                    ? Colors.red.shade900
+                                    : Colors.green.shade900,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
                               ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const Spacer(),
-                    ],
+                    ),
+                  ],
+
+                  // ── Schedule list (from source device) ───────────────────────
+                  if (isLoadingSchedules)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (sourceSchedules.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    Text(
+                      "Schedules on selected device:",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.blue.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 220),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade200),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: sourceSchedules.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final s = sourceSchedules[index];
+                          final name =
+                              s['schedule_name'] ??
+                              s['name'] ??
+                              'Unnamed Schedule';
+                          final fromDate =
+                              s['from_date'] ?? s['start_date'] ?? '-';
+                          final toDate = s['to_date'] ?? s['end_date'] ?? '-';
+                          final fromTime =
+                              s['from_time'] ?? s['start_time'] ?? '-';
+                          final toTime = s['to_time'] ?? s['end_time'] ?? '-';
+                          return ListTile(
+                            dense: true,
+                            leading: const Icon(
+                              Icons.calendar_today,
+                              size: 16,
+                              color: Colors.blueGrey,
+                            ),
+                            title: Text(
+                              name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            subtitle: Text(
+                              "$fromDate → $toDate  |  $fromTime – $toTime",
+                            ),
+                            trailing: const Icon(
+                              Icons.check_circle,
+                              color: Colors.green,
+                              size: 16,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ] else if (selectedSourceDeviceId != null &&
+                      !isLoadingSchedules) ...[
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.orange.shade700,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            "No schedules found on the selected source device.",
+                            style: TextStyle(
+                              color: Colors.orange.shade900,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 48),
+
+            // ── WIPE OFF SECTION ──────────────────────────────────────────────
+            const AnimatedHeading(text: "Wipe Off Devices"),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 4),
                   ),
-          ),
-        ],
+                ],
+                border: Border.all(color: Colors.red.shade50),
+              ),
+              child: isLoadingDevices
+                  ? const Center(child: CircularProgressIndicator())
+                  : Row(
+                      // 1. CHANGE THIS TO CENTER
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: _buildDropdown(
+                            hintText: "Choose device to wipe…",
+                            value: selectedWipeDeviceId,
+                            items: deviceList,
+                            onChanged: (val) =>
+                                setState(() => selectedWipeDeviceId = val),
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        // 2. REMOVED THE PADDING(TOP: 30) WRAPPER
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 40,
+                              vertical: 20,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            elevation: 0,
+                          ),
+                          onPressed: isSubmittingWipe ? null : _wipeOff,
+                          child: isSubmittingWipe
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  "WIPE OFF DEVICE",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                        ),
+                        const Spacer(),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 
@@ -740,7 +744,8 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
           items: items.map((item) {
             return SearchableDropdownItem<int>(
               value: _itemId(item) ?? 0,
-              label: item['device_name'] ??
+              label:
+                  item['device_name'] ??
                   item['Device_name'] ??
                   'Unknown Device',
             );

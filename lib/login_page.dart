@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,6 +23,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   final _userIdFocusNode = FocusNode();
   final _passwordFocusNode = FocusNode();
+  final _buttonFocusNode = FocusNode();
 
   late AnimationController _entryController;
   late AnimationController _buttonController;
@@ -39,6 +41,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   bool _isObscure = true;
   bool _isLoggingIn = false;
   String? _errorMessage;
+
+  /// Track which of our 3 logical items is "active" for D-pad:
+  /// 0 = userId, 1 = password, 2 = signIn button
+  int _focusIndex = 0;
 
   @override
   void initState() {
@@ -117,9 +123,57 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     _passwordController.dispose();
     _userIdFocusNode.dispose();
     _passwordFocusNode.dispose();
+    _buttonFocusNode.dispose();
     super.dispose();
   }
 
+  // ── D-Pad handler ──────────────────────────────────────────────────
+  void _moveFocus(int newIndex) {
+    setState(() => _focusIndex = newIndex.clamp(0, 2));
+    switch (_focusIndex) {
+      case 0:
+        _userIdFocusNode.requestFocus();
+        break;
+      case 1:
+        _passwordFocusNode.requestFocus();
+        break;
+      case 2:
+        // Unfocus text fields (dismiss keyboard) then focus button
+        FocusScope.of(context).unfocus();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _buttonFocusNode.requestFocus();
+        });
+        break;
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _moveFocus(_focusIndex + 1);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _moveFocus(_focusIndex - 1);
+      return KeyEventResult.handled;
+    }
+    // DPAD_CENTER / Enter / Select on the button → trigger login
+    if (_focusIndex == 2 &&
+        (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+            event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+      if (!_isLoggingIn) _handleLogin();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+
+
+  // ── Login logic ────────────────────────────────────────────────────
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -241,55 +295,72 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
+  // ── Responsive helpers ─────────────────────────────────────────────
+  /// Returns a scale factor relative to a 1080p baseline (height 1080).
+  /// Clamped so it never shrinks too much or grows too large.
+  double _scale(BuildContext context) {
+    final h = MediaQuery.of(context).size.height;
+    return (h / 1080).clamp(0.55, 1.3);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final scale = _scale(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
-      body: Stack(
-        children: [
-          // Deep Base Layer
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF0F172A),
-                  Color(0xFF1E293B),
-                  Color(0xFF020617),
-                ],
+      body: Focus(
+        onKeyEvent: _handleKeyEvent,
+        child: Stack(
+          children: [
+            // Deep Base Layer
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF0F172A),
+                    Color(0xFF1E293B),
+                    Color(0xFF020617),
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Enhanced Interactive Background
-          const AnimatedBackground(),
+            // Enhanced Interactive Background
+            const AnimatedBackground(),
 
-          // Ambient Glows
-          Positioned(
-            top: MediaQuery.of(context).size.height * 0.2,
-            left: -100,
-            child: _buildAmbientGlow(
-              400,
-              const Color(0xFF3B82F6).withOpacity(0.08),
+            // Ambient Glows
+            Positioned(
+              top: screenHeight * 0.2,
+              left: -100,
+              child: _buildAmbientGlow(
+                400,
+                const Color(0xFF3B82F6).withOpacity(0.08),
+              ),
             ),
-          ),
-          Positioned(
-            bottom: 100,
-            right: -100,
-            child: _buildAmbientGlow(
-              500,
-              const Color(0xFF10B981).withOpacity(0.05),
+            Positioned(
+              bottom: 100,
+              right: -100,
+              child: _buildAmbientGlow(
+                500,
+                const Color(0xFF10B981).withOpacity(0.05),
+              ),
             ),
-          ),
 
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-              child: _buildLoginCard(),
+            Center(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 16 * scale,
+                  vertical: 12 * scale,
+                ),
+                child: _buildLoginCard(scale),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -305,10 +376,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildLoginCard() {
+  Widget _buildLoginCard(double scale) {
+    final cardMaxWidth = (380 * scale).clamp(280.0, 440.0);
+    final cardPadding = (28 * scale).clamp(16.0, 40.0);
+    final logoPad = (14 * scale).clamp(8.0, 18.0);
+    final logoHeight = (48 * scale).clamp(32.0, 64.0);
+    final logoFallbackSize = (36 * scale).clamp(24.0, 44.0);
+    final titleFontSize = (20 * scale).clamp(14.0, 26.0);
+    final subtitleFontSize = (12 * scale).clamp(10.0, 15.0);
+    final sectionGap = (20 * scale).clamp(10.0, 36.0);
+    final fieldGap = (12 * scale).clamp(6.0, 20.0);
+    final buttonGap = (20 * scale).clamp(10.0, 36.0);
+
     return GlassCard(
-      constraints: const BoxConstraints(maxWidth: 440),
-      padding: const EdgeInsets.all(40.0),
+      constraints: BoxConstraints(maxWidth: cardMaxWidth),
+      padding: EdgeInsets.all(cardPadding),
       opacity: 0.04,
       blur: 25,
       border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.5),
@@ -325,11 +407,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 child: Hero(
                   tag: 'app_logo',
                   child: Container(
-                    padding: const EdgeInsets.all(18),
+                    padding: EdgeInsets.all(logoPad),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.05),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.1)),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.2),
@@ -340,10 +423,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     ),
                     child: Image.asset(
                       'assets/images/logo.png',
-                      height: 64,
-                      errorBuilder: (c, e, s) => const Icon(
+                      height: logoHeight,
+                      errorBuilder: (c, e, s) => Icon(
                         Icons.display_settings_rounded,
-                        size: 44,
+                        size: logoFallbackSize,
                         color: Colors.white,
                       ),
                     ),
@@ -352,7 +435,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               ),
             ),
 
-            const SizedBox(height: 30),
+            SizedBox(height: sectionGap),
 
             // Title Staggered
             FadeTransition(
@@ -361,20 +444,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 position: _titleSlide,
                 child: Column(
                   children: [
-                    const Text(
+                    Text(
                       'SRIHER DISPLAY',
                       style: TextStyle(
-                        fontSize: 24,
+                        fontSize: titleFontSize,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
-                        letterSpacing: 3,
+                        letterSpacing: 2,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 6 * scale),
                     Text(
                       'Management System Portal',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: subtitleFontSize,
                         color: Colors.white.withOpacity(0.5),
                         letterSpacing: 1,
                         fontWeight: FontWeight.w500,
@@ -385,7 +468,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               ),
             ),
 
-            const SizedBox(height: 40),
+            SizedBox(height: sectionGap),
 
             // Form Fields Staggered
             FadeTransition(
@@ -395,23 +478,26 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 child: Column(
                   children: [
                     if (_errorMessage != null) ...[
-                      _buildErrorDisplay(),
-                      const SizedBox(height: 24),
+                      _buildErrorDisplay(scale),
+                      SizedBox(height: fieldGap),
                     ],
                     _buildTextField(
+                      scale: scale,
                       controller: _userIdController,
                       label: 'User ID',
                       hint: 'Enter your credentials',
                       icon: Icons.person_outline_rounded,
                       focusNode: _userIdFocusNode,
-                      nextFocusNode: _passwordFocusNode,
                       textInputAction: TextInputAction.next,
+                      autofocus: true,
+                      onSubmitted: (_) => _moveFocus(1),
                       validator: (v) => (v == null || v.trim().isEmpty)
                           ? 'User ID is required'
                           : null,
                     ),
-                    const SizedBox(height: 20),
+                    SizedBox(height: fieldGap),
                     _buildTextField(
+                      scale: scale,
                       controller: _passwordController,
                       label: 'Password',
                       hint: '••••••••',
@@ -419,7 +505,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       isPassword: true,
                       focusNode: _passwordFocusNode,
                       textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _isLoggingIn ? null : _handleLogin(),
+                      onSubmitted: (_) => _moveFocus(2),
                       validator: (v) => (v == null || v.trim().isEmpty)
                           ? 'Password is required'
                           : null,
@@ -429,14 +515,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               ),
             ),
 
-            const SizedBox(height: 40),
+            SizedBox(height: buttonGap),
 
             // Button Staggered
             FadeTransition(
               opacity: _buttonFade,
               child: ScaleTransition(
                 scale: _buttonScale,
-                child: _buildSignInButton(),
+                child: _buildSignInButton(scale),
               ),
             ),
           ],
@@ -445,9 +531,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildErrorDisplay() {
+  Widget _buildErrorDisplay(double scale) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: 14 * scale,
+        vertical: 10 * scale,
+      ),
       decoration: BoxDecoration(
         color: Colors.red.withOpacity(0.08),
         borderRadius: BorderRadius.circular(12),
@@ -455,18 +544,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.error_outline_rounded,
-            color: Color(0xFFF87171),
-            size: 20,
+            color: const Color(0xFFF87171),
+            size: (18 * scale).clamp(14.0, 22.0),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 10 * scale),
           Expanded(
             child: Text(
               _errorMessage!,
-              style: const TextStyle(
-                color: Color(0xFFF87171),
-                fontSize: 13,
+              style: TextStyle(
+                color: const Color(0xFFF87171),
+                fontSize: (12 * scale).clamp(10.0, 15.0),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -476,120 +565,146 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSignInButton() {
+  Widget _buildSignInButton(double scale) {
+    final btnHeight = (48 * scale).clamp(36.0, 58.0);
+    final btnFontSize = (14 * scale).clamp(11.0, 18.0);
+    final btnIconSize = (18 * scale).clamp(14.0, 22.0);
+    final btnRadius = (14 * scale).clamp(10.0, 18.0);
+
     return ScaleTransition(
       scale: _buttonController,
       child: SizedBox(
         width: double.infinity,
-        height: 58,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(
-              colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF3B82F6).withOpacity(0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              foregroundColor: Colors.white,
-              shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            onPressed: _isLoggingIn ? null : _handleLogin,
-            child: _isLoggingIn
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'SIGN IN',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Icon(Icons.arrow_forward_rounded, size: 20),
-                    ],
+        height: btnHeight,
+        child: AnimatedBuilder(
+          animation: _buttonFocusNode,
+          builder: (context, child) {
+            final isFocused = _buttonFocusNode.hasFocus;
+            return Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(btnRadius),
+                gradient: LinearGradient(
+                  colors: isFocused
+                      ? [const Color(0xFF60A5FA), const Color(0xFF2563EB)]
+                      : [const Color(0xFF3B82F6), const Color(0xFF1D4ED8)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                border: isFocused
+                    ? Border.all(color: Colors.white, width: 2.5)
+                    : null,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF3B82F6)
+                        .withOpacity(isFocused ? 0.8 : 0.4),
+                    blurRadius: isFocused ? 25 : 20,
+                    offset: const Offset(0, 8),
                   ),
-          ),
+                ],
+              ),
+              child: ElevatedButton(
+                focusNode: _buttonFocusNode,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(btnRadius - 2),
+                  ),
+                ),
+                onPressed: _isLoggingIn ? null : _handleLogin,
+                child: _isLoggingIn
+                    ? SizedBox(
+                        width: 22 * scale,
+                        height: 22 * scale,
+                        child: const CircularProgressIndicator(
+                          strokeWidth: 3,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'SIGN IN',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: btnFontSize,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          SizedBox(width: 10 * scale),
+                          Icon(Icons.arrow_forward_rounded, size: btnIconSize),
+                        ],
+                      ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
   Widget _buildTextField({
+    required double scale,
     required TextEditingController controller,
     required String label,
     required String hint,
     required IconData icon,
     bool isPassword = false,
     FocusNode? focusNode,
-    FocusNode? nextFocusNode,
     TextInputAction? textInputAction,
     ValueChanged<String>? onSubmitted,
     String? Function(String?)? validator,
+    bool autofocus = false,
   }) {
+    final labelSize = (10 * scale).clamp(8.0, 13.0);
+    final inputSize = (14 * scale).clamp(11.0, 17.0);
+    final hintSize = (13 * scale).clamp(10.0, 16.0);
+    final iconSize = (18 * scale).clamp(14.0, 22.0);
+    final vertPad = (14 * scale).clamp(8.0, 20.0);
+    final horizPad = (14 * scale).clamp(10.0, 20.0);
+    final borderRadius = (14 * scale).clamp(10.0, 18.0);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 6, bottom: 8),
+          padding: EdgeInsets.only(left: 6, bottom: 4 * scale),
           child: Text(
             label.toUpperCase(),
             style: TextStyle(
               color: Colors.white.withOpacity(0.5),
-              fontSize: 11,
+              fontSize: labelSize,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.5,
             ),
           ),
         ),
         TextFormField(
+          autofocus: autofocus,
           validator: validator,
           controller: controller,
           focusNode: focusNode,
           obscureText: isPassword && _isObscure,
           textInputAction: textInputAction,
-          onFieldSubmitted:
-              onSubmitted ??
-              (nextFocusNode != null
-                  ? (_) => FocusScope.of(context).requestFocus(nextFocusNode)
-                  : null),
-          style: const TextStyle(
+          onFieldSubmitted: onSubmitted,
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 16,
+            fontSize: inputSize,
             fontWeight: FontWeight.w500,
           ),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(
               color: Colors.white.withOpacity(0.2),
-              fontSize: 15,
+              fontSize: hintSize,
             ),
             prefixIcon: Container(
               margin: const EdgeInsets.only(right: 8),
-              child: Icon(icon, color: Colors.white.withOpacity(0.4), size: 22),
+              child:
+                  Icon(icon, color: Colors.white.withOpacity(0.4), size: iconSize),
             ),
             suffixIcon: isPassword
                 ? IconButton(
@@ -598,7 +713,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                           ? Icons.visibility_off_rounded
                           : Icons.visibility_rounded,
                       color: Colors.white.withOpacity(0.3),
-                      size: 20,
+                      size: iconSize,
                     ),
                     onPressed: () => setState(() => _isObscure = !_isObscure),
                   )
@@ -606,20 +721,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             filled: true,
             fillColor: Colors.white.withOpacity(0.03),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(borderRadius),
               borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(borderRadius),
               borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
+              borderRadius: BorderRadius.circular(borderRadius),
+              borderSide:
+                  const BorderSide(color: Color(0xFF3B82F6), width: 3),
             ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 20,
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: horizPad,
+              vertical: vertPad,
             ),
           ),
         ),

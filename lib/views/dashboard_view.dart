@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/searchable_dropdown.dart';
+import '../widgets/web_compat_image.dart';
 import '../api_config.dart';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -364,41 +365,48 @@ class _DashboardViewState extends State<DashboardView>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "$greeting, ${_userName ?? 'User'}",
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF0F172A),
-                    letterSpacing: -0.8,
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "$greeting, ${_userName ?? 'User'}",
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0F172A),
+                      letterSpacing: -0.8,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF10B981),
-                        shape: BoxShape.circle,
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF10B981),
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      "Login Time • ${_loginTime ?? 'Just now'}",
-                      style: const TextStyle(
-                        color: Color(0xFF64748B),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          "Login Time • ${_loginTime ?? 'Just now'}",
+                          style: const TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
             // Floating Refresh Button
             IconButton.filled(
@@ -630,24 +638,31 @@ class _DashboardViewState extends State<DashboardView>
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title.toUpperCase(),
-                          style: const TextStyle(
-                            color: Color(0xFF0F172A),
-                            fontWeight: FontWeight.w900,
-                            fontSize: 11,
-                            letterSpacing: 1.5,
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title.toUpperCase(),
+                            style: const TextStyle(
+                              color: Color(0xFF0F172A),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                              letterSpacing: 1.5,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
                     const Spacer(),
                     Container(
@@ -709,86 +724,70 @@ class _DashboardViewState extends State<DashboardView>
         Icons.image_not_supported_rounded,
         'No images available',
       );
-    return Stack(
-      children: [
-        // Cinematic Blurred Background
-        Positioned.fill(
-          child: AnimatedSwitcher(
-            duration: const Duration(seconds: 1),
-            child: Image.network(
-              urls[_slideIndex % urls.length],
-              key: ValueKey(urls[_slideIndex % urls.length]),
-              fit: BoxFit.cover,
-              color: Colors.black.withOpacity(0.4),
-              colorBlendMode: BlendMode.darken,
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-            child: Container(color: Colors.black.withOpacity(0.1)),
-          ),
-        ),
-        // Main Image
-        PageView.builder(
-          controller: _pageCtrl,
-          onPageChanged: (i) => setState(() => _slideIndex = i % urls.length),
-          itemBuilder: (_, i) => Center(
-            child: Container(
-              margin: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 30,
-                    offset: const Offset(0, 15),
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Image.network(
-                urls[i % urls.length],
-                fit: BoxFit.contain,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return const Center(child: CircularProgressIndicator());
-                },
+    // Full-screen image: fills the card, no blur, no background duplicate.
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Stack(
+        children: [
+          // ── Background fill (light grey for letterbox areas) ──
+          Container(color: const Color(0xFFF1F5F9)),
+
+          // ── Full image — not cropped, fully visible ──
+          PageView.builder(
+            controller: _pageCtrl,
+            onPageChanged: (i) => setState(() => _slideIndex = i % urls.length),
+            itemBuilder: (_, i) => Padding(
+              padding: const EdgeInsets.all(20),
+              child: WebCompatImage(
+                url: urls[i % urls.length],
+                fit: BoxFit.contain, // whole image always visible
               ),
             ),
           ),
-        ),
-        // Stylish Pagination Indicators
-        Positioned(
-          bottom: 40,
-          left: 0,
-          right: 0,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(
-              urls.length,
-              (i) => AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                width: i == _slideIndex ? 32 : 8,
-                height: 6,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  gradient: i == _slideIndex
-                      ? const LinearGradient(
-                          colors: [Color(0xFF3B82F6), Color(0xFF60A5FA)],
-                        )
-                      : null,
-                  color: i == _slideIndex
-                      ? null
-                      : Colors.white.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(3),
-                ),
+
+          // ── Blurred border strips (top, bottom, left, right) ── 8px wide, sigma 20
+          // Top
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(height: 8, color: Colors.white.withOpacity(0.4)),
               ),
             ),
           ),
-        ),
-      ],
+          // Bottom
+          Positioned(
+            bottom: 0, left: 0, right: 0,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(height: 8, color: Colors.white.withOpacity(0.4)),
+              ),
+            ),
+          ),
+          // Left
+          Positioned(
+            top: 0, bottom: 0, left: 0,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(width: 8, color: Colors.white.withOpacity(0.4)),
+              ),
+            ),
+          ),
+          // Right
+          Positioned(
+            top: 0, bottom: 0, right: 0,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(width: 8, color: Colors.white.withOpacity(0.4)),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1237,22 +1236,89 @@ class _DashboardViewState extends State<DashboardView>
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            // Side View (Category Selector)
-            _buildRegistrySideView(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Hide the 240px side panel when the card is narrower than 600px
+            final showSidePanel = constraints.maxWidth >= 600;
+            return Row(
+              children: [
+                // Side View (Category Selector) — hidden on narrow screens
+                if (showSidePanel) _buildRegistrySideView(),
 
-            // Main Table View
-            Expanded(
-              child: Column(
-                children: [
-                  _buildRegistryHeaderTitle(),
-                  Expanded(child: _buildRegistryTable(d)),
-                  _buildRegistryFooter(d),
-                ],
+                // On narrow screens show a compact category selector row instead
+                // Main Table View
+                Expanded(
+                  child: Column(
+                    children: [
+                      if (!showSidePanel) _buildNarrowCategorySelector(),
+                      _buildRegistryHeaderTitle(),
+                      Expanded(child: _buildRegistryTable(d)),
+                      _buildRegistryFooter(d),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Compact horizontal scrollable category selector for narrow screens
+  Widget _buildNarrowCategorySelector() {
+    final categories = [
+      ('Devices', Icons.devices_rounded, const Color(0xFF3B82F6)),
+      ('Templates', Icons.auto_awesome_mosaic_rounded, const Color(0xFF8B5CF6)),
+      ('Locations', Icons.location_on_rounded, const Color(0xFF10B981)),
+      ('Over Views', Icons.dashboard_customize_rounded, const Color(0xFFF59E0B)),
+    ];
+    return Container(
+      height: 48,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+        color: Color(0xFFF8FAFC),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: categories.map((cat) {
+            final isSel = _selectedCategory == cat.$1;
+            return GestureDetector(
+              onTap: () => setState(() {
+                _selectedCategory = cat.$1;
+                _currentPage = 1;
+              }),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isSel ? cat.$3.withOpacity(0.12) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSel ? cat.$3 : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(cat.$2, size: 14, color: isSel ? cat.$3 : const Color(0xFF94A3B8)),
+                    const SizedBox(width: 6),
+                    Text(
+                      cat.$1,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                        color: isSel ? cat.$3 : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            );
+          }).toList(),
         ),
       ),
     );
@@ -1384,31 +1450,38 @@ class _DashboardViewState extends State<DashboardView>
 
   Widget _buildRegistryHeaderTitle() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _selectedCategory.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF0F172A),
-                  letterSpacing: 1.5,
+          // Title — Expanded so it absorbs all leftover space and ellipsis when narrow
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _selectedCategory.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF0F172A),
+                    letterSpacing: 1.5,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Managing system ${_selectedCategory.toLowerCase()} registry',
-                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  'Managing system ${_selectedCategory.toLowerCase()} registry',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
-          const Spacer(),
-          // Entries selector
+          const SizedBox(width: 12),
+          // Entries selector — always at its natural width (never squished)
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
                 'Show ',
@@ -1419,8 +1492,8 @@ class _DashboardViewState extends State<DashboardView>
                 ),
               ),
               SizedBox(
-                width: 75,
-                height: 35,
+                width: 95, // Increased width to prevent internal text/icon overflow
+                height: 42, // Increased height for better visibility and usability
                 child: DropdownButtonFormField<int>(
                   value: _entriesPerPage,
                   dropdownColor: Colors.white,
@@ -1442,8 +1515,8 @@ class _DashboardViewState extends State<DashboardView>
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
+                      horizontal: 8, // Balanced padding
+                      vertical: 10, // Centered vertically in 42px height container
                     ),
                   ),
                   items: [10, 25, 50, 100]
@@ -1477,6 +1550,38 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 
+  Map<int, TableColumnWidth> _getColumnWidths() {
+    switch (_selectedCategory) {
+      case 'Devices':
+        return {
+          0: const FlexColumnWidth(3), // Name
+          1: const FlexColumnWidth(2), // Code
+          2: const FlexColumnWidth(2), // Model
+        };
+      case 'Templates':
+        return {
+          0: const FlexColumnWidth(3), // Name
+          1: const FlexColumnWidth(2), // Duration
+        };
+      case 'Locations':
+        return {
+          0: const FlexColumnWidth(3), // Name
+          1: const FlexColumnWidth(2), // Floor
+          2: const FlexColumnWidth(2), // Sub-Location
+        };
+      case 'Over Views':
+        return {
+          0: const FlexColumnWidth(2), // Device
+          1: const FlexColumnWidth(2), // Schedule
+          2: const FlexColumnWidth(2), // Template
+          3: const FlexColumnWidth(1), // Duration
+          4: const FlexColumnWidth(2), // Location
+        };
+      default:
+        return {};
+    }
+  }
+
   Widget _buildRegistryTable(_DashboardData d) {
     final rows = _getFilteredRows(d);
     if (rows.isEmpty) {
@@ -1489,56 +1594,78 @@ class _DashboardViewState extends State<DashboardView>
     final startIndex = (_currentPage - 1) * _entriesPerPage;
     final endIndex = (startIndex + _entriesPerPage).clamp(0, rows.length);
     final pageRows = rows.sublist(startIndex, endIndex);
+    final headers = _getTableHeaders();
+    final colWidths = _getColumnWidths();
 
     return Container(
       width: double.infinity,
-      clipBehavior: Clip.antiAlias,
       decoration: const BoxDecoration(),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.vertical,
+      child: Column(
+        children: [
+          // Sticky/Fixed Table Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF8FAFC),
+              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
+            child: Table(
+              columnWidths: colWidths,
+              children: [
+                TableRow(
+                  children: headers.map((h) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        h.toUpperCase(),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF64748B),
+                          fontSize: 12,
+                          letterSpacing: 1.0,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+          // Scrollable Table Body
+          Expanded(
             child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                child: DataTable(
-                  columnSpacing: 40,
-                  horizontalMargin: 24,
-                  dataRowMaxHeight: 64,
-                  headingRowHeight: 56,
-                  headingTextStyle: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF64748B),
-                    fontSize: 12,
-                    letterSpacing: 1.0,
-                  ),
-                  columns: _getTableHeaders()
-                      .map((h) => DataColumn(label: Text(h.toUpperCase())))
-                      .toList(),
-                  rows: pageRows.asMap().entries.map((entry) {
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Table(
+                  columnWidths: colWidths,
+                  children: pageRows.asMap().entries.map((entry) {
+                    final rowIndex = entry.key;
                     final row = entry.value;
-                    return DataRow(
-                      color: WidgetStateProperty.resolveWith<Color?>((states) {
-                        if (entry.key % 2 != 0) {
-                          return const Color(0xFFF8FAFC).withOpacity(0.5);
-                        }
-                        return null;
-                      }),
-                      cells: row.asMap().entries.map((cellEntry) {
+                    final isOdd = rowIndex % 2 != 0;
+
+                    return TableRow(
+                      decoration: BoxDecoration(
+                        color: isOdd ? const Color(0xFFF8FAFC).withOpacity(0.5) : Colors.white,
+                        border: const Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+                      ),
+                      children: row.asMap().entries.map((cellEntry) {
+                        final colIndex = cellEntry.key;
                         final cellValue = cellEntry.value.toString();
-                        return DataCell(
-                          Text(
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Text(
                             cellValue,
                             style: TextStyle(
-                              color: cellEntry.key == 0
+                              color: colIndex == 0
                                   ? const Color(0xFF0F172A)
                                   : const Color(0xFF334155),
-                              fontWeight: cellEntry.key == 0
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
+                              fontWeight: FontWeight.normal, // Set to normal instead of bold for the first column
                               fontSize: 14,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         );
                       }).toList(),
@@ -1547,8 +1674,8 @@ class _DashboardViewState extends State<DashboardView>
                 ),
               ),
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
@@ -1624,8 +1751,10 @@ class _DashboardViewState extends State<DashboardView>
         color: Colors.white,
         border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: OverflowBar(
+        alignment: MainAxisAlignment.spaceBetween,
+        overflowAlignment: OverflowBarAlignment.start,
+        overflowSpacing: 8,
         children: [
           Text(
             'Showing $start to $end of $total entries',
@@ -1636,6 +1765,7 @@ class _DashboardViewState extends State<DashboardView>
             ),
           ),
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               _buildPageNavBtn(
                 Icons.chevron_left_rounded,

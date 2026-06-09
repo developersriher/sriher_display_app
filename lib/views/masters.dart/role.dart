@@ -966,42 +966,46 @@ class _RoleViewState extends State<RoleView>
             ),
           ],
         ),
-        SizedBox(
-          width: 250,
-          height: 38,
-          child: TextField(
-            controller: _searchController,
-            onChanged: (val) => setState(() {
-              searchQuery = val;
-              currentPage = 0;
-            }),
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-            decoration: InputDecoration(
-              hintText: 'Search roles...',
-              hintStyle: const TextStyle(
-                color: Color(0xFF94A3B8),
-                fontSize: 12,
-              ),
-              prefixIcon: const Icon(
-                Icons.search,
-                size: 16,
-                color: Color(0xFF94A3B8),
-              ),
-              isDense: true,
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade200),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade200),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade200),
+        Flexible(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 250),
+            child: SizedBox(
+              height: 38,
+              child: TextField(
+                controller: _searchController,
+                onChanged: (val) => setState(() {
+                  searchQuery = val;
+                  currentPage = 0;
+                }),
+                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                decoration: InputDecoration(
+                  hintText: 'Search roles...',
+                  hintStyle: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 12,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    size: 16,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  isDense: true,
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                ),
               ),
             ),
           ),

@@ -317,180 +317,200 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       builder: (context, setDialogState) {
         return Form(
           key: dialogFormKey,
-  autovalidateMode: AutovalidateMode.disabled, // ← no validation until submit
-  child: Column(
+          autovalidateMode:
+              AutovalidateMode.disabled, // ← no validation until submit
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            _buildSectionHeader("DEVICE IDENTITY"),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTextField(
-                    "Enter Device Name",
-                    _deviceNameController,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Please enter the Device Name' : null,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildTextField(
-                    "Enter Device ID/Code",
-                    _deviceCodeController,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Please enter the Device ID/Code' : null,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildDropdownField(
-              hint: "Select Device Type",
-              value: selectedDeviceType,
-              items: [
-                "Android Smart TV",
-                "LED Display",
-                "Projector",
-                "Linux Player",
-              ],
-              validator: (v) => (v == null || v.isEmpty) ? 'Please select the Device Type' : null,
-              onChanged: (val) {
-                setDialogState(() => selectedDeviceType = val);
-                setState(() => selectedDeviceType = val);
-              },
-            ),
-            const SizedBox(height: 32),
-            _buildSectionHeader("HARDWARE SPECIFICATIONS"),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTextField(
-                    "Enter Model Number",
-                    _modelController,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Please enter the Model Number' : null,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildTextField(
-                    "Enter OS System", 
-                    _osController,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Please enter the OS System' : null,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTextField(
-                    "Enter Year of Model",
-                    _yearController,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Please enter the Year of Model' : null,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildTextField(
-                    "Enter Serial Number",
-                    _serialNoController,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Please enter the Serial Number' : null,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            _buildSectionHeader("MANUFACTURING DETAILS"),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTextField(
-                    "Enter Manufacturer Name",
-                    _manufacturerController,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Please enter the Manufacturer Name' : null,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildTextField(
-                    "Enter Warranty Status",
-                    _warrantyController,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Please enter the Warranty Status' : null,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () {
-                    _clearForm();
-                    Navigator.pop(context);
-                  },
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 20,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              _buildSectionHeader("DEVICE IDENTITY"),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      "Enter Device Name",
+                      _deviceNameController,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Please enter the Device Name'
+                          : null,
                     ),
                   ),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildTextField(
+                      "Enter Device ID/Code",
+                      _deviceCodeController,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Please enter the Device ID/Code'
+                          : null,
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-            ElevatedButton(
-  onPressed: isSubmitting
-      ? null
-      : () async {
-          if (dialogFormKey.currentState!.validate()) {
-            if (Navigator.canPop(context)) Navigator.pop(context);
-            await handleFormSubmit();
-          }
-        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 32,
-                    ),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildDropdownField(
+                hint: "Select Device Type",
+                value: selectedDeviceType,
+                items: [
+                  "Android Smart TV",
+                  "LED Display",
+                  "Projector",
+                  "Linux Player",
+                ],
+                validator: (v) => (v == null || v.isEmpty)
+                    ? 'Please select the Device Type'
+                    : null,
+                onChanged: (val) {
+                  setDialogState(() => selectedDeviceType = val);
+                  setState(() => selectedDeviceType = val);
+                },
+              ),
+              const SizedBox(height: 32),
+              _buildSectionHeader("HARDWARE SPECIFICATIONS"),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      "Enter Model Number",
+                      _modelController,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Please enter the Model Number'
+                          : null,
                     ),
                   ),
-                  child: isSubmitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildTextField(
+                      "Enter OS System",
+                      _osController,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Please enter the OS System'
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      "Enter Year of Model",
+                      _yearController,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Please enter the Year of Model'
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildTextField(
+                      "Enter Serial Number",
+                      _serialNoController,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Please enter the Serial Number'
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+              _buildSectionHeader("MANUFACTURING DETAILS"),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      "Enter Manufacturer Name",
+                      _manufacturerController,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Please enter the Manufacturer Name'
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildTextField(
+                      "Enter Warranty Status",
+                      _warrantyController,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Please enter the Warranty Status'
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      _clearForm();
+                      Navigator.pop(context);
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 20,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            if (dialogFormKey.currentState!.validate()) {
+                              if (Navigator.canPop(context))
+                                Navigator.pop(context);
+                              await handleFormSubmit();
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 32,
+                      ),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            editingId == null ? "Submit" : "Update",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                            ),
                           ),
-                        )
-                      : Text(
-                          editingId == null ? "Submit" : "Update",
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13,
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
       },
     );
   }
@@ -518,41 +538,45 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SelectionArea(child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const AnimatedHeading(
-                  text: "Device List",
-                  style: TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
+      body: SelectionArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const AnimatedHeading(
+                    text: "Device List",
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                    ),
                   ),
-                ),
-              ElevatedButton.icon(
-  onPressed: () {
-    _clearForm();
-    _showDeviceDialog();
-  },
-  icon: const Icon(Icons.add_to_queue_rounded, size: 20),
-  label: const Text(
-    "CREATE DEVICE",
-    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-  ),
-),
-              ],
-            ),
-            const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _clearForm();
+                      _showDeviceDialog();
+                    },
+                    icon: const Icon(Icons.add_to_queue_rounded, size: 20),
+                    label: const Text(
+                      "CREATE DEVICE",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
 
-            // List Card
-            Expanded(child: _buildTableCard()),
-          ],
+              // List Card
+              Expanded(child: _buildTableCard()),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -603,7 +627,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                           ),
 
                         Expanded(
-                          child: (deviceList.isNotEmpty && _filteredList.isEmpty)
+                          child:
+                              (deviceList.isNotEmpty && _filteredList.isEmpty)
                               ? Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -644,15 +669,18 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                                       child: DataTable(
                                         columnSpacing: 20,
                                         headingRowHeight: 45,
-                                        headingRowColor: WidgetStateProperty.all(
-                                          Colors.blue.shade50,
-                                        ),
+                                        headingRowColor:
+                                            WidgetStateProperty.all(
+                                              Colors.blue.shade50,
+                                            ),
                                         border: TableBorder.all(
                                           color: Colors.white10,
                                         ),
                                         columns: _getColumns(),
                                         rows: _filteredList
-                                            .map((device) => _getDataRow(device))
+                                            .map(
+                                              (device) => _getDataRow(device),
+                                            )
                                             .toList(),
                                       ),
                                     ),
@@ -805,7 +833,9 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   }
 
   // --- REUSABLE COMPONENTS ---
- Widget _buildTextField(String hint, TextEditingController controller, {
+  Widget _buildTextField(
+    String hint,
+    TextEditingController controller, {
     bool readOnly = false,
     String? Function(String?)? validator,
   }) {
@@ -840,7 +870,10 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
         helperText: ' ', // Reserve space
       ),
     );
@@ -855,7 +888,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   }) {
     return DropdownButtonFormField<String>(
       value: value,
-      autovalidateMode: AutovalidateMode.onUserInteraction, // ← clears red once selected
+      autovalidateMode:
+          AutovalidateMode.onUserInteraction, // ← clears red once selected
       validator: validator,
       style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
       decoration: InputDecoration(
@@ -884,18 +918,26 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
       ),
-      hint: Text(hint, style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
-      items: items.map((item) => DropdownMenuItem<String>(
-        value: item,
-        child: Text(item, style: const TextStyle(fontSize: 13)),
-      )).toList(),
+      hint: Text(
+        hint,
+        style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+      ),
+      items: items
+          .map(
+            (item) => DropdownMenuItem<String>(
+              value: item,
+              child: Text(item, style: const TextStyle(fontSize: 13)),
+            ),
+          )
+          .toList(),
       onChanged: onChanged,
     );
   }
-
- 
 
   Widget _buildListHeaderControls() {
     return Row(
@@ -941,10 +983,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                   ),
                 ),
                 items: ["10", "25", "50", "100"]
-                    .map((v) => DropdownMenuItem(
-                          value: v,
-                          child: Text(v),
-                        ))
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                     .toList(),
                 onChanged: (v) => setState(() {
                   entriesValue = v!;
@@ -962,39 +1001,43 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             ),
           ],
         ),
-        SizedBox(
-          width: 250,
-          height: 40,
-          child: TextField(
-            controller: _searchController,
-            onChanged: (val) {
-              setState(() {
-                searchQuery = val;
-              });
-            },
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-            decoration: InputDecoration(
-              hintText: "Search Devices...",
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF94A3B8),
-              ),
-              prefixIcon: const Icon(Icons.search, size: 16),
-              isDense: true,
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+        Flexible(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 250),
+            child: SizedBox(
+              height: 40,
+              child: TextField(
+                controller: _searchController,
+                onChanged: (val) {
+                  setState(() {
+                    searchQuery = val;
+                  });
+                },
+                style: const TextStyle(fontSize: 12, color: Colors.black87),
+                decoration: InputDecoration(
+                  hintText: "Search Devices...",
+                  hintStyle: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  prefixIcon: const Icon(Icons.search, size: 16),
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                ),
               ),
             ),
           ),
@@ -1002,6 +1045,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       ],
     );
   }
+
   Widget _buildTableFooter() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

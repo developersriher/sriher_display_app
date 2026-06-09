@@ -68,7 +68,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     final query = _searchController.text.toLowerCase().trim();
     if (query.isEmpty) return templateFiles;
     return templateFiles.where((file) {
-      final fileName = (file['user_filename'] ?? file['file_name'] ?? '').toString().toLowerCase();
+      final fileName = (file['user_filename'] ?? file['file_name'] ?? '')
+          .toString()
+          .toLowerCase();
       return fileName.contains(query);
     }).toList();
   }
@@ -107,7 +109,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
       if (schedRes.statusCode == 200) {
         final schedData = jsonDecode(schedRes.body);
         final List<dynamic> rawSchedules = schedData['data'] ?? [];
-        
+
         // Filter for unique schedule names to avoid dropdown duplicates
         final Map<String, dynamic> uniqueSchedules = {};
         for (var item in rawSchedules) {
@@ -212,7 +214,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     List<String> tempSelected = List.from(offDates);
     bool showDateList = false;
 
-  StylishDialog.show(
+    StylishDialog.show(
       context: context,
       title: "Remove Dates",
       subtitle: "Select dates to exclude from the schedule.",
@@ -308,7 +310,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                             color: Color(0xFF1E293B),
                           ),
                         ),
-                        value: tempSelected.length == rangeDates.length &&
+                        value:
+                            tempSelected.length == rangeDates.length &&
                             rangeDates.isNotEmpty,
                         activeColor: const Color(0xFF0F172A),
                         controlAffinity: ListTileControlAffinity.leading,
@@ -328,10 +331,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                     Expanded(
                       child: ListView.separated(
                         itemCount: rangeDates.length,
-                        separatorBuilder: (_, __) => const Divider(
-                          height: 1,
-                          color: Color(0xFFE2E8F0),
-                        ),
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1, color: Color(0xFFE2E8F0)),
                         itemBuilder: (context, index) {
                           final date = rangeDates[index];
                           final isSelected = tempSelected.contains(date);
@@ -456,10 +457,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                   ),
                   child: const Text(
                     "Save",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ),
               ],
@@ -552,10 +550,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     setState(() {
       // Mock an ID for now until API is integrated
       final newId = DateTime.now().millisecondsSinceEpoch % 10000;
-      scheduleList = List.from(scheduleList)..add({
-        "id": newId.toString(),
-        "schedule_name": name,
-      });
+      scheduleList = List.from(scheduleList)
+        ..add({"id": newId.toString(), "schedule_name": name});
       selectedScheduleId = newId;
       _scheduleNameController.clear();
     });
@@ -659,10 +655,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                   ),
                   child: const Text(
                     "Create Schedule",
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
                   ),
                 ),
               ],
@@ -677,225 +670,248 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
   Widget build(BuildContext context) {
     return SelectionArea(
       child: LayoutBuilder(
-      builder: (context, constraints) {
-        final bool isNarrow = constraints.maxWidth < 1000;
+        builder: (context, constraints) {
+          final bool isNarrow = constraints.maxWidth < 1000;
 
-        return Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const AnimatedHeading(text: "Schedule Range Allocation"),
-              const SizedBox(height: 20),
-              // Combined Header Card
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 15,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Form(
-                  key: _formKey,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  child: Column(
-                    children: [
-                    // Row 1: Dropdowns
-                    isNarrow
-                        ? Column(
-                            children: [
-                              _buildDropdown(
-                                label: "Schedule Name",
-                                hint: "Select Schedule",
-                                value: selectedScheduleId,
-                                items: scheduleList,
-                                showAdd: true,
-                                onChanged: (val) {
-                                  setState(() {
-                                    selectedScheduleId = val;
-                                  });
-                                  if (val != null &&
-                                      selectedTemplateId != null) {
-                                    _fetchTemplateFiles(
-                                      selectedTemplateId!,
-                                      scheduleId: val,
-                                    );
-                                  }
-                                },
-                                validator: (v) => (v == null) ? 'Select the Schedule' : null,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildDropdown(
-                                label: "Template Name",
-                                hint: "Select Template",
-                                value: selectedTemplateId,
-                                items: templateList,
-                                onChanged: (val) {
-                                  setState(() {
-                                    selectedTemplateId = val;
-                                    templateFiles = [];
-                                  });
-                                  if (val != null) {
-                                    _fetchTemplateFiles(
-                                      val,
-                                      scheduleId: selectedScheduleId,
-                                    );
-                                  }
-                                },
-                                validator: (v) => (v == null) ? 'Select the Template' : null,
-                              ),
-                            ],
-                          )
-                        : Row(
-                            children: [
-                              Expanded(
-                                child: _buildDropdown(
-                                  label: "Schedule Name",
-                                  hint: "Select Schedule",
-                                  value: selectedScheduleId,
-                                  items: scheduleList,
-                                  showAdd: true,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      selectedScheduleId = val;
-                                    });
-                                    if (val != null &&
-                                        selectedTemplateId != null) {
-                                      _fetchTemplateFiles(
-                                        selectedTemplateId!,
-                                        scheduleId: val,
-                                      );
-                                    }
-                                  },
-                                  validator: (v) => (v == null) ? 'Select the Schedule' : null,
-                                ),
-                              ),
-                              const SizedBox(width: 24),
-                              Expanded(
-                                child: _buildDropdown(
-                                  label: "Template Name",
-                                  hint: "Select Template",
-                                  value: selectedTemplateId,
-                                  items: templateList,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      selectedTemplateId = val;
-                                      templateFiles = [];
-                                    });
-                                    if (val != null) {
-                                      _fetchTemplateFiles(
-                                        val,
-                                        scheduleId: selectedScheduleId,
-                                      );
-                                    }
-                                  },
-                                  validator: (v) => (v == null) ? 'Select the Template' : null,
-                                ),
-                              ),
-                            ],
-                          ),
-                    const SizedBox(height: 24),
-                    // Row 2: Dates, Checkbox, Submit
-                    isNarrow
-                        ? Column(
-                            children: [
-                              _buildDateField("From Date", _fromDateController,
-                                  validator: (v) => (v == null || v.isEmpty) ? 'Enter the from date' : null,
-                                ),
-                              const SizedBox(height: 16),
-                                _buildDateField("To Date", _toDateController,
-                                  validator: (v) => (v == null || v.isEmpty) ? 'Enter the to date' : null,
-                                ),
-                              const SizedBox(height: 16),
-                              _buildCheckboxRow(),
-                              const SizedBox(height: 24),
-                              _buildSubmitButton(isFullWidth: true),
-                            ],
-                          )
-                        : Row(
-                            crossAxisAlignment: CrossAxisAlignment.start, // Align to top
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              // Fixed width for From Date
-                              SizedBox(
-                                width: 180,
-                                child: _buildDateField(
-                                  "From Date",
-                                  _fromDateController,
-                                  validator: (v) => (v == null || v.isEmpty) ? 'Enter the from date' : null,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              // Fixed width for To Date
-                              SizedBox(
-                                width: 180,
-                                child: _buildDateField(
-                                  "To Date",
-                                  _toDateController,
-                                  validator: (v) => (v == null || v.isEmpty) ? 'Enter the to date' : null,
-                                ),
-                              ),
-                              const SizedBox(width: 20),
-                              // Align CheckboxRow with input box (Accounting for label + gap)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 28.0), // Label height + gap
-                                child: _buildCheckboxRow(),
-                              ),
-                              const SizedBox(width: 20),
-                              // Align SubmitButton with input box
-                              Padding(
-                                padding: const EdgeInsets.only(top: 28.0),
-                                child: _buildSubmitButton(),
-                              ),
-                              const Spacer(flex: 2),
-                            ],
-                          )
-                  ],
-                ),
-              ),
-            ),
-              const SizedBox(height: 24),
-              // Lower content shown after selection
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      if (selectedTemplateId != null) ...[
-                        if (isNarrow) ...[
-                          _buildSlotsPanel(),
-                          const SizedBox(height: 24),
-                          _buildTemplateDetailsPanel(),
-                        ] else ...[
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(flex: 4, child: _buildSlotsPanel()),
-                              const SizedBox(width: 32),
-                              Expanded(
-                                flex: 6,
-                                child: _buildTemplateDetailsPanel(),
-                              ),
-                            ],
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                      ],
+          return Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const AnimatedHeading(text: "Schedule Range Allocation"),
+                const SizedBox(height: 20),
+                // Combined Header Card
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
                     ],
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Form(
+                    key: _formKey,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    child: Column(
+                      children: [
+                        // Row 1: Dropdowns
+                        isNarrow
+                            ? Column(
+                                children: [
+                                  _buildDropdown(
+                                    label: "Schedule Name",
+                                    hint: "Select Schedule",
+                                    value: selectedScheduleId,
+                                    items: scheduleList,
+                                    showAdd: true,
+                                    onChanged: (val) {
+                                      setState(() {
+                                        selectedScheduleId = val;
+                                      });
+                                      if (val != null &&
+                                          selectedTemplateId != null) {
+                                        _fetchTemplateFiles(
+                                          selectedTemplateId!,
+                                          scheduleId: val,
+                                        );
+                                      }
+                                    },
+                                    validator: (v) => (v == null)
+                                        ? 'Select the Schedule'
+                                        : null,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildDropdown(
+                                    label: "Template Name",
+                                    hint: "Select Template",
+                                    value: selectedTemplateId,
+                                    items: templateList,
+                                    onChanged: (val) {
+                                      setState(() {
+                                        selectedTemplateId = val;
+                                        templateFiles = [];
+                                      });
+                                      if (val != null) {
+                                        _fetchTemplateFiles(
+                                          val,
+                                          scheduleId: selectedScheduleId,
+                                        );
+                                      }
+                                    },
+                                    validator: (v) => (v == null)
+                                        ? 'Select the Template'
+                                        : null,
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildDropdown(
+                                      label: "Schedule Name",
+                                      hint: "Select Schedule",
+                                      value: selectedScheduleId,
+                                      items: scheduleList,
+                                      showAdd: true,
+                                      onChanged: (val) {
+                                        setState(() {
+                                          selectedScheduleId = val;
+                                        });
+                                        if (val != null &&
+                                            selectedTemplateId != null) {
+                                          _fetchTemplateFiles(
+                                            selectedTemplateId!,
+                                            scheduleId: val,
+                                          );
+                                        }
+                                      },
+                                      validator: (v) => (v == null)
+                                          ? 'Select the Schedule'
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 24),
+                                  Expanded(
+                                    child: _buildDropdown(
+                                      label: "Template Name",
+                                      hint: "Select Template",
+                                      value: selectedTemplateId,
+                                      items: templateList,
+                                      onChanged: (val) {
+                                        setState(() {
+                                          selectedTemplateId = val;
+                                          templateFiles = [];
+                                        });
+                                        if (val != null) {
+                                          _fetchTemplateFiles(
+                                            val,
+                                            scheduleId: selectedScheduleId,
+                                          );
+                                        }
+                                      },
+                                      validator: (v) => (v == null)
+                                          ? 'Select the Template'
+                                          : null,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                        const SizedBox(height: 24),
+                        // Row 2: Dates, Checkbox, Submit
+                        isNarrow
+                            ? Column(
+                                children: [
+                                  _buildDateField(
+                                    "From Date",
+                                    _fromDateController,
+                                    validator: (v) => (v == null || v.isEmpty)
+                                        ? 'Enter the from date'
+                                        : null,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildDateField(
+                                    "To Date",
+                                    _toDateController,
+                                    validator: (v) => (v == null || v.isEmpty)
+                                        ? 'Enter the to date'
+                                        : null,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildCheckboxRow(),
+                                  const SizedBox(height: 24),
+                                  _buildSubmitButton(isFullWidth: true),
+                                ],
+                              )
+                            : Row(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start, // Align to top
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: [
+                                  // Fixed width for From Date
+                                  SizedBox(
+                                    width: 180,
+                                    child: _buildDateField(
+                                      "From Date",
+                                      _fromDateController,
+                                      validator: (v) => (v == null || v.isEmpty)
+                                          ? 'Enter the from date'
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Fixed width for To Date
+                                  SizedBox(
+                                    width: 180,
+                                    child: _buildDateField(
+                                      "To Date",
+                                      _toDateController,
+                                      validator: (v) => (v == null || v.isEmpty)
+                                          ? 'Enter the to date'
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 20),
+                                  // Align CheckboxRow with input box (Accounting for label + gap)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: 28.0,
+                                    ), // Label height + gap
+                                    child: _buildCheckboxRow(),
+                                  ),
+                                  const SizedBox(width: 20),
+                                  // Align SubmitButton with input box
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 28.0),
+                                    child: _buildSubmitButton(),
+                                  ),
+                                  const Spacer(flex: 2),
+                                ],
+                              ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
-    ),
+                const SizedBox(height: 24),
+                // Lower content shown after selection
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        if (selectedTemplateId != null) ...[
+                          if (isNarrow) ...[
+                            _buildSlotsPanel(),
+                            const SizedBox(height: 24),
+                            _buildTemplateDetailsPanel(),
+                          ] else ...[
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 4, child: _buildSlotsPanel()),
+                                const SizedBox(width: 32),
+                                Expanded(
+                                  flex: 6,
+                                  child: _buildTemplateDetailsPanel(),
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 24),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -923,19 +939,14 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     );
   }
 
- Widget _buildSubmitButton({bool isFullWidth = false}) {
+  Widget _buildSubmitButton({bool isFullWidth = false}) {
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.blue.shade600,
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(
-          horizontal: 32,
-          vertical: 12,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       onPressed: () {
         if (_formKey.currentState!.validate()) {
@@ -1083,7 +1094,11 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.search_off_rounded, size: 40, color: Colors.grey),
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: 40,
+                          color: Colors.grey,
+                        ),
                         SizedBox(height: 8),
                         Text(
                           "No matching files found",
@@ -1139,7 +1154,12 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(4),
-                                  child: (file['file_name'] != null && file['file_name'].toString().trim().isNotEmpty)
+                                  child:
+                                      (file['file_name'] != null &&
+                                          file['file_name']
+                                              .toString()
+                                              .trim()
+                                              .isNotEmpty)
                                       ? Image.network(
                                           "$_baseUrl/uploads/${file['file_name']}",
                                           fit: BoxFit.cover,
@@ -1150,7 +1170,11 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                                 color: Colors.grey,
                                               ),
                                         )
-                                      : const Icon(Icons.image, size: 24, color: Colors.grey),
+                                      : const Icon(
+                                          Icons.image,
+                                          size: 24,
+                                          color: Colors.grey,
+                                        ),
                                 ),
                               ),
                             ),
@@ -1321,10 +1345,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                     ),
                   ),
                   items: ["10", "25", "50", "100"]
-                      .map((v) => DropdownMenuItem(
-                            value: v,
-                            child: Text(v),
-                          ))
+                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                       .toList(),
                   onChanged: (v) => setState(() {
                     entriesValue = v!;
@@ -1420,10 +1441,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
             children: [
               _buildMiniBtn("Prev", isFirst: true),
               ...List.generate(totalPages, (index) {
-                return _buildMiniBtn(
-                  "${index + 1}",
-                  active: (index + 1) == 1,
-                );
+                return _buildMiniBtn("${index + 1}", active: (index + 1) == 1);
               }),
               _buildMiniBtn("Next", isLast: true),
             ],
@@ -1484,7 +1502,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
         ),
         const SizedBox(height: 8),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start, // Align top of dropdown with top of button
+          crossAxisAlignment: CrossAxisAlignment
+              .start, // Align top of dropdown with top of button
           children: [
             Expanded(
               child: SearchableDropdown<int>(
@@ -1496,7 +1515,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                 items: items.map((item) {
                   return SearchableDropdownItem<int>(
                     value: int.tryParse(item['id']?.toString() ?? '') ?? 0,
-                    label: item['name']?.toString() ??
+                    label:
+                        item['name']?.toString() ??
                         item['schedule_name']?.toString() ??
                         item['temp_name']?.toString() ??
                         '',
@@ -1508,7 +1528,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
             if (showAdd) ...[
               const SizedBox(width: 8),
               Container(
-                margin: const EdgeInsets.only(top: 0), // Already aligned via CrossAxisAlignment.start
+                margin: const EdgeInsets.only(
+                  top: 0,
+                ), // Already aligned via CrossAxisAlignment.start
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
@@ -1525,7 +1547,11 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     );
   }
 
-  Widget _buildDateField(String label, TextEditingController controller, {String? Function(String?)? validator}) {
+  Widget _buildDateField(
+    String label,
+    TextEditingController controller, {
+    String? Function(String?)? validator,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1538,55 +1564,55 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           ),
         ),
         const SizedBox(height: 8),
-  TextFormField(
-  controller: controller,
-  readOnly: true,
-  validator: validator,
-  autovalidateMode: AutovalidateMode.onUserInteraction,
-  style: const TextStyle(fontSize: 13), // Main text size
-  decoration: InputDecoration(
-    hintText: 'YYYY-MM-DD',
-    // 1. THIS REDUCES THE HINT TEXT SIZE
-    hintStyle: TextStyle(
-      fontSize: 14, 
-      color: Colors.grey.shade400,
-    ),
-    
-    filled: true,
-    fillColor: Colors.white,
-    prefixIcon: const Icon(
-      Icons.calendar_today,
-      size: 16, // Slightly smaller icon to match
-      color: Colors.blue,
-    ),
-    
-    // 2. REDUCE PADDING TO MATCH THE SMALLER TEXT
-    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-    helperText: ' ', // Reserve space for error
-    
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: Colors.grey.shade300),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: Colors.grey.shade300),
-    ),
-  ),
-  onTap: () async {
-    DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(), 
-      lastDate: DateTime(2101),
-    );
-    if (picked != null) {
-      // Ensure you have the intl package for DateFormat
-      controller.text = DateFormat('yyyy-MM-dd').format(picked);
-      setState(() {}); 
-    }
-  },
-),
+        TextFormField(
+          controller: controller,
+          readOnly: true,
+          validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          style: const TextStyle(fontSize: 13), // Main text size
+          decoration: InputDecoration(
+            hintText: 'YYYY-MM-DD',
+            // 1. THIS REDUCES THE HINT TEXT SIZE
+            hintStyle: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+
+            filled: true,
+            fillColor: Colors.white,
+            prefixIcon: const Icon(
+              Icons.calendar_today,
+              size: 16, // Slightly smaller icon to match
+              color: Colors.blue,
+            ),
+
+            // 2. REDUCE PADDING TO MATCH THE SMALLER TEXT
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 8,
+            ),
+            helperText: ' ', // Reserve space for error
+
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+          ),
+          onTap: () async {
+            DateTime? picked = await showDatePicker(
+              context: context,
+              initialDate: DateTime.now(),
+              firstDate: DateTime.now(),
+              lastDate: DateTime(2101),
+            );
+            if (picked != null) {
+              // Ensure you have the intl package for DateFormat
+              controller.text = DateFormat('yyyy-MM-dd').format(picked);
+              setState(() {});
+            }
+          },
+        ),
       ],
     );
   }

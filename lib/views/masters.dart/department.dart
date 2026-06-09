@@ -57,7 +57,10 @@ class _DepartmentViewState extends State<DepartmentView> {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/categoryview'),
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
         body: jsonEncode({"api_key": _apiKey}),
       );
 
@@ -84,7 +87,7 @@ class _DepartmentViewState extends State<DepartmentView> {
   // 2 & 4. INSERT OR UPDATE (insertCategoryview / categoryUpdateview)
   Future<void> handleFormSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     final String name = _departmentNameController.text.trim();
     if (name.isEmpty) {
       _showSnackBar("Department Name is required!");
@@ -97,20 +100,28 @@ class _DepartmentViewState extends State<DepartmentView> {
     try {
       final String name = _departmentNameController.text.trim();
       final response = await http.post(
-        Uri.parse(isUpdate
-            ? '$_baseUrl/categoryUpdateview'
-            : '$_baseUrl/insertCategoryview'),
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
-        body: jsonEncode(isUpdate
-            ? {"api_key": _apiKey, "id": editingId, "category_name": name}
-            : {"api_key": _apiKey, "category_name": name}),
+        Uri.parse(
+          isUpdate
+              ? '$_baseUrl/categoryUpdateview'
+              : '$_baseUrl/insertCategoryview',
+        ),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: jsonEncode(
+          isUpdate
+              ? {"api_key": _apiKey, "id": editingId, "category_name": name}
+              : {"api_key": _apiKey, "category_name": name},
+        ),
       );
 
       if (response.statusCode == 200) {
         if (!mounted) return;
         if (Navigator.canPop(context)) Navigator.pop(context);
         _showSnackBar(
-            isUpdate ? "Department Updated!" : "Department Submitted!");
+          isUpdate ? "Department Updated!" : "Department Submitted!",
+        );
         _clearForm();
         fetchCategories(); // Refresh table immediately
       } else {
@@ -130,15 +141,18 @@ class _DepartmentViewState extends State<DepartmentView> {
       final response = await http.post(
         Uri.parse('$_baseUrl/categoryEditview'),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"api_key": _apiKey, "id": int.tryParse(id.toString()) ?? id}),
+        body: jsonEncode({
+          "api_key": _apiKey,
+          "id": int.tryParse(id.toString()) ?? id,
+        }),
       );
 
       if (response.statusCode == 200) {
         final resBody = jsonDecode(response.body);
         final dynamic data = resBody['data'] ?? resBody['category_data'];
-        
+
         if (!mounted) return;
-        
+
         // Handle if data is a list or a map
         dynamic category;
         if (data is List && data.isNotEmpty) {
@@ -148,8 +162,9 @@ class _DepartmentViewState extends State<DepartmentView> {
         }
 
         // Additional fallback: search in categoryList if API response is empty or missing name
-        if (category == null || (category['category_name'] == null && category['name'] == null)) {
-           category = categoryList.firstWhere(
+        if (category == null ||
+            (category['category_name'] == null && category['name'] == null)) {
+          category = categoryList.firstWhere(
             (item) => item['id']?.toString() == id.toString(),
             orElse: () => null,
           );
@@ -158,9 +173,9 @@ class _DepartmentViewState extends State<DepartmentView> {
         if (category != null) {
           setState(() {
             editingId = int.parse(id.toString());
-            _departmentNameController.text = 
-                category['category_name']?.toString() ?? 
-                category['name']?.toString() ?? 
+            _departmentNameController.text =
+                category['category_name']?.toString() ??
+                category['name']?.toString() ??
                 "";
           });
           _showDepartmentDialog();
@@ -236,61 +251,66 @@ class _DepartmentViewState extends State<DepartmentView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          TextFormField(
-  controller: _departmentNameController,
-  validator: (v) => (v == null || v.isEmpty) ? 'Please enter the Department Name' : null,
-  autovalidateMode: AutovalidateMode.onUserInteraction,
-  style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-  decoration: InputDecoration(
-    hintText: 'Department Name',
-    hintStyle: const TextStyle(
-      fontSize: 12,
-      color: Color(0xFF94A3B8),
-    ),
-    filled: true,
-    fillColor: const Color(0xFFF8FAFC),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(
-        color: Color(0xFFCBD5E1),
-        width: 1.2,
-      ),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(
-        color: Color(0xFF334155),
-        width: 1.6,
-      ),
-    ),
-    errorBorder: OutlineInputBorder(       // ← add this
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(
-        color: Color(0xFFCBD5E1),          // ← same grey, border stays
-        width: 1.2,
-      ),
-    ),
-    focusedErrorBorder: OutlineInputBorder( // ← add this
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(
-        color: Color(0xFF334155),           // ← dark when focused with error
-        width: 1.6,
-      ),
-    ),
-    border: OutlineInputBorder(             // ← add this as fallback
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(
-        color: Color(0xFFCBD5E1),
-        width: 1.2,
-      ),
-    ),
-    contentPadding: const EdgeInsets.symmetric(
-      horizontal: 14,
-      vertical: 14,
-    ),
-  ),
-),
-        ],
+            TextFormField(
+              controller: _departmentNameController,
+              validator: (v) => (v == null || v.isEmpty)
+                  ? 'Please enter the Department Name'
+                  : null,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+              decoration: InputDecoration(
+                hintText: 'Department Name',
+                hintStyle: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF94A3B8),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFCBD5E1),
+                    width: 1.2,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF334155),
+                    width: 1.6,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  // ← add this
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFCBD5E1), // ← same grey, border stays
+                    width: 1.2,
+                  ),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  // ← add this
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF334155), // ← dark when focused with error
+                    width: 1.6,
+                  ),
+                ),
+                border: OutlineInputBorder(
+                  // ← add this as fallback
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFCBD5E1),
+                    width: 1.2,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
       actions: [
@@ -316,11 +336,13 @@ class _DepartmentViewState extends State<DepartmentView> {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: isSubmitting ? null : () {
-            if (_formKey.currentState!.validate()) {
-              handleFormSubmit();
-            }
-          },
+          onPressed: isSubmitting
+              ? null
+              : () {
+                  if (_formKey.currentState!.validate()) {
+                    handleFormSubmit();
+                  }
+                },
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF0F172A),
             foregroundColor: Colors.white,
@@ -341,8 +363,10 @@ class _DepartmentViewState extends State<DepartmentView> {
                 )
               : Text(
                   editingId == null ? "Submit" : "Update",
-                  style:
-                      const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
                 ),
         ),
       ],
@@ -356,58 +380,62 @@ class _DepartmentViewState extends State<DepartmentView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SelectionArea(child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const AnimatedHeading(
-                  text: "Department List",
-                  style: TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    _clearForm();
-                    _showDepartmentDialog();
-                  },
-                  icon: const Icon(Icons.add_business_rounded, size: 20),
-                  label: const Text(
-                    "ADD DEPARTMENT",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // List Card
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(20.0),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+      body: SelectionArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const AnimatedHeading(
+                    text: "Department List",
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
                     ),
-                  ],
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: _buildTableCard(),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _clearForm();
+                      _showDepartmentDialog();
+                    },
+                    icon: const Icon(Icons.add_business_rounded, size: 20),
+                    label: const Text(
+                      "ADD DEPARTMENT",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+
+              // List Card
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(20.0),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: _buildTableCard(),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -500,10 +528,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                         const SizedBox(height: 4),
                         const Text(
                           "Try a different search term",
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 13.0,
-                          ),
+                          style: TextStyle(color: Colors.grey, fontSize: 13.0),
                         ),
                       ],
                     ),
@@ -672,10 +697,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                   ),
                 ),
                 items: ["10", "25", "50", "100"]
-                    .map((v) => DropdownMenuItem(
-                          value: v,
-                          child: Text(v),
-                        ))
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                     .toList(),
                 onChanged: (v) => setState(() {
                   entriesValue = v!;
@@ -693,18 +715,22 @@ class _DepartmentViewState extends State<DepartmentView> {
             ),
           ],
         ),
-        SizedBox(
-          width: 250,
-          height: 40,
-          child: TextField(
-            controller: _searchController,
-            onChanged: _onSearchChanged,
-            style: const TextStyle(color: Colors.black87, fontSize: 13),
-            decoration: InputDecoration(
-              hintText: "Search Departments...",
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+        Flexible(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 250),
+            child: SizedBox(
+              height: 40,
+              child: TextField(
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+                style: const TextStyle(color: Colors.black87, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: "Search Departments...",
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+              ),
             ),
           ),
         ),
@@ -841,6 +867,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                         : Colors.grey.shade300,
                   ),
                 ),
+              
                 child: Text(
                   "Next",
                   style: TextStyle(
@@ -858,6 +885,7 @@ class _DepartmentViewState extends State<DepartmentView> {
       ],
     );
   }
+  
 
   void _showSnackBar(String msg) {
     if (!mounted) return;
