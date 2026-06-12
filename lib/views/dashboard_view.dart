@@ -18,6 +18,9 @@ const _kApiKey =
     '933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2';
 const _kBaseUrl = 'https://display.sriher.com/uploads/';
 
+/// Times New Roman is used as the font family for all dashboard text.
+const String _kFont = 'Times New Roman';
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 class _DashboardData {
@@ -319,6 +322,15 @@ class _DashboardViewState extends State<DashboardView>
     if (_error != null) return _buildError();
 
     final d = _data!;
+    // Wrap the entire dashboard in a DefaultTextStyle so that every Text
+    // widget inherits Times New Roman without explicit per-widget overrides.
+    return DefaultTextStyle(
+      style: const TextStyle(fontFamily: _kFont),
+      child: _buildDashboardContent(d),
+    );
+  }
+
+  Widget _buildDashboardContent(_DashboardData d) {
     return Stack(
       children: [
         SelectionArea(
@@ -372,10 +384,11 @@ class _DashboardViewState extends State<DashboardView>
                   Text(
                     "$greeting, ${_userName ?? 'User'}",
                     style: const TextStyle(
+                      fontFamily: _kFont,
                       fontSize: 28,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.normal,
                       color: Color(0xFF0F172A),
-                      letterSpacing: -0.8,
+                      letterSpacing: -0.5,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -596,7 +609,12 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 
-  Widget _buildMediaCard(String title, String subtitle, Widget content, Animation<double> anim) {
+  Widget _buildMediaCard(
+    String title,
+    String subtitle,
+    Widget content,
+    Animation<double> anim,
+  ) {
     return FadeTransition(
       opacity: anim,
       child: SlideTransition(
@@ -604,115 +622,125 @@ class _DashboardViewState extends State<DashboardView>
           begin: const Offset(0, 0.05),
           end: Offset.zero,
         ).animate(anim),
-        child: Container(
-          height: 420,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 40,
-                offset: const Offset(0, 15),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              height: 420,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 40,
+                    offset: const Offset(0, 15),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 4,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 4,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                         ),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title.toUpperCase(),
-                            style: const TextStyle(
-                              color: Color(0xFF0F172A),
-                              fontWeight: FontWeight.w900,
-                              fontSize: 11,
-                              letterSpacing: 1.5,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title.toUpperCase(),
+                                style: const TextStyle(
+                                  color: Color(0xFF0F172A),
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                  letterSpacing: 1.5,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                subtitle,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF64748B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF64748B),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEEF2FF),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.circle, color: Color(0xFF10B981), size: 8),
-                          SizedBox(width: 6),
-                          Text(
-                            "LIVE",
-                            style: TextStyle(
-                              color: Color(0xFF3730A3),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                            ),
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 20,
+                            spreadRadius: -5,
+                            offset: const Offset(0, 10),
                           ),
                         ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: content,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // LIVE badge — top-right corner
+            Positioned(
+              top: 14,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.circle, color: Color(0xFF10B981), size: 8),
+                    SizedBox(width: 6),
+                    Text(
+                      "LIVE",
+                      style: TextStyle(
+                        color: Color(0xFF3730A3),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
                 ),
               ),
-              Expanded(
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 20,
-                        spreadRadius: -5,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: content,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -748,41 +776,61 @@ class _DashboardViewState extends State<DashboardView>
           // ── Blurred border strips (top, bottom, left, right) ── 8px wide, sigma 20
           // Top
           Positioned(
-            top: 0, left: 0, right: 0,
+            top: 0,
+            left: 0,
+            right: 0,
             child: ClipRect(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(height: 8, color: Colors.white.withOpacity(0.4)),
+                child: Container(
+                  height: 8,
+                  color: Colors.white.withOpacity(0.4),
+                ),
               ),
             ),
           ),
           // Bottom
           Positioned(
-            bottom: 0, left: 0, right: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: ClipRect(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(height: 8, color: Colors.white.withOpacity(0.4)),
+                child: Container(
+                  height: 8,
+                  color: Colors.white.withOpacity(0.4),
+                ),
               ),
             ),
           ),
           // Left
           Positioned(
-            top: 0, bottom: 0, left: 0,
+            top: 0,
+            bottom: 0,
+            left: 0,
             child: ClipRect(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(width: 8, color: Colors.white.withOpacity(0.4)),
+                child: Container(
+                  width: 8,
+                  color: Colors.white.withOpacity(0.4),
+                ),
               ),
             ),
           ),
           // Right
           Positioned(
-            top: 0, bottom: 0, right: 0,
+            top: 0,
+            bottom: 0,
+            right: 0,
             child: ClipRect(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(width: 8, color: Colors.white.withOpacity(0.4)),
+                child: Container(
+                  width: 8,
+                  color: Colors.white.withOpacity(0.4),
+                ),
               ),
             ),
           ),
@@ -812,16 +860,27 @@ class _DashboardViewState extends State<DashboardView>
           onExit: (_) {
             _hideControlsTimer?.cancel();
             _hideControlsTimer = Timer(const Duration(seconds: 3), () {
-              if (mounted) setVideoState(() { _showControls = false; _showMenu = false; });
+              if (mounted)
+                setVideoState(() {
+                  _showControls = false;
+                  _showMenu = false;
+                });
             });
           },
           child: GestureDetector(
             onTap: () {
-              setVideoState(() { _showControls = !_showControls; if (!_showControls) _showMenu = false; });
+              setVideoState(() {
+                _showControls = !_showControls;
+                if (!_showControls) _showMenu = false;
+              });
               if (_showControls) {
                 _hideControlsTimer?.cancel();
                 _hideControlsTimer = Timer(const Duration(seconds: 3), () {
-                  if (mounted) setVideoState(() { _showControls = false; _showMenu = false; });
+                  if (mounted)
+                    setVideoState(() {
+                      _showControls = false;
+                      _showMenu = false;
+                    });
                 });
               }
             },
@@ -837,11 +896,20 @@ class _DashboardViewState extends State<DashboardView>
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Icon(Icons.picture_in_picture_alt_rounded, color: Colors.white24, size: 48),
+                                  const Icon(
+                                    Icons.picture_in_picture_alt_rounded,
+                                    color: Colors.white24,
+                                    size: 48,
+                                  ),
                                   const SizedBox(height: 12),
                                   Text(
-                                    _isFullScreen ? "Playing in Full Screen" : "Playing in Picture in Picture",
-                                    style: const TextStyle(color: Colors.white24, fontSize: 13),
+                                    _isFullScreen
+                                        ? "Playing in Full Screen"
+                                        : "Playing in Picture in Picture",
+                                    style: const TextStyle(
+                                      color: Colors.white24,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -898,18 +966,27 @@ class _DashboardViewState extends State<DashboardView>
                             child: SliderTheme(
                               data: SliderThemeData(
                                 trackHeight: 3,
-                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 5,
+                                ),
+                                overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 10,
+                                ),
                                 activeTrackColor: const Color(0xFF3B82F6),
                                 inactiveTrackColor: Colors.white24,
                                 thumbColor: const Color(0xFF3B82F6),
                               ),
                               child: Slider(
                                 value: _duration.inMilliseconds > 0
-                                    ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
+                                    ? (_position.inMilliseconds /
+                                              _duration.inMilliseconds)
+                                          .clamp(0.0, 1.0)
                                     : 0.0,
                                 onChanged: (v) {
-                                  final target = Duration(milliseconds: (v * _duration.inMilliseconds).toInt());
+                                  final target = Duration(
+                                    milliseconds: (v * _duration.inMilliseconds)
+                                        .toInt(),
+                                  );
                                   _player.seek(target);
                                 },
                               ),
@@ -918,15 +995,23 @@ class _DashboardViewState extends State<DashboardView>
 
                           // ── Control Row ──
                           Padding(
-                            padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
+                            padding: const EdgeInsets.only(
+                              left: 12,
+                              right: 12,
+                              bottom: 8,
+                            ),
                             child: Row(
                               children: [
                                 // Play / Pause
                                 _controlIcon(
-                                  _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                  _isPlaying
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
                                   onTap: () {
                                     _player.playOrPause();
-                                    setVideoState(() => _isPlaying = !_isPlaying);
+                                    setVideoState(
+                                      () => _isPlaying = !_isPlaying,
+                                    );
                                   },
                                 ),
                                 const SizedBox(width: 6),
@@ -938,7 +1023,9 @@ class _DashboardViewState extends State<DashboardView>
                                     color: Colors.white70,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
-                                    fontFeatures: [FontFeature.tabularFigures()],
+                                    fontFeatures: [
+                                      FontFeature.tabularFigures(),
+                                    ],
                                   ),
                                 ),
 
@@ -946,11 +1033,15 @@ class _DashboardViewState extends State<DashboardView>
 
                                 // Volume Icon + Slider (right side)
                                 _controlIcon(
-                                  _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                                  _isMuted
+                                      ? Icons.volume_off_rounded
+                                      : Icons.volume_up_rounded,
                                   onTap: () {
                                     setVideoState(() {
                                       _isMuted = !_isMuted;
-                                      _player.setVolume(_isMuted ? 0.0 : _volume * 100);
+                                      _player.setVolume(
+                                        _isMuted ? 0.0 : _volume * 100,
+                                      );
                                     });
                                   },
                                 ),
@@ -959,8 +1050,13 @@ class _DashboardViewState extends State<DashboardView>
                                   child: SliderTheme(
                                     data: SliderThemeData(
                                       trackHeight: 3,
-                                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
-                                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 8),
+                                      thumbShape: const RoundSliderThumbShape(
+                                        enabledThumbRadius: 4,
+                                      ),
+                                      overlayShape:
+                                          const RoundSliderOverlayShape(
+                                            overlayRadius: 8,
+                                          ),
                                       activeTrackColor: Colors.white,
                                       inactiveTrackColor: Colors.white24,
                                       thumbColor: Colors.white,
@@ -1029,24 +1125,36 @@ class _DashboardViewState extends State<DashboardView>
                             'Playback Speed',
                             trailing: Text(
                               '${_playbackSpeed}x',
-                              style: const TextStyle(color: Colors.white54, fontSize: 11),
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 11,
+                              ),
                             ),
                             onTap: () {
                               setVideoState(() {
                                 const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
                                 final idx = speeds.indexOf(_playbackSpeed);
-                                _playbackSpeed = speeds[(idx + 1) % speeds.length];
+                                _playbackSpeed =
+                                    speeds[(idx + 1) % speeds.length];
                                 _player.setRate(_playbackSpeed);
                               });
                             },
                           ),
-                          Container(height: 1, color: Colors.white10, margin: const EdgeInsets.symmetric(horizontal: 12)),
+                          Container(
+                            height: 1,
+                            color: Colors.white10,
+                            margin: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
                           _menuItem(
                             Icons.download_rounded,
                             'Download',
                             onTap: () => setVideoState(() => _showMenu = false),
                           ),
-                          Container(height: 1, color: Colors.white10, margin: const EdgeInsets.symmetric(horizontal: 12)),
+                          Container(
+                            height: 1,
+                            color: Colors.white10,
+                            margin: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
                           _menuItem(
                             Icons.picture_in_picture_alt_rounded,
                             'Picture in Picture',
@@ -1071,7 +1179,6 @@ class _DashboardViewState extends State<DashboardView>
     return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 
-
   Widget _controlIcon(IconData icon, {VoidCallback? onTap, double size = 22}) {
     return InkWell(
       onTap: onTap,
@@ -1082,7 +1189,6 @@ class _DashboardViewState extends State<DashboardView>
       ),
     );
   }
-
 
   // _buildFullScreenOverlay is now handled by _FullScreenVideoPage via Navigator.push
 
@@ -1121,7 +1227,11 @@ class _DashboardViewState extends State<DashboardView>
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.picture_in_picture_alt_rounded, color: Color(0xFF3B82F6), size: 16),
+                    const Icon(
+                      Icons.picture_in_picture_alt_rounded,
+                      color: Color(0xFF3B82F6),
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     const Text(
                       'Picture to Picture',
@@ -1134,7 +1244,11 @@ class _DashboardViewState extends State<DashboardView>
                     const Spacer(),
                     GestureDetector(
                       onTap: _togglePiP,
-                      child: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
                     ),
                   ],
                 ),
@@ -1158,7 +1272,9 @@ class _DashboardViewState extends State<DashboardView>
                       child: Center(
                         child: IconButton(
                           icon: Icon(
-                            _isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
+                            _isPlaying
+                                ? Icons.pause_circle_filled_rounded
+                                : Icons.play_circle_filled_rounded,
                             color: Colors.white,
                             size: 32,
                           ),
@@ -1179,7 +1295,12 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 
-  Widget _menuItem(IconData icon, String label, {VoidCallback? onTap, Widget? trailing}) {
+  Widget _menuItem(
+    IconData icon,
+    String label, {
+    VoidCallback? onTap,
+    Widget? trailing,
+  }) {
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -1191,7 +1312,11 @@ class _DashboardViewState extends State<DashboardView>
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             if (trailing != null) trailing,
@@ -1200,7 +1325,6 @@ class _DashboardViewState extends State<DashboardView>
       ),
     );
   }
-
 
   Widget _buildMediaPlaceholder(IconData icon, String label) {
     return Center(
@@ -1271,7 +1395,11 @@ class _DashboardViewState extends State<DashboardView>
       ('Devices', Icons.devices_rounded, const Color(0xFF3B82F6)),
       ('Templates', Icons.auto_awesome_mosaic_rounded, const Color(0xFF8B5CF6)),
       ('Locations', Icons.location_on_rounded, const Color(0xFF10B981)),
-      ('Over Views', Icons.dashboard_customize_rounded, const Color(0xFFF59E0B)),
+      (
+        'Over Views',
+        Icons.dashboard_customize_rounded,
+        const Color(0xFFF59E0B),
+      ),
     ];
     return Container(
       height: 48,
@@ -1293,7 +1421,10 @@ class _DashboardViewState extends State<DashboardView>
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: isSel ? cat.$3.withOpacity(0.12) : Colors.transparent,
                   borderRadius: BorderRadius.circular(20),
@@ -1304,7 +1435,11 @@ class _DashboardViewState extends State<DashboardView>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(cat.$2, size: 14, color: isSel ? cat.$3 : const Color(0xFF94A3B8)),
+                    Icon(
+                      cat.$2,
+                      size: 14,
+                      color: isSel ? cat.$3 : const Color(0xFF94A3B8),
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       cat.$1,
@@ -1450,38 +1585,44 @@ class _DashboardViewState extends State<DashboardView>
 
   Widget _buildRegistryHeaderTitle() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+      width: double.infinity,
+      // Pure, transparent container padding layout with NO colors or hard lines
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Title — Expanded so it absorbs all leftover space and ellipsis when narrow
-          Expanded(
+          // Left side: Title and subtitle Column
+          Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   _selectedCategory.toUpperCase(),
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFF0F172A),
+                    color: Color(0xFF0F172A), // Premium Dark Slate Text
                     letterSpacing: 1.5,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
                   'Managing system ${_selectedCategory.toLowerCase()} registry',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF64748B), // Slate Gray subtitle descriptor
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          // Entries selector — always at its natural width (never squished)
+
+          // Right side: Show [dropdown] rows control
           Row(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Text(
                 'Show ',
@@ -1491,52 +1632,69 @@ class _DashboardViewState extends State<DashboardView>
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              SizedBox(
-                width: 95, // Increased width to prevent internal text/icon overflow
-                height: 42, // Increased height for better visibility and usability
-                child: DropdownButtonFormField<int>(
-                  value: _entriesPerPage,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Colors.black87, fontSize: 13),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                child: SizedBox(
+                  width: 80, // Perfectly sized tracking footprint box
+                  height: 36,
+                  child: DropdownButtonFormField<int>(
+                    value: _entriesPerPage,
+                    dropdownColor: Colors.white,
+                    icon: const Icon(
+                      Icons.arrow_drop_down_rounded,
+                      color: Color(0xFF64748B),
+                      size: 20,
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    style: const TextStyle(
+                      color: Colors.black87,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF1E3A8A),
+                          width: 1,
+                        ),
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8, // Balanced padding
-                      vertical: 10, // Centered vertically in 42px height container
-                    ),
-                  ),
-                  items: [10, 25, 50, 100]
-                      .map((v) => DropdownMenuItem(
+                    items: [10, 25, 50, 100]
+                        .map(
+                          (v) => DropdownMenuItem(
                             value: v,
                             child: Text(v.toString()),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _entriesPerPage = val;
-                        _currentPage = 1;
-                      });
-                    }
-                  },
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _entriesPerPage = val;
+                          _currentPage = 1; // Resets view index safely
+                        });
+                      }
+                    },
+                  ),
                 ),
               ),
               const Text(
-                ' rows',
+                'rows',
                 style: TextStyle(
                   fontSize: 13,
                   color: Color(0xFF64748B),
@@ -1548,38 +1706,6 @@ class _DashboardViewState extends State<DashboardView>
         ],
       ),
     );
-  }
-
-  Map<int, TableColumnWidth> _getColumnWidths() {
-    switch (_selectedCategory) {
-      case 'Devices':
-        return {
-          0: const FlexColumnWidth(3), // Name
-          1: const FlexColumnWidth(2), // Code
-          2: const FlexColumnWidth(2), // Model
-        };
-      case 'Templates':
-        return {
-          0: const FlexColumnWidth(3), // Name
-          1: const FlexColumnWidth(2), // Duration
-        };
-      case 'Locations':
-        return {
-          0: const FlexColumnWidth(3), // Name
-          1: const FlexColumnWidth(2), // Floor
-          2: const FlexColumnWidth(2), // Sub-Location
-        };
-      case 'Over Views':
-        return {
-          0: const FlexColumnWidth(2), // Device
-          1: const FlexColumnWidth(2), // Schedule
-          2: const FlexColumnWidth(2), // Template
-          3: const FlexColumnWidth(1), // Duration
-          4: const FlexColumnWidth(2), // Location
-        };
-      default:
-        return {};
-    }
   }
 
   Widget _buildRegistryTable(_DashboardData d) {
@@ -1594,78 +1720,54 @@ class _DashboardViewState extends State<DashboardView>
     final startIndex = (_currentPage - 1) * _entriesPerPage;
     final endIndex = (startIndex + _entriesPerPage).clamp(0, rows.length);
     final pageRows = rows.sublist(startIndex, endIndex);
-    final headers = _getTableHeaders();
-    final colWidths = _getColumnWidths();
 
     return Container(
       width: double.infinity,
+      clipBehavior: Clip.antiAlias,
       decoration: const BoxDecoration(),
-      child: Column(
-        children: [
-          // Sticky/Fixed Table Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            decoration: const BoxDecoration(
-              color: Color(0xFFF8FAFC),
-              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-            ),
-            child: Table(
-              columnWidths: colWidths,
-              children: [
-                TableRow(
-                  children: headers.map((h) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text(
-                        h.toUpperCase(),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF64748B),
-                          fontSize: 12,
-                          letterSpacing: 1.0,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
-          ),
-          // Scrollable Table Body
-          Expanded(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.vertical,
             child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Table(
-                  columnWidths: colWidths,
-                  children: pageRows.asMap().entries.map((entry) {
-                    final rowIndex = entry.key;
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                child: DataTable(
+                  columnSpacing: 40,
+                  horizontalMargin: 24,
+                  dataRowMaxHeight: 64,
+                  headingRowHeight: 56,
+                  headingTextStyle: const TextStyle(
+                    fontWeight: FontWeight.bold, // Keep headers bold
+                    color: Color(0xFF64748B),
+                    fontSize: 12,
+                    letterSpacing: 1.0,
+                  ),
+                  columns: _getTableHeaders()
+                      .map((h) => DataColumn(label: Text(h.toUpperCase())))
+                      .toList(),
+                  rows: pageRows.asMap().entries.map((entry) {
                     final row = entry.value;
-                    final isOdd = rowIndex % 2 != 0;
-
-                    return TableRow(
-                      decoration: BoxDecoration(
-                        color: isOdd ? const Color(0xFFF8FAFC).withOpacity(0.5) : Colors.white,
-                        border: const Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
-                      ),
-                      children: row.asMap().entries.map((cellEntry) {
-                        final colIndex = cellEntry.key;
+                    return DataRow(
+                      color: WidgetStateProperty.resolveWith<Color?>((states) {
+                        if (entry.key % 2 != 0) {
+                          return const Color(0xFFF8FAFC).withOpacity(0.5);
+                        }
+                        return null;
+                      }),
+                      cells: row.asMap().entries.map((cellEntry) {
                         final cellValue = cellEntry.value.toString();
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Text(
+                        return DataCell(
+                          Text(
                             cellValue,
-                            style: TextStyle(
-                              color: colIndex == 0
-                                  ? const Color(0xFF0F172A)
-                                  : const Color(0xFF334155),
-                              fontWeight: FontWeight.normal, // Set to normal instead of bold for the first column
+                            style: const TextStyle(
+                              // FIXED: Cleaned colors to be uniform across all cells
+                              color: Color(0xFF334155),
+                              // FIXED: Changed from conditional check to normal weight across all columns
+                              fontWeight: FontWeight.normal,
                               fontSize: 14,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                         );
                       }).toList(),
@@ -1674,8 +1776,8 @@ class _DashboardViewState extends State<DashboardView>
                 ),
               ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -1869,7 +1971,11 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
             top: 40,
             right: 40,
             child: IconButton(
-              icon: const Icon(Icons.close_fullscreen_rounded, color: Colors.white, size: 32),
+              icon: const Icon(
+                Icons.close_fullscreen_rounded,
+                color: Colors.white,
+                size: 32,
+              ),
               onPressed: widget.onClose,
             ),
           ),
@@ -1881,7 +1987,9 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
             child: Center(
               child: IconButton(
                 icon: Icon(
-                  _playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
+                  _playing
+                      ? Icons.pause_circle_filled_rounded
+                      : Icons.play_circle_filled_rounded,
                   color: Colors.white,
                   size: 64,
                 ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -10,6 +11,21 @@ import '../../widgets/searchable_dropdown.dart';
 import '../../api_config.dart';
 import '../../widgets/web_compat_image.dart';
 import '../../widgets/web_video_thumbnail.dart';
+
+/// Tracks a single in-flight background upload.
+class _UploadTask {
+  final String tempId;
+  double progress; // 0.0 → 1.0
+  bool hasError;
+  String errorMessage;
+
+  _UploadTask({
+    required this.tempId,
+    this.progress = 0.0,
+    this.hasError = false,
+    this.errorMessage = '',
+  });
+}
 
 /**
  * FileUploadView - Master Module
@@ -41,6 +57,19 @@ class _FileUploadViewState extends State<FileUploadView> {
   List<dynamic> _deptList = []; // loaded from /categoryview
   bool isLoading = true;
   bool isSubmitting = false;
+
+  // Tracks IDs whose status toggle API call is currently in-flight.
+  // Prevents double-tap flicker and race conditions.
+  final Set<String> _pendingToggle = {};
+
+  // Tracks in-flight background uploads keyed by their temp row ID.
+  // Each entry holds live progress (0.0–1.0) and error state.
+  final Map<String, _UploadTask> _uploadTasks = {};
+
+  // A stable key for ScaffoldMessenger so snackbars can be shown safely
+  // even after the dialog/route that triggered the upload has been popped.
+  final GlobalKey<ScaffoldMessengerState> _messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   // Table Pagination & Search
   String entriesValue = "10";
@@ -172,161 +201,232 @@ class _FileUploadViewState extends State<FileUploadView> {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // API 2: INSERT FILE (POST /insertFileview) — multipart form upload
+  // API 2: INSERT FILE — instant dialog dismiss + background streaming upload
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> insertFileAction() async {
     if (!_formKey.currentState!.validate() || _selectedFile == null) {
       if (_selectedFile == null) _showSnackBar("Please pick a file to upload.");
       return;
     }
+    if (!mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => isSubmitting = true);
-    // DISMISS DIALOG IMMEDIATELY before the upload begins
+    // Snapshot all form values BEFORE the dialog is popped.
+    final String uploadName = _nameController.text.trim();
+    final String uploadDesc = _descController.text.trim();
+    final String uploadCatId = _selectedDeptId!;
+    final String uploadType = _selectedType;
+    final String uploadFromDate = _fromDateController.text;
+    final String uploadToDate = _toDateController.text;
+    final PlatformFile uploadFile = _selectedFile!;
+    final String filename = uploadFile.name;
+    final String extension = filename.split('.').last.toLowerCase();
+    final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    // Unique key for this upload session
+    final String tempId = 'upload_${DateTime.now().millisecondsSinceEpoch}';
+
+    // ── STEP 1: Dismiss dialog immediately (before any await) ──
     if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+    if (mounted) _resetForm();
 
+    // ── STEP 2: Insert optimistic "uploading" row at top of table ──
+    final Map<String, dynamic> optimisticRow = {
+      'id': tempId,
+      '_isUploading': true,
+      'user_filename': uploadName,
+      'description': uploadDesc,
+      'category_id': uploadCatId,
+      'file_name': filename,
+      'file_type': extension,
+      'file_status': 0,
+      'status': 0,
+      'type': uploadType == 'Short Term' ? 'Temporary' : uploadType,
+      'valid_from_date': uploadType == 'Short Term' ? uploadFromDate : today,
+      'valid_upto_date': uploadType == 'Short Term' ? uploadToDate : null,
+    };
+
+    if (mounted) {
+      setState(() {
+        fileList = [optimisticRow, ...fileList];
+        _uploadTasks[tempId] = _UploadTask(tempId: tempId);
+      });
+    }
+
+    // ── STEP 3: Fire-and-forget background upload ──
+    _runBackgroundUpload(
+      tempId: tempId,
+      uploadName: uploadName,
+      uploadDesc: uploadDesc,
+      uploadCatId: uploadCatId,
+      uploadType: uploadType,
+      uploadFromDate: uploadFromDate,
+      uploadToDate: uploadToDate,
+      uploadFile: uploadFile,
+      filename: filename,
+      extension: extension,
+      today: today,
+    );
+  }
+
+  /// Runs the actual multipart upload in the background.
+  /// Updates [_uploadTasks[tempId].progress] as bytes are sent,
+  /// then promotes the optimistic row to live-green on success.
+  Future<void> _runBackgroundUpload({
+    required String tempId,
+    required String uploadName,
+    required String uploadDesc,
+    required String uploadCatId,
+    required String uploadType,
+    required String uploadFromDate,
+    required String uploadToDate,
+    required PlatformFile uploadFile,
+    required String filename,
+    required String extension,
+    required String today,
+  }) async {
+    // Resolve MIME type
+    MediaType contentType;
+    if (['jpg', 'jpeg'].contains(extension)) {
+      contentType = MediaType('image', 'jpeg');
+    } else if (extension == 'png') {
+      contentType = MediaType('image', 'png');
+    } else if (extension == 'gif') {
+      contentType = MediaType('image', 'gif');
+    } else if (extension == 'webp') {
+      contentType = MediaType('image', 'webp');
+    } else if (extension == 'mp4') {
+      contentType = MediaType('video', 'mp4');
+    } else if (extension == 'mov') {
+      contentType = MediaType('video', 'quicktime');
+    } else if (extension == 'avi') {
+      contentType = MediaType('video', 'x-msvideo');
+    } else if (extension == 'mkv') {
+      contentType = MediaType('video', 'x-matroska');
+    } else {
+      contentType = MediaType('application', 'octet-stream');
+    }
+
+    void _markError(String msg) {
+      if (!mounted) return;
+      setState(() {
+        _uploadTasks[tempId]
+          ?..hasError = true
+          ..errorMessage = msg;
+        // Mark the row itself as errored so _getRow can show red UI
+        final idx = fileList.indexWhere((e) => e['id']?.toString() == tempId);
+        if (idx != -1) {
+          fileList[idx] = Map<String, dynamic>.from(fileList[idx])
+            ..['_uploadError'] = msg;
+        }
+      });
+      _showSnackBar('Upload failed: $msg');
+    }
+
+    final client = http.Client();
     try {
-      final String filename = _selectedFile!.name;
-      final String extension = filename.split('.').last.toLowerCase();
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_baseUrl/insertFileview'),
+      );
 
-      // Determine MIME type
-      MediaType contentType;
-      if (['jpg', 'jpeg'].contains(extension)) {
-        contentType = MediaType('image', 'jpeg');
-      } else if (extension == 'png') {
-        contentType = MediaType('image', 'png');
-      } else if (extension == 'gif') {
-        contentType = MediaType('image', 'gif');
-      } else if (extension == 'webp') {
-        contentType = MediaType('image', 'webp');
-      } else if (extension == 'mp4') {
-        contentType = MediaType('video', 'mp4');
-      } else if (extension == 'mov') {
-        contentType = MediaType('video', 'quicktime');
-      } else if (extension == 'avi') {
-        contentType = MediaType('video', 'x-msvideo');
-      } else if (extension == 'mkv') {
-        contentType = MediaType('video', 'x-matroska');
+      request.fields['api_key'] = _apiKey;
+      request.fields['category_id'] = uploadCatId;
+      request.fields['name'] = uploadName;
+      request.fields['desc'] = uploadDesc;
+      request.fields['group5'] =
+          uploadType == 'Short Term' ? 'Temporary' : uploadType;
+      request.fields['file_duration'] = '25';
+
+      if (uploadType == 'Short Term') {
+        request.fields['valid_from_date'] = uploadFromDate;
+        request.fields['valid_upto_date'] = uploadToDate;
+        request.fields['from_date'] = uploadFromDate;
+        request.fields['to_date'] = uploadToDate;
+        request.fields['valid_from'] = uploadFromDate;
+        request.fields['valid_upto'] = uploadToDate;
       } else {
-        contentType = MediaType('application', 'octet-stream');
+        request.fields['valid_from_date'] = today;
+        request.fields['from_date'] = today;
+        request.fields['valid_from'] = today;
       }
 
-      final client = http.Client();
-      try {
-        final request = http.MultipartRequest(
-          'POST',
-          Uri.parse('$_baseUrl/insertFileview'),
-        );
+      if (uploadFile.bytes != null && uploadFile.bytes!.isNotEmpty) {
+        request.files.add(http.MultipartFile.fromBytes(
+          'file', uploadFile.bytes!,
+          filename: filename, contentType: contentType,
+        ));
+      } else if (uploadFile.path != null) {
+        request.files.add(await http.MultipartFile.fromPath(
+          'file', uploadFile.path!,
+          filename: filename, contentType: contentType,
+        ));
+      } else {
+        _markError('No file data available.');
+        return;
+      }
 
-        // ── Form fields ──
-        request.fields['api_key'] = _apiKey;
-        request.fields['category_id'] = _selectedDeptId!;
-        request.fields['name'] = _nameController.text.trim();
-        request.fields['desc'] = _descController.text.trim();
-        request.fields['group5'] = _selectedType == 'Short Term'
-            ? 'Temporary'
-            : _selectedType;
-        request.fields['file_duration'] = '25';
+      // ── Stream the request so we can track bytes sent ──
+      final streamedResponse = await client
+          .send(request)
+          .timeout(const Duration(minutes: 15));
 
-        if (_selectedType == 'Short Term') {
-          request.fields['valid_from_date'] = _fromDateController.text;
-          request.fields['valid_upto_date'] = _toDateController.text;
-          request.fields['from_date'] = _fromDateController.text;
-          request.fields['to_date'] = _toDateController.text;
-          request.fields['valid_from'] = _fromDateController.text;
-          request.fields['valid_upto'] = _toDateController.text;
-        } else {
-          final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-          request.fields['valid_from_date'] = today;
-          request.fields['from_date'] = today;
-          request.fields['valid_from'] = today;
+      final int totalBytes = streamedResponse.contentLength ?? 0;
+      int receivedBytes = 0;
+      final List<int> responseBytes = [];
+
+      await for (final chunk in streamedResponse.stream) {
+        responseBytes.addAll(chunk);
+        receivedBytes += chunk.length;
+        if (totalBytes > 0 && mounted) {
+          setState(() {
+            _uploadTasks[tempId]?.progress =
+                (receivedBytes / totalBytes).clamp(0.0, 1.0);
+          });
         }
+      }
 
-        // ── Attach file (prefer bytes for web, fall back to path for mobile) ──
-        if (_selectedFile!.bytes != null && _selectedFile!.bytes!.isNotEmpty) {
-          request.files.add(
-            http.MultipartFile.fromBytes(
-              'file',
-              _selectedFile!.bytes!,
-              filename: filename,
-              contentType: contentType,
-            ),
-          );
-        } else if (_selectedFile!.path != null) {
-          request.files.add(
-            await http.MultipartFile.fromPath(
-              'file',
-              _selectedFile!.path!,
-              filename: filename,
-              contentType: contentType,
-            ),
-          );
-        } else {
-          throw Exception(
-            'No file data available. Please pick the file again.',
-          );
-        }
+      final response = http.Response(
+        String.fromCharCodes(responseBytes),
+        streamedResponse.statusCode,
+      );
 
-        // Send with a generous timeout for large video files
-        final streamedResponse = await client
-            .send(request)
-            .timeout(const Duration(minutes: 10));
-        final response = await http.Response.fromStream(streamedResponse);
+      debugPrint(
+        'Insert response [${response.statusCode}]: ${response.body}',
+      );
 
-        debugPrint(
-          'Insert response [${response.statusCode}]: ${response.body}',
-        );
-
-        if (response.statusCode == 200) {
-          // Server always returns 200; check body status field
-          final Map<String, dynamic> body = jsonDecode(response.body);
-          if ((body['status']?.toString() ?? '').toLowerCase() == 'success') {
-            messenger.showSnackBar(
-              const SnackBar(
-                content: Text('File uploaded successfully.'),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-            _resetForm();
-            await fetchFilesFromServer(); // Refresh table (latest first)
-          } else {
-            // Server returned 200 but with a failure message
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(body['Message']?.toString() ?? 'Upload failed.'),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> body = jsonDecode(response.body);
+        if ((body['status']?.toString() ?? '').toLowerCase() == 'success') {
+          // ── Promote optimistic row to live-green ──
+          if (mounted) {
+            setState(() {
+              final idx =
+                  fileList.indexWhere((e) => e['id']?.toString() == tempId);
+              if (idx != -1) {
+                fileList[idx] = Map<String, dynamic>.from(fileList[idx])
+                  ..['_isUploading'] = false
+                  ..['file_status'] = 1
+                  ..['status'] = 1;
+              }
+              _uploadTasks.remove(tempId);
+            });
           }
+          _showSnackBar('✅ "$uploadName" uploaded — now LIVE on all displays.');
+          // Sync with server to replace temp row with real server ID
+          fetchFilesFromServer();
         } else {
-          // HTTP-level error (413 = file too large, 500 = server error, etc.)
-          String hint = '';
-          if (response.statusCode == 413) {
-            hint =
-                ' (File too large — contact server admin to increase upload limit)';
-          }
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text('Upload Error: HTTP ${response.statusCode}$hint'),
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 6),
-            ),
-          );
+          _markError(body['Message']?.toString() ?? 'Upload failed.');
         }
-      } finally {
-        client.close();
+      } else {
+        final hint =
+            response.statusCode == 413 ? ' (file too large)' : '';
+        _markError('HTTP ${response.statusCode}$hint');
       }
     } catch (e) {
-      debugPrint('insertFileAction error: $e');
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Upload failed: $e'),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 6),
-        ),
-      );
+      debugPrint('_runBackgroundUpload error: $e');
+      _markError(e.toString());
     } finally {
-      if (mounted) setState(() => isSubmitting = false);
+      client.close();
     }
   }
 
@@ -394,7 +494,6 @@ class _FileUploadViewState extends State<FileUploadView> {
   // API 4: UPDATE FILE (POST /fileUpdateview)
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> updateFileAction() async {
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => isSubmitting = true);
     try {
       if (!_formKey.currentState!.validate()) return;
@@ -421,22 +520,12 @@ class _FileUploadViewState extends State<FileUploadView> {
 
       if (response.statusCode == 200) {
         if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text("Record updated successfully."),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showSnackBar("Record updated successfully.");
         _resetForm();
         fetchFilesFromServer();
       }
     } catch (e) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text("Update Error."),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _showSnackBar("Update Error.");
     } finally {
       if (mounted) setState(() => isSubmitting = false);
     }
@@ -446,29 +535,74 @@ class _FileUploadViewState extends State<FileUploadView> {
   // API 5: STATUS TOGGLE (POST /fileStatusUpdateview)
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> toggleFileStatus(dynamic id, dynamic currentStatus) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final String rowKey = id?.toString() ?? '';
+
+    // Guard: ignore rapid double-taps while API call is in-flight
+    if (_pendingToggle.contains(rowKey)) return;
+
+    final int newStatus = (currentStatus == 1 || currentStatus == "1") ? 0 : 1;
+    final idx = fileList.indexWhere(
+      (e) => e['id']?.toString() == rowKey,
+    );
+
+    // ── STEP 1: Optimistic UI update — flip the switch immediately ──
+    if (mounted) {
+      setState(() {
+        _pendingToggle.add(rowKey);
+        if (idx != -1) {
+          // Update both field names the server might use
+          fileList[idx] = Map<String, dynamic>.from(fileList[idx])
+            ..['status'] = newStatus
+            ..['file_status'] = newStatus;
+        }
+      });
+    }
+
     try {
-      final int newStatus = (currentStatus == 1 || currentStatus == "1")
-          ? 0
-          : 1;
-      final response = await http.post(
-        Uri.parse('$_baseUrl/fileStatusUpdateview'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"api_key": _apiKey, "id": id, "status": newStatus}),
-      );
+      // ── STEP 2: Hit the server ──
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/fileStatusUpdateview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"api_key": _apiKey, "id": id, "status": newStatus}),
+          )
+          .timeout(const Duration(seconds: 15));
+
       if (response.statusCode == 200) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              newStatus == 1 ? "File activated." : "File deactivated.",
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
+        // ── STEP 3a: Success — keep optimistic state, show feedback ──
+        // Do NOT call fetchFilesFromServer() here: that round-trip can return
+        // stale cached data and overwrite our optimistic state (race condition).
+        _showSnackBar(
+          newStatus == 1
+              ? "✅ File activated — now live on all displays."
+              : "⏸ File deactivated — removed from live stream.",
         );
-        await fetchFilesFromServer();
+      } else {
+        // ── STEP 3b: Server rejected — rollback ──
+        debugPrint('toggleFileStatus: server returned ${response.statusCode}');
+        if (idx != -1 && mounted) {
+          setState(() {
+            fileList[idx] = Map<String, dynamic>.from(fileList[idx])
+              ..['status'] = currentStatus
+              ..['file_status'] = currentStatus;
+          });
+        }
+        _showSnackBar("Status update failed (${response.statusCode}).");
       }
     } catch (e) {
-      debugPrint("Status Shift Error: $e");
+      // ── STEP 3c: Network error — rollback ──
+      debugPrint('toggleFileStatus error: $e');
+      if (idx != -1 && mounted) {
+        setState(() {
+          fileList[idx] = Map<String, dynamic>.from(fileList[idx])
+            ..['status'] = currentStatus
+            ..['file_status'] = currentStatus;
+        });
+      }
+      _showSnackBar("Network error — status not changed.");
+    } finally {
+      // ── STEP 4: Always release the pending lock ──
+      if (mounted) setState(() => _pendingToggle.remove(rowKey));
     }
   }
 
@@ -476,8 +610,6 @@ class _FileUploadViewState extends State<FileUploadView> {
   // API 6: DELETE RECORD (POST /deleteFileview)
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> deleteFileAction(dynamic id) async {
-    final messenger = ScaffoldMessenger.of(context);
-
     // Capture the item to restore if delete fails
     final deletedItem = fileList.firstWhere(
       (item) => item['id']?.toString() == id.toString(),
@@ -501,12 +633,7 @@ class _FileUploadViewState extends State<FileUploadView> {
         body: jsonEncode({"api_key": _apiKey, "id": id}),
       );
       if (response.statusCode == 200) {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text("File deleted successfully."),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showSnackBar("File deleted successfully.");
         // Sync with server to be safe, but UI is already updated
         fetchFilesFromServer();
       } else {
@@ -516,12 +643,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             fileList.insert(deletedIndex, deletedItem);
           });
         }
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text("Delete failed."),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showSnackBar("Delete failed.");
       }
     } catch (e) {
       // Rollback if error
@@ -582,21 +704,40 @@ class _FileUploadViewState extends State<FileUploadView> {
   }
 
   void _showSnackBar(String m) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(m), behavior: SnackBarBehavior.floating),
+    // Use the stable messenger key so snackbars work even when the dialog
+    // that triggered the action has already been disposed/popped.
+    _messengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(m),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
     );
   }
 
   List<dynamic> get _filteredList {
     String query = _searchController.text.toLowerCase();
-    List<dynamic> sorted = List.from(fileList);
-    // Descending Sort (Latest First)
-    sorted.sort(
+    // Pin uploading rows (string tempId like "upload_...") and old negative-int
+    // optimistic rows to the top; sort real server rows descending by ID.
+    final uploading = fileList
+        .where((e) =>
+            e['_isUploading'] == true ||
+            e['_uploadError'] != null ||
+            (int.tryParse(e['id'].toString()) ?? 0) < 0)
+        .toList();
+    final real = fileList
+        .where((e) =>
+            e['_isUploading'] != true &&
+            e['_uploadError'] == null &&
+            (int.tryParse(e['id'].toString()) ?? 0) >= 0)
+        .toList();
+
+    real.sort(
       (a, b) => (int.tryParse(b['id'].toString()) ?? 0).compareTo(
         int.tryParse(a['id'].toString()) ?? 0,
       ),
     );
+    List<dynamic> sorted = [...uploading, ...real];
 
     if (query.isEmpty) return sorted;
     return sorted.where((item) {
@@ -1212,64 +1353,69 @@ class _FileUploadViewState extends State<FileUploadView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SelectionArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const AnimatedHeading(
-                    text: "Uploaded Files List",
-                    style: TextStyle(
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 22,
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      _resetForm();
-                      _showUploadDialog();
-                    },
-                    icon: const Icon(Icons.cloud_upload_rounded, size: 20),
-                    label: const Text(
-                      "UPLOAD FILE",
+    // ScaffoldMessenger with a stable key ensures snackbars can be shown
+    // safely from async callbacks even after dialogs have been popped.
+    return ScaffoldMessenger(
+      key: _messengerKey,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SelectionArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const AnimatedHeading(
+                      text: "Uploaded Files List",
                       style: TextStyle(
+                        color: Colors.blue,
                         fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                        fontSize: 22,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Repository List Card
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        _resetForm();
+                        _showUploadDialog();
+                      },
+                      icon: const Icon(Icons.cloud_upload_rounded, size: 20),
+                      label: const Text(
+                        "UPLOAD FILE",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
-                    ],
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: _buildTableCard(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Repository List Card
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: _buildTableCard(),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1413,6 +1559,131 @@ class _FileUploadViewState extends State<FileUploadView> {
   }
 
   DataRow _getRow(dynamic item) {
+    final String tempId = item['id']?.toString() ?? '';
+    final bool isUploading = item['_isUploading'] == true;
+    final bool hasError = item['_uploadError'] != null;
+    final _UploadTask? task = _uploadTasks[tempId];
+    final double progress = task?.progress ?? 0.0;
+
+    // ── Uploading row: show progress bar instead of normal content ──
+    if (isUploading || hasError) {
+      final String errorMsg = item['_uploadError']?.toString() ?? '';
+      return DataRow(
+        color: WidgetStateProperty.all(
+          hasError
+              ? Colors.red.shade50
+              : Colors.blue.shade50,
+        ),
+        cells: [
+          // ID cell — shows status text
+          DataCell(
+            Text(
+              hasError ? 'Error' : 'Uploading…',
+              style: TextStyle(
+                color: hasError ? Colors.red : Colors.blue.shade700,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          // IMG/VID cell — spinner or error icon
+          DataCell(
+            Container(
+              width: 60,
+              height: 60,
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: hasError ? Colors.red.shade200 : Colors.blue.shade200,
+                ),
+                color: hasError ? Colors.red.shade50 : Colors.blue.shade50,
+              ),
+              child: hasError
+                  ? const Icon(Icons.error_outline, color: Colors.red, size: 24)
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.cloud_upload_outlined,
+                            color: Colors.blue, size: 20),
+                        const SizedBox(height: 4),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: LinearProgressIndicator(
+                            value: progress > 0 ? progress : null,
+                            backgroundColor: Colors.blue.shade100,
+                            color: Colors.blue.shade600,
+                            minHeight: 3,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+          // Filename
+          DataCell(Text(
+            item['user_filename'] ?? '-',
+            style: const TextStyle(
+                color: Colors.black87, fontSize: 12, fontWeight: FontWeight.w600),
+          )),
+          // Description
+          DataCell(Text(
+            item['description'] ?? '-',
+            style: const TextStyle(color: Colors.black54, fontSize: 12),
+          )),
+          // Type
+          DataCell(Text(
+            item['type'] ?? '-',
+            style: const TextStyle(color: Colors.black54, fontSize: 12),
+          )),
+          // Valid From
+          DataCell(Text(
+            item['valid_from_date'] ?? '-',
+            style: const TextStyle(color: Colors.black54, fontSize: 12),
+          )),
+          // Valid Upto
+          DataCell(Text(
+            item['valid_upto_date'] ?? '-',
+            style: const TextStyle(color: Colors.black54, fontSize: 12),
+          )),
+          // Status — progress % or error
+          DataCell(
+            hasError
+                ? Tooltip(
+                    message: errorMsg,
+                    child: const Icon(Icons.warning_amber_rounded,
+                        color: Colors.red, size: 20),
+                  )
+                : Text(
+                    progress > 0
+                        ? '${(progress * 100).toStringAsFixed(0)}%'
+                        : 'Queued',
+                    style: TextStyle(
+                      color: Colors.blue.shade700,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+          ),
+          // Delete — disabled while uploading, enabled on error
+          DataCell(
+            hasError
+                ? IconButton(
+                    icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                    onPressed: () {
+                      setState(() {
+                        fileList.removeWhere(
+                            (e) => e['id']?.toString() == tempId);
+                        _uploadTasks.remove(tempId);
+                      });
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      );
+    }
+
+    // ── Normal row ──────────────────────────────────────────────────────────
     final String? fileName = item['file_name']?.toString().trim();
     final bool isVideo = _isVideoFile(fileName);
     // Image URL: https://display.sriher.com/uploads/{file_name}
@@ -1504,15 +1775,46 @@ class _FileUploadViewState extends State<FileUploadView> {
           ),
         ),
         DataCell(
-          Transform.scale(
-            scale: 0.7,
-            child: Switch(
-              value: item['file_status'] == 1 || item['file_status'] == "1",
-              activeColor: Colors.green,
-              onChanged: (v) =>
-                  toggleFileStatus(item['id'], item['file_status']),
-            ),
-          ),
+          Builder(builder: (context) {
+            final String rowKey = item['id']?.toString() ?? '';
+            final bool isPending = _pendingToggle.contains(rowKey);
+            final bool isActive =
+                item['file_status'] == 1 ||
+                item['file_status'] == "1" ||
+                item['status'] == 1 ||
+                item['status'] == "1";
+            return SizedBox(
+              width: 46,
+              height: 28,
+              child: isPending
+                  // While API call is in-flight show a tiny spinner
+                  ? Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isActive ? Colors.green : Colors.grey,
+                          ),
+                        ),
+                      ),
+                    )
+                  : Transform.scale(
+                      scale: 0.8,
+                      child: Switch(
+                        value: isActive,
+                        activeColor: Colors.green,
+                        inactiveThumbColor: Colors.grey.shade400,
+                        inactiveTrackColor: Colors.grey.shade300,
+                        onChanged: (_) => toggleFileStatus(
+                          item['id'],
+                          item['file_status'] ?? item['status'],
+                        ),
+                      ),
+                    ),
+            );
+          }),
         ),
         DataCell(
           IconButton(
