@@ -213,9 +213,10 @@ void _showLocationDialog() {
       width: MediaQuery.of(context).size.width * 0.4,
       child: Form(
         key: _formKey,
-        autovalidateMode: AutovalidateMode.disabled, // ← disabled by default
+        autovalidateMode: AutovalidateMode.disabled,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildSmallTextField(
               'Building/Area Name',
@@ -235,7 +236,7 @@ void _showLocationDialog() {
             const SizedBox(height: 20),
             _buildSmallTextField(
               'Sub Location Name',
-              _subLocationController,
+              _subLocationController, 
               validator: (v) => (v == null || v.isEmpty)
                   ? 'Please enter the Sub Location Name'
                   : null,

@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
+import '../../widgets/video_thumbnail.dart';
 
 class SelectTemplateView extends StatefulWidget {
   const SelectTemplateView({super.key});
@@ -182,22 +183,89 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (mounted) {
+          final files = List<dynamic>.from(data['data'] ?? []);
           setState(() {
-            availableFiles = data['data'] ?? [];
-            // Clear old controllers
-            for (var c in _availableFileControllers.values) {
-              c.dispose();
-            }
+            availableFiles = files;
+            for (var c in _availableFileControllers.values) c.dispose();
             _availableFileControllers.clear();
           });
         }
       }
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("_fetchAvailableFiles error: $e");
     } finally {
       if (mounted) setState(() => isLoadingAvailableFiles = false);
     }
+
+    // After loading template-specific files (status=0), also pull in
+    // LIVE (status=1) video files from the global file list so that
+    // videos toggled ON as "live" in File Upload also appear here.
+    await _fetchAndMergeLiveVideos();
   }
+
+  /// Fetches all uploaded files, extracts the ones marked as LIVE (status=1)
+  /// or belonging to the selected department/category, and merges them into [availableFiles].
+  Future<void> _fetchAndMergeLiveVideos() async {
+    if (!mounted) return;
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/fileview'),
+        body: jsonEncode({"api_key": _apiKey}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (response.statusCode != 200) return;
+      final data = jsonDecode(response.body);
+      if ((data['status']?.toString() ?? '') != 'Success') return;
+
+      final allFiles = List<dynamic>.from(data['data'] ?? []);
+
+      // IDs already in the available list (to avoid duplicates)
+      final existingIds =
+          availableFiles.map((f) => f['id']?.toString() ?? '').toSet();
+
+      final matchingVideos = allFiles.where((f) {
+        // Skip if already in the list
+        if (existingIds.contains(f['id']?.toString() ?? '')) return false;
+
+        // Only video files
+        final type = f['file_type']?.toString().toLowerCase() ?? '';
+        final fmt  = f['file_format']?.toString().toLowerCase() ?? '';
+        final name = f['file_name']?.toString().toLowerCase() ?? '';
+        final isVideo = type.contains('video') ||
+            type == 'mp4' || type == 'avi' || type == 'mov' ||
+            type == 'mkv' || type == 'webm' || type == 'vinci' ||
+            type == 'live' ||
+            fmt.contains('video') ||
+            name.endsWith('.mp4') || name.endsWith('.avi') ||
+            name.endsWith('.mov') || name.endsWith('.mkv') ||
+            name.endsWith('.webm');
+        if (!isVideo) return false;
+
+        // Either it belongs to the selected department (category_id)
+        // OR it is set as LIVE (status = 1)
+        final fileCatId = int.tryParse(f['category_id']?.toString() ?? '');
+        final status = f['file_status']?.toString() ?? f['status']?.toString() ?? '0';
+        final isLive = (status == '1');
+
+        return (fileCatId == selectedCategoryId) || isLive;
+      }).map((f) {
+        final status = f['file_status']?.toString() ?? f['status']?.toString() ?? '0';
+        final isLive = (status == '1');
+        return Map<String, dynamic>.from(f)..['_isLive'] = isLive;
+      }).toList();
+
+      if (mounted && matchingVideos.isNotEmpty) {
+        setState(() => availableFiles = [...availableFiles, ...matchingVideos]);
+      }
+
+      debugPrint(
+        '[LiveVideos] merged ${matchingVideos.length} matching video(s) into available files'
+      );
+    } catch (e) {
+      debugPrint("_fetchAndMergeLiveVideos error: $e");
+    }
+  }
+
 
   Future<void> _fetchAssignedFiles() async {
     if (selectedTemplateId == null) return;
@@ -566,23 +634,46 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     final filteredFiles = availableFiles.where((f) {
       final type = f['file_type']?.toString().toLowerCase() ?? '';
       final name = f['file_name']?.toString().toLowerCase() ?? '';
+      final format = f['file_format']?.toString().toLowerCase() ?? '';
       if (fileType == null) return false;
+
       if (fileType == 'images') {
+        // Images: standard image types only
         return type.contains('image') ||
             type == 'png' ||
             type == 'jpg' ||
             type == 'jpeg' ||
+            type == 'webp' ||
             name.endsWith('.png') ||
             name.endsWith('.jpg') ||
             name.endsWith('.jpeg') ||
-            name.endsWith('.webp');
+            name.endsWith('.webp') ||
+            format.contains('image');
       } else {
-        return type.contains('video') ||
+        // Videos: include standard video types AND live/vinci types.
+        // The server stores live-enabled videos as file_type="vinci" or "live".
+        final isStandardVideo =
+            type.contains('video') ||
             type == 'mp4' ||
+            type == 'avi' ||
+            type == 'mov' ||
+            type == 'mkv' ||
+            type == 'webm' ||
             name.endsWith('.mp4') ||
             name.endsWith('.avi') ||
             name.endsWith('.mov') ||
-            name.endsWith('.mkv');
+            name.endsWith('.mkv') ||
+            name.endsWith('.webm') ||
+            format.contains('video');
+
+        // Live videos toggled ON in File Upload get type "vinci" or "live".
+        final isLiveVideo =
+            type == 'vinci' ||
+            type == 'live' ||
+            type.contains('vinci') ||
+            type.contains('live');
+
+        return isStandardVideo || isLiveVideo;
       }
     }).toList();
 
@@ -655,6 +746,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   itemBuilder: (c, i) {
                     final file = filteredFiles[i];
                     final fileId = int.tryParse(file['id'].toString()) ?? 0;
+                    final bool isLive = file['_isLive'] == true ||
+                        (file['file_status']?.toString() ??
+                                file['status']?.toString() ?? '0') ==
+                            '1';
+                    final bool isVideo = _isFileVideo(file);
 
                     if (!_availableFileControllers.containsKey(fileId)) {
                       final rawDuration =
@@ -673,119 +769,180 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                         vertical: 12,
                         horizontal: 15,
                       ),
-                      child: Row(
+                      // Tint the row green for live files so they stand out.
+                      color: isLive
+                          ? Colors.green.shade50
+                          : null,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Expanded(
-                            flex: 2,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                width: 75,
-                                height: 75,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.grey.shade200,
+                          if (isLive)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade600,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.wifi_tethering,
+                                            color: Colors.white, size: 12),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'LIVE',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'This video is set as Live — add it to play on displays',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.green,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    width: isVideo ? 120 : 75,
+                                    height: 75,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: isLive
+                                            ? Colors.green.shade300
+                                            : Colors.grey.shade200,
+                                      ),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: _buildFilePreview(file),
                                   ),
                                 ),
-                                clipBehavior: Clip.antiAlias,
-                                child: _buildFilePreview(file),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 4,
-                            child: Text(
-                              file['user_filename'] ?? file['file_name'] ?? '',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 2,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: SizedBox(
-                                width: 65,
-                                height: 34,
-                                child: TextFormField(
-                                  controller: controller,
-                                  textAlign: TextAlign.center,
+
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 4,
+                                child: Text(
+                                  file['user_filename'] ??
+                                      file['file_name'] ?? '',
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
                                   ),
-                                  decoration: InputDecoration(
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 8,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.zero,
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.zero,
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.zero,
-                                      borderSide: const BorderSide(
-                                        color: Colors.blue,
-                                      ),
-                                    ),
-                                  ),
-                                  readOnly: true,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 2,
-                            child: Center(
-                              child: ElevatedButton(
-                                onPressed: () => _assignFile(
-                                  fileId, 
-                                  controller.text, 
-                                  file['user_filename'] ?? file['file_name'] ?? 'File',
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue.shade600,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 10,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                child: const Text(
-                                  "Add",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: SizedBox(
+                                    width: 65,
+                                    height: 34,
+                                    child: TextFormField(
+                                      controller: controller,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 8,
+                                        ),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.zero,
+                                          borderSide: BorderSide(
+                                            color: Colors.grey.shade300,
+                                          ),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.zero,
+                                          borderSide: BorderSide(
+                                            color: Colors.grey.shade300,
+                                          ),
+                                        ),
+                                        focusedBorder: const OutlineInputBorder(
+                                          borderRadius: BorderRadius.zero,
+                                          borderSide: BorderSide(
+                                            color: Colors.blue,
+                                          ),
+                                        ),
+                                      ),
+                                      readOnly: true,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: Center(
+                                  child: ElevatedButton(
+                                    onPressed: () => _assignFile(
+                                      fileId,
+                                      controller.text,
+                                      file['user_filename'] ??
+                                          file['file_name'] ??
+                                          'File',
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isLive
+                                          ? Colors.green.shade600
+                                          : Colors.blue.shade600,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                        vertical: 10,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      "Add",
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ], // end inner Row children
+                          ),   // end inner Row
+                        ],     // end Column children
+                      ),       // end Column
+                    );         // end Container
                   },
                 ),
             ],
@@ -795,7 +952,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     );
   }
 
-  Widget _buildFilePreview(dynamic file) {
+  bool _isFileVideo(dynamic file) {
+    if (file == null) return false;
     String fileName = file['file_name'] ?? '';
     String userFileName = file['user_filename'] ?? '';
     String fType = file['file_type']?.toString().toLowerCase() ?? '';
@@ -803,26 +961,43 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     String lowerName = fileName.toLowerCase();
     String lowerUser = userFileName.toLowerCase();
 
-    bool isVideo =
-        lowerName.endsWith('.mp4') ||
+    return lowerName.endsWith('.mp4') ||
         lowerName.endsWith('.avi') ||
         lowerName.endsWith('.mov') ||
         lowerName.endsWith('.mkv') ||
+        lowerName.endsWith('.webm') ||
         lowerUser.endsWith('.mp4') ||
         lowerUser.endsWith('.avi') ||
+        lowerUser.endsWith('.mov') ||
+        lowerUser.endsWith('.mkv') ||
+        lowerUser.endsWith('.webm') ||
         fType.contains('video') ||
         fType == 'mp4' ||
         fType == 'avi' ||
         fType == 'mov' ||
         fType == 'mkv' ||
+        fType == 'webm' ||
+        fType == 'vinci' ||
+        fType == 'live' ||
+        fType.contains('vinci') ||
+        fType.contains('live') ||
         fFormat.contains('video');
+  }
+
+  Widget _buildFilePreview(dynamic file) {
+    String fileName = file['file_name'] ?? '';
+    String userFileName = file['user_filename'] ?? '';
+    bool isVideo = _isFileVideo(file);
 
     // Build URL: only encode the filename part, not the whole URL
     final encodedName = Uri.encodeFull(fileName);
     final fileUrl = '$_baseUrl/uploads/$encodedName';
 
     if (isVideo) {
-      return VideoThumbnail(url: fileUrl);
+      return VideoThumbnail(
+        url: fileUrl,
+        title: userFileName.isNotEmpty ? userFileName : fileName,
+      );
     } else {
       return Image.network(
         fileUrl,
@@ -873,15 +1048,18 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                         const SizedBox(width: 12),
                         Expanded(
                           flex: 2,
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade200),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              width: _isFileVideo(file) ? 100 : 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: _buildFilePreview(file),
                             ),
-                            clipBehavior: Clip.antiAlias,
-                            child: _buildFilePreview(file),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -1519,110 +1697,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           ),
         );
       },
-    );
-  }
-}
-
-class VideoThumbnail extends StatefulWidget {
-  final String url;
-  const VideoThumbnail({super.key, required this.url});
-
-  @override
-  State<VideoThumbnail> createState() => _VideoThumbnailState();
-}
-
-class _VideoThumbnailState extends State<VideoThumbnail> {
-  Player? _player;
-  VideoController? _controller;
-  bool _isPlaying = false;
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  void _togglePlay() {
-    if (!_initialized) {
-      final player = Player();
-      final controller = VideoController(player);
-
-      // Let mpv auto-select the best decoder for the platform.
-      // 'auto' enables VAAPI/VDPAU on Linux, VideoToolbox on macOS.
-      if (!kIsWeb && player.platform is NativePlayer) {
-        (player.platform as dynamic).setProperty('hwdec', 'auto');
-        (player.platform as dynamic).setProperty('cache', 'yes');
-        (player.platform as dynamic).setProperty(
-          'demuxer-max-bytes',
-          '10000000',
-        );
-      }
-
-      player.open(Media(widget.url), play: true);
-
-      player.stream.playing.listen((playing) {
-        if (mounted) setState(() => _isPlaying = playing);
-      });
-
-      setState(() {
-        _player = player;
-        _controller = controller;
-        _isPlaying = true;
-        _initialized = true;
-      });
-    } else {
-      _player?.playOrPause();
-    }
-  }
-
-  @override
-  void dispose() {
-    _player?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _togglePlay,
-      child: Stack(
-        fit: StackFit.expand,
-        alignment: Alignment.center,
-        children: [
-          Container(color: Colors.black),
-          if (_initialized && _controller != null)
-            SizedBox.expand(
-              child: Video(
-                controller: _controller!,
-                controls: NoVideoControls,
-                fit: BoxFit.cover,
-                fill: Colors.black,
-              ),
-            ),
-          if (!_initialized)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: Icon(
-                  Icons.play_circle_fill,
-                  color: Colors.white,
-                  size: 32,
-                ),
-              ),
-            ),
-          if (_initialized && _isPlaying)
-            Container(
-              color: Colors.transparent,
-              child: const Center(
-                child: Icon(
-                  Icons.pause_circle_filled,
-                  color: Colors.white54,
-                  size: 28,
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

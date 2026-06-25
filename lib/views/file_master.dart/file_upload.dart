@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:file_picker/file_picker.dart';
@@ -10,7 +10,7 @@ import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
 import '../../api_config.dart';
 import '../../widgets/web_compat_image.dart';
-import '../../widgets/web_video_thumbnail.dart';
+import '../../widgets/video_thumbnail.dart';
 
 /// Tracks a single in-flight background upload.
 class _UploadTask {
@@ -162,12 +162,12 @@ class _FileUploadViewState extends State<FileUploadView> {
         body: jsonEncode({"api_key": _apiKey, "category_name": name}),
       );
       if (response.statusCode == 200) {
-        _showSnackBar("Department '$name' created.");
+        _showSnackBar("Department '$name' created.", isSuccess: true);
         _newDeptController.clear();
         await fetchDepartments();
       }
     } catch (e) {
-      _showSnackBar("Failed to create department.");
+      _showSnackBar("Failed to create department.", isError: true);
     }
   }
 
@@ -189,7 +189,17 @@ class _FileUploadViewState extends State<FileUploadView> {
         final Map<String, dynamic> decoded = jsonDecode(response.body);
         if ((decoded['status']?.toString() ?? '') == 'Success') {
           final List<dynamic> data = decoded['data'] ?? [];
-          if (mounted) setState(() => fileList = data);
+          if (mounted) {
+            setState(() {
+              // Keep any in-flight upload rows pinned at the top;
+              // replace only real (non-temp) server rows.
+              final inFlight = fileList
+                  .where((e) =>
+                      e['_isUploading'] == true || e['_uploadError'] != null)
+                  .toList();
+              fileList = [...inFlight, ...data];
+            });
+          }
         }
       }
     } catch (e) {
@@ -199,6 +209,59 @@ class _FileUploadViewState extends State<FileUploadView> {
       if (mounted) setState(() => isLoading = false);
     }
   }
+
+  /// Silent background refresh after a successful upload.
+  /// Does NOT set isLoading=true so the table stays stable.
+  /// Merges newly-arrived server rows at the top without wiping in-flight rows.
+  Future<void> _silentRefresh({String? targetFileNameToSetLive}) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/fileview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"api_key": _apiKey}),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> decoded = jsonDecode(response.body);
+        if ((decoded['status']?.toString() ?? '') == 'Success') {
+          final List<dynamic> freshData = decoded['data'] ?? [];
+          if (mounted) {
+            setState(() {
+              // Keep any rows that are still uploading or errored;
+              // replace everything else with fresh server data.
+              final inFlight = fileList
+                  .where((e) =>
+                      e['_isUploading'] == true || e['_uploadError'] != null)
+                  .toList();
+              fileList = [...inFlight, ...freshData];
+            });
+
+            if (targetFileNameToSetLive != null) {
+              final matchedFile = freshData.firstWhere(
+                (f) => f['file_name']?.toString() == targetFileNameToSetLive,
+                orElse: () => null,
+              );
+              if (matchedFile != null) {
+                final matchedId = matchedFile['id'];
+                final currentStatus = matchedFile['status'] ?? matchedFile['file_status'] ?? 0;
+                if (currentStatus == 0 || currentStatus == "0") {
+                  // Set it to live (1) at the start itself
+                  toggleFileStatus(matchedId, 0);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('_silentRefresh error: $e');
+      // Silent — do not show any snackbar on background refresh failure.
+    }
+  }
+
+
 
   // ──────────────────────────────────────────────────────────────────────────
   // API 2: INSERT FILE — instant dialog dismiss + background streaming upload
@@ -307,19 +370,28 @@ class _FileUploadViewState extends State<FileUploadView> {
     }
 
     void _markError(String msg) {
-      if (!mounted) return;
-      setState(() {
-        _uploadTasks[tempId]
-          ?..hasError = true
-          ..errorMessage = msg;
-        // Mark the row itself as errored so _getRow can show red UI
-        final idx = fileList.indexWhere((e) => e['id']?.toString() == tempId);
-        if (idx != -1) {
-          fileList[idx] = Map<String, dynamic>.from(fileList[idx])
-            ..['_uploadError'] = msg;
-        }
-      });
-      _showSnackBar('Upload failed: $msg');
+      // Guard against calling setState on a defunct/unmounted widget
+      // (can happen with long video uploads if user navigates away)
+      if (!mounted) {
+        debugPrint('_markError skipped (not mounted): $msg');
+        return;
+      }
+      try {
+        setState(() {
+          _uploadTasks[tempId]
+            ?..hasError = true
+            ..errorMessage = msg;
+          // Mark the row itself as errored so _getRow can show red UI
+          final idx = fileList.indexWhere((e) => e['id']?.toString() == tempId);
+          if (idx != -1) {
+            fileList[idx] = Map<String, dynamic>.from(fileList[idx])
+              ..['_uploadError'] = msg;
+          }
+        });
+        _showSnackBar('Upload failed: $msg', isError: true);
+      } catch (e) {
+        debugPrint('_markError setState failed: $e');
+      }
     }
 
     final client = http.Client();
@@ -365,62 +437,98 @@ class _FileUploadViewState extends State<FileUploadView> {
         return;
       }
 
-      // ── Stream the request so we can track bytes sent ──
+      // ── Send the request and collect the response ──
+      // Note: the http package does not expose per-chunk upload progress;
+      // the progress indicator stays indeterminate (null value) while uploading.
       final streamedResponse = await client
           .send(request)
           .timeout(const Duration(minutes: 15));
 
-      final int totalBytes = streamedResponse.contentLength ?? 0;
-      int receivedBytes = 0;
       final List<int> responseBytes = [];
-
       await for (final chunk in streamedResponse.stream) {
         responseBytes.addAll(chunk);
-        receivedBytes += chunk.length;
-        if (totalBytes > 0 && mounted) {
-          setState(() {
-            _uploadTasks[tempId]?.progress =
-                (receivedBytes / totalBytes).clamp(0.0, 1.0);
-          });
-        }
       }
 
-      final response = http.Response(
-        String.fromCharCodes(responseBytes),
-        streamedResponse.statusCode,
-      );
+      // Use utf8.decode for safe multi-byte character handling in JSON
+      final String responseBody = utf8.decode(responseBytes, allowMalformed: true);
 
       debugPrint(
-        'Insert response [${response.statusCode}]: ${response.body}',
+        'Insert response [${streamedResponse.statusCode}]: $responseBody',
       );
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> body = jsonDecode(response.body);
-        if ((body['status']?.toString() ?? '').toLowerCase() == 'success') {
-          // ── Promote optimistic row to live-green ──
+      if (streamedResponse.statusCode == 200) {
+        Map<String, dynamic> body = {};
+        try {
+          body = jsonDecode(responseBody) as Map<String, dynamic>;
+        } catch (jsonErr) {
+          debugPrint('JSON parse error: $jsonErr  raw: $responseBody');
+          _markError('Server returned invalid JSON.');
+          return;
+        }
+
+        // ── Determine success: the server may return the status in two places:
+        //   1. Top-level:    {"status": "Success", ...}
+        //   2. Inside data:  {"data": {"status": "uploaded", ...}}
+        // Both are treated as success.
+        final String topStatus =
+            (body['status']?.toString() ?? '').toLowerCase();
+        final dynamic dataObj = body['data'];
+        final String dataStatus = (dataObj is Map)
+            ? (dataObj['status']?.toString() ?? '').toLowerCase()
+            : '';
+
+        final bool isSuccess = topStatus == 'success' ||
+            topStatus == 'uploaded' ||
+            dataStatus == 'success' ||
+            dataStatus == 'uploaded';
+
+        if (isSuccess) {
+          // ── STEP 1: Promote the temp row to a green "completed" state INSTANTLY
+          //    so the user sees it turn green immediately, not disappear suddenly.
           if (mounted) {
-            setState(() {
-              final idx =
-                  fileList.indexWhere((e) => e['id']?.toString() == tempId);
-              if (idx != -1) {
-                fileList[idx] = Map<String, dynamic>.from(fileList[idx])
-                  ..['_isUploading'] = false
-                  ..['file_status'] = 1
-                  ..['status'] = 1;
-              }
-              _uploadTasks.remove(tempId);
-            });
+            try {
+              setState(() {
+                final idx =
+                    fileList.indexWhere((e) => e['id']?.toString() == tempId);
+                if (idx != -1) {
+                  fileList[idx] = Map<String, dynamic>.from(fileList[idx])
+                    ..['_isUploading'] = false
+                    ..['_uploadError'] = null
+                    ..['file_status'] = 1
+                    ..['status'] = 1;
+                }
+                _uploadTasks.remove(tempId);
+              });
+            } catch (e) {
+              debugPrint('setState after upload failed: $e');
+            }
           }
-          _showSnackBar('✅ "$uploadName" uploaded — now LIVE on all displays.');
-          // Sync with server to replace temp row with real server ID
-          fetchFilesFromServer();
+
+          // ── STEP 2: Show success snackbar immediately ──
+          final isVideo = ['mp4', 'mov', 'avi', 'mkv', 'webm']
+              .contains(extension.toLowerCase());
+          final mediaType = isVideo ? 'Video' : 'Image';
+          _showSnackBar('✅ $mediaType uploaded successfully!', isSuccess: true);
+
+          // ── STEP 3: Silent background refresh — replaces temp row with the
+          //    real server row (with actual ID) without showing a loading spinner.
+          String? serverFileName;
+          if (dataObj is Map && dataObj['original_path'] != null) {
+            final String pathStr = dataObj['original_path'].toString();
+            serverFileName = pathStr.split('/').last;
+          }
+          _silentRefresh(targetFileNameToSetLive: isVideo ? serverFileName : null);
+
         } else {
-          _markError(body['Message']?.toString() ?? 'Upload failed.');
+          _markError(body['Message']?.toString() ??
+              body['message']?.toString() ??
+              (dataObj is Map ? dataObj['message']?.toString() : null) ??
+              'Upload failed.');
         }
       } else {
         final hint =
-            response.statusCode == 413 ? ' (file too large)' : '';
-        _markError('HTTP ${response.statusCode}$hint');
+            streamedResponse.statusCode == 413 ? ' (file too large)' : '';
+        _markError('HTTP ${streamedResponse.statusCode}$hint');
       }
     } catch (e) {
       debugPrint('_runBackgroundUpload error: $e');
@@ -520,12 +628,12 @@ class _FileUploadViewState extends State<FileUploadView> {
 
       if (response.statusCode == 200) {
         if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-        _showSnackBar("Record updated successfully.");
+        _showSnackBar("Record updated successfully.", isSuccess: true);
         _resetForm();
         fetchFilesFromServer();
       }
     } catch (e) {
-      _showSnackBar("Update Error.");
+      _showSnackBar("Update Error.", isError: true);
     } finally {
       if (mounted) setState(() => isSubmitting = false);
     }
@@ -633,7 +741,7 @@ class _FileUploadViewState extends State<FileUploadView> {
         body: jsonEncode({"api_key": _apiKey, "id": id}),
       );
       if (response.statusCode == 200) {
-        _showSnackBar("File deleted successfully.");
+        _showSnackBar("File deleted successfully.", isSuccess: true);
         // Sync with server to be safe, but UI is already updated
         fetchFilesFromServer();
       } else {
@@ -643,7 +751,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             fileList.insert(deletedIndex, deletedItem);
           });
         }
-        _showSnackBar("Delete failed.");
+        _showSnackBar("Delete failed.", isError: true);
       }
     } catch (e) {
       // Rollback if error
@@ -652,7 +760,7 @@ class _FileUploadViewState extends State<FileUploadView> {
           fileList.insert(deletedIndex, deletedItem);
         });
       }
-      _showSnackBar("Delete Protocol Failed.");
+      _showSnackBar("Delete Protocol Failed.", isError: true);
     }
   }
 
@@ -703,16 +811,36 @@ class _FileUploadViewState extends State<FileUploadView> {
     }
   }
 
-  void _showSnackBar(String m) {
+  void _showSnackBar(String m, {bool isSuccess = false, bool isError = false}) {
     // Use the stable messenger key so snackbars work even when the dialog
     // that triggered the action has already been disposed/popped.
-    _messengerKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text(m),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
-      ),
-    );
+    _messengerKey.currentState
+      ?..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              if (isSuccess)
+                const Icon(Icons.check_circle_outline, color: Colors.white, size: 18)
+              else if (isError)
+                const Icon(Icons.error_outline, color: Colors.white, size: 18)
+              else
+                const Icon(Icons.info_outline, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text(m, style: const TextStyle(fontSize: 13))),
+            ],
+          ),
+          backgroundColor: isSuccess
+              ? const Color(0xFF16A34A)
+              : isError
+                  ? const Color(0xFFDC2626)
+                  : const Color(0xFF1E40AF),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          margin: const EdgeInsets.all(16),
+          duration: Duration(seconds: isError ? 6 : 4),
+        ),
+      );
   }
 
   List<dynamic> get _filteredList {
@@ -1565,6 +1693,11 @@ class _FileUploadViewState extends State<FileUploadView> {
     final _UploadTask? task = _uploadTasks[tempId];
     final double progress = task?.progress ?? 0.0;
 
+    final String? fileNameForCheck = item['file_name']?.toString() ?? item['user_filename']?.toString();
+    final String fileTypeForCheck = item['file_type']?.toString().toLowerCase() ?? '';
+    final bool isVideo = _isVideoFile(fileNameForCheck) ||
+        ['mp4', 'mov', 'avi', 'mkv', 'webm', 'vinci', 'live'].contains(fileTypeForCheck);
+
     // ── Uploading row: show progress bar instead of normal content ──
     if (isUploading || hasError) {
       final String errorMsg = item['_uploadError']?.toString() ?? '';
@@ -1589,7 +1722,7 @@ class _FileUploadViewState extends State<FileUploadView> {
           // IMG/VID cell — spinner or error icon
           DataCell(
             Container(
-              width: 60,
+              width: isVideo ? 100 : 60,
               height: 60,
               margin: const EdgeInsets.symmetric(vertical: 6),
               decoration: BoxDecoration(
@@ -1685,7 +1818,6 @@ class _FileUploadViewState extends State<FileUploadView> {
 
     // ── Normal row ──────────────────────────────────────────────────────────
     final String? fileName = item['file_name']?.toString().trim();
-    final bool isVideo = _isVideoFile(fileName);
     // Image URL: https://display.sriher.com/uploads/{file_name}
     final String imageUrl = '$_baseUrl/uploads/$fileName';
 
@@ -1698,31 +1830,34 @@ class _FileUploadViewState extends State<FileUploadView> {
           ),
         ),
         DataCell(
-          Container(
-            width: 60,
-            height: 60,
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade200),
-              color: Colors.grey.shade100,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              width: isVideo ? 100 : 60,
+              height: 60,
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade200),
+                color: Colors.grey.shade100,
+              ),
+              child: fileName != null && fileName.isNotEmpty
+                  ? isVideo
+                        // ── Video: show first-frame thumbnail ──
+                        ? VideoThumbnail(
+                            url: imageUrl,
+                            title: item['user_filename'] ?? item['file_name'] ?? 'Video Preview',
+                          )
+                        // ── Image: load thumbnail via WebCompatImage (CORS-safe for Chrome) ──
+                        : WebCompatImage(
+                            url: imageUrl,
+                            fit: BoxFit.cover,
+                          )
+                  : const Icon(
+                      Icons.image_not_supported_rounded,
+                      size: 22,
+                      color: Colors.grey,
+                    ),
             ),
-            child: fileName != null && fileName.isNotEmpty
-                ? isVideo
-                      // ── Video: show first-frame thumbnail ──
-                      ? WebVideoThumbnail(
-                          url: imageUrl,
-                          fit: BoxFit.cover,
-                        )
-                      // ── Image: load thumbnail via WebCompatImage (CORS-safe for Chrome) ──
-                      : WebCompatImage(
-                          url: imageUrl,
-                          fit: BoxFit.cover,
-                        )
-                : const Icon(
-                    Icons.image_not_supported_rounded,
-                    size: 22,
-                    color: Colors.grey,
-                  ),
           ),
         ),
         DataCell(

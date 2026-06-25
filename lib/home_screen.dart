@@ -121,44 +121,60 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: Row(
-        children: [
-          // Sidebar
-          SlideTransition(
-            position: _sidebarSlide,
-            child: FadeTransition(
-              opacity: _sidebarFade,
-              child: _buildSidebar(theme),
-            ),
-          ),
-
-          // Main Content
-          Expanded(
-            child: Column(
+      // ClipRect at the Scaffold body level prevents ANY yellow/black overflow
+      // stripes from leaking into view, no matter how small the window is.
+      body: ClipRect(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Below 700 px wide the sidebar is hidden to avoid overflow.
+            final showSidebar = constraints.maxWidth >= 700;
+            return Row(
               children: [
-                _buildHeader(theme),
-                Expanded(
-                  child: FadeTransition(
-                    opacity: _viewFade,
-                    child: SlideTransition(
-                      position: _viewSlide,
-                      child: Container(
-                        margin: const EdgeInsets.fromLTRB(0, 0, 24, 24),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.4),
-                          borderRadius: BorderRadius.circular(32),
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: _getSelectedView(),
-                      ),
+                // Sidebar (conditionally shown)
+                if (showSidebar)
+                  SlideTransition(
+                    position: _sidebarSlide,
+                    child: FadeTransition(
+                      opacity: _sidebarFade,
+                      child: _buildSidebar(theme),
                     ),
+                  ),
+
+                // Main Content
+                Expanded(
+                  child: Column(
+                    children: [
+                      _buildHeader(theme, showSidebar: showSidebar),
+                      Expanded(
+                        child: FadeTransition(
+                          opacity: _viewFade,
+                          child: SlideTransition(
+                            position: _viewSlide,
+                            child: Container(
+                              margin: EdgeInsets.fromLTRB(
+                                0, 0,
+                                showSidebar ? 24 : 12,
+                                showSidebar ? 24 : 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(32),
+                                border: Border.all(
+                                    color: Colors.white, width: 2),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: _getSelectedView(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -168,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       width: 260,
       margin: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A), // Sl  color: const Color(0xFF0F172A),ate 900
+        color: const Color(0xFF0F172A),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
@@ -178,166 +194,168 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ],
       ),
-      child: Column(
-        children: [
-          // Sidebar Logo
-          Padding(
-            padding: const EdgeInsets.all(32.0),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    height: 24,
-                    width: 24,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.display_settings_rounded,
-                      color: Colors.white,
-                      size: 20,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Column(
+          children: [
+            // Sidebar Logo
+            Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      height: 24,
+                      width: 24,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.display_settings_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  "SRIHER",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
-                    letterSpacing: 1.2,
+                  const SizedBox(width: 12),
+                  const Text(
+                    "SRIHER",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                      letterSpacing: 1.2,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _buildSidebarItem(Icons.dashboard_rounded, 'Dashboard', 0),
-                const SizedBox(height: 16),
-                _buildSectionHeader('SYSTEM MASTERS'),
-                _buildSidebarItem(
-                  Icons.admin_panel_settings_rounded,
-                  'Roles',
-                  11,
-                ),
-                _buildSidebarItem(Icons.settings_cell_rounded, 'Devices', 12),
-                _buildSidebarItem(Icons.business_rounded, 'Departments', 13),
-                _buildSidebarItem(Icons.location_on_rounded, 'Locations', 14),
-                _buildSidebarItem(Icons.map_rounded, 'Mapping', 15),
-                   const SizedBox(height: 16),
-                _buildSectionHeader('MANAGEMENT'),
-                _buildSidebarItem(Icons.person_add_rounded, 'Add User', 1),
-                _buildSidebarItem(
-                  Icons.folder_shared_rounded,
-                  'File Upload',
-                  2,
-                ),
-                const SizedBox(height: 16),
-                _buildSectionHeader('TEMPLATES'),
-                _buildSidebarItem(Icons.add_box_rounded, 'Create Template', 3),
-                _buildSidebarItem(
-                  Icons.auto_awesome_mosaic_rounded,
-                  'Default Template',
-                  4,
-                ),
-                _buildSidebarItem(
-                  Icons.library_add_check_rounded,
-                  'Select Template',
-                  5,
-                ),
-                const SizedBox(height: 16),
-                _buildSectionHeader('SCHEDULING'),
-                _buildSidebarItem(Icons.calendar_month_rounded, 'Allocate', 6),
-                _buildSidebarItem(Icons.devices_rounded, 'Assign Device', 7),
-                _buildSidebarItem(Icons.list_alt_rounded, 'Schedule List', 8),
-                _buildSidebarItem(
-                  Icons.date_range_rounded,
-                  'Specific Ranges',
-                  9,
-                ),
-                _buildSidebarItem(
-                  Icons.cleaning_services_rounded,
-                  'Maintenance',
-                  10,
-                ),
-                const SizedBox(height: 16),
-                
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
-
-          // User Info / Logout
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(24),
+                ],
               ),
             ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: const Color(0xFF3B82F6),
-                  radius: 18,
-                  child: Text(
-                    _userName?.isNotEmpty == true
-                        ? _userName![0].toUpperCase()
-                        : 'U',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  _buildSidebarItem(Icons.dashboard_rounded, 'Dashboard', 0),
+                  const SizedBox(height: 16),
+                  _buildSectionHeader('SYSTEM MASTERS'),
+                  _buildSidebarItem(
+                    Icons.admin_panel_settings_rounded,
+                    'Roles',
+                    11,
+                  ),
+                  _buildSidebarItem(Icons.settings_cell_rounded, 'Devices', 12),
+                  _buildSidebarItem(Icons.business_rounded, 'Departments', 13),
+                  _buildSidebarItem(Icons.location_on_rounded, 'Locations', 14),
+                  _buildSidebarItem(Icons.map_rounded, 'Mapping', 15),
+                  const SizedBox(height: 16),
+                  _buildSectionHeader('MANAGEMENT'),
+                  _buildSidebarItem(Icons.person_add_rounded, 'Add User', 1),
+                  _buildSidebarItem(
+                    Icons.folder_shared_rounded,
+                    'File Upload',
+                    2,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSectionHeader('TEMPLATES'),
+                  _buildSidebarItem(Icons.add_box_rounded, 'Create Template', 3),
+                  _buildSidebarItem(
+                    Icons.auto_awesome_mosaic_rounded,
+                    'Default Template',
+                    4,
+                  ),
+                  _buildSidebarItem(
+                    Icons.library_add_check_rounded,
+                    'Select Template',
+                    5,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSectionHeader('SCHEDULING'),
+                  _buildSidebarItem(Icons.calendar_month_rounded, 'Allocate', 6),
+                  _buildSidebarItem(Icons.devices_rounded, 'Assign Device', 7),
+                  _buildSidebarItem(Icons.list_alt_rounded, 'Schedule List', 8),
+                  _buildSidebarItem(
+                    Icons.date_range_rounded,
+                    'Specific Ranges',
+                    9,
+                  ),
+                  _buildSidebarItem(
+                    Icons.cleaning_services_rounded,
+                    'Maintenance',
+                    10,
+                  ),
+                  const SizedBox(height: 16),
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+
+            // User Info / Logout
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.03),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(24),
+                ),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: const Color(0xFF3B82F6),
+                    radius: 18,
+                    child: Text(
+                      _userName?.isNotEmpty == true
+                          ? _userName![0].toUpperCase()
+                          : 'U',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _userName ?? "User",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _userName ?? "User",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        _userRole ?? "Administrator",
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 11,
+                        Text(
+                          _userRole ?? "Administrator",
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 11,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.logout_rounded,
-                    color: Colors.white54,
-                    size: 20,
+                  IconButton(
+                    icon: const Icon(
+                      Icons.logout_rounded,
+                      color: Colors.white54,
+                      size: 20,
+                    ),
+                    onPressed: () => _handleLogout(),
                   ),
-                  onPressed: () => _handleLogout(),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -421,10 +439,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildHeader(ThemeData theme) {
+  Widget _buildHeader(ThemeData theme, {bool showSidebar = true}) {
     return Container(
       height: 72,
-      margin: const EdgeInsets.fromLTRB(0, 24, 24, 16),
+      margin: EdgeInsets.fromLTRB(
+        showSidebar ? 0 : 12, 24, showSidebar ? 24 : 12, 16),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.8),
@@ -440,43 +459,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       child: Row(
         children: [
-          Text(
-            _getPageTitle(),
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF0F172A),
-              letterSpacing: -0.5,
+          Expanded(
+            child: Text(
+              _getPageTitle(),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF0F172A),
+                letterSpacing: -0.5,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const Spacer(),
-          // Container(
-          //   width: 300,
-          //   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          //   decoration: BoxDecoration(
-          //     color: const Color(0xFFF1F5F9),
-          //     borderRadius: BorderRadius.circular(14),
-          //   ),
-          //   child: Row(
-          //     children: [
-          //       const Icon(
-          //         Icons.search_rounded,
-          //         size: 16,
-          //         color: Color(0xFF64748B),
-          //       ),
-          //       const SizedBox(width: 10),
-          //       Text(
-          //         "Search assets, devices...",
-          //         style: TextStyle(
-          //           color: const Color(0xFF64748B).withOpacity(0.5),
-          //           fontSize: 13,
-          //         ),
-          //       ),
-          //     ],
-          //   ),
-          // ),
-          // const SizedBox(width: 20),
-          // _buildHeaderAction(Icons.notifications_none_rounded),
           const SizedBox(width: 12),
           _buildHeaderAction(Icons.logout_rounded, onTap: _handleLogout),
         ],

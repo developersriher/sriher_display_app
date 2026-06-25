@@ -66,12 +66,17 @@ class StylishDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final padding = screenHeight < 600 ? 24.0 : 32.0;
+
     return AlertDialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
       contentPadding: EdgeInsets.zero,
+      insetPadding: const EdgeInsets.all(16),
       content: Container(
         width: width,
+        constraints: BoxConstraints(maxHeight: screenHeight * 0.9),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(32),
@@ -89,7 +94,7 @@ class StylishDialog extends StatelessWidget {
           children: [
             // Header
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+              padding: EdgeInsets.symmetric(horizontal: padding, vertical: padding * 0.6),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
@@ -146,20 +151,22 @@ class StylishDialog extends StatelessWidget {
             ),
 
             // Content
-            Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  child,
-                  if (actions != null) ...[
-                    const SizedBox(height: 32),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: actions!,
-                    ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(padding),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    child,
+                    if (actions != null) ...[
+                      const SizedBox(height: 32),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: actions!,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ],

@@ -625,89 +625,102 @@ class _DashboardViewState extends State<DashboardView>
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            Container(
-              height: 420,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 40,
-                    offset: const Offset(0, 15),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 4,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title.toUpperCase(),
-                                style: const TextStyle(
-                                  color: Color(0xFF0F172A),
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 11,
-                                  letterSpacing: 1.5,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                subtitle,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF64748B),
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+            ConstrainedBox(
+              // Min height keeps the card visible even on very small windows;
+              // it can grow freely above 280 px.
+              constraints: const BoxConstraints(minHeight: 280),
+              child: Container(
+                // No fixed height — the card now uses all available space
+                // given by the parent (Expanded inside a Row).
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 40,
+                      offset: const Offset(0, 15),
                     ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 20,
-                            spreadRadius: -5,
-                            offset: const Offset(0, 10),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 4,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title.toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Color(0xFF0F172A),
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 11,
+                                    letterSpacing: 1.5,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  subtitle,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: content,
                     ),
-                  ),
-                ],
+                    // Media content: fixed 320px height, shrinks to 200 minimum
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: 200,
+                        maxHeight: 360,
+                      ),
+                      child: Container(
+                        height: 320,
+                        margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 20,
+                              spreadRadius: -5,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: content,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             // LIVE badge — top-right corner
@@ -1345,45 +1358,55 @@ class _DashboardViewState extends State<DashboardView>
   Widget _buildRegistrySection(_DashboardData d) {
     return FadeTransition(
       opacity: _cardAnimations[6],
-      child: Container(
-        height: 600,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 30,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // Hide the 240px side panel when the card is narrower than 600px
-            final showSidePanel = constraints.maxWidth >= 600;
-            return Row(
-              children: [
-                // Side View (Category Selector) — hidden on narrow screens
-                if (showSidePanel) _buildRegistrySideView(),
+      child: ConstrainedBox(
+        // Can grow above 480 px but never forces below that even on small windows.
+        constraints: const BoxConstraints(minHeight: 480),
+        child: Container(
+          // Use a preferred height that stays within the available space;
+          // the ConstrainedBox minHeight keeps it tall on big screens.
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Hide the 240px side panel when the card is narrower than 600px
+              final showSidePanel = constraints.maxWidth >= 600;
+              return Row(
+                children: [
+                  // Side View (Category Selector) — hidden on narrow screens
+                  if (showSidePanel) _buildRegistrySideView(),
 
-                // On narrow screens show a compact category selector row instead
-                // Main Table View
-                Expanded(
-                  child: Column(
-                    children: [
-                      if (!showSidePanel) _buildNarrowCategorySelector(),
-                      _buildRegistryHeaderTitle(),
-                      Expanded(child: _buildRegistryTable(d)),
-                      _buildRegistryFooter(d),
-                    ],
+                  // On narrow screens show a compact category selector row instead
+                  // Main Table View
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!showSidePanel) _buildNarrowCategorySelector(),
+                        _buildRegistryHeaderTitle(),
+                        // Give the table a fixed 380px slot; it scrolls internally.
+                        SizedBox(
+                          height: 380,
+                          child: _buildRegistryTable(d),
+                        ),
+                        _buildRegistryFooter(d),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -1468,11 +1491,13 @@ class _DashboardViewState extends State<DashboardView>
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: const [
                 Text(
                   'PROGRESS TRACK',
@@ -1482,17 +1507,21 @@ class _DashboardViewState extends State<DashboardView>
                     color: Color(0xFF0F172A),
                     letterSpacing: 1.5,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 SizedBox(height: 4),
                 Text(
                   'Monitoring the overall progress',
                   style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          Expanded(
+          // Use Flexible instead of Expanded so the sidebar shrinks with parent
+          Flexible(
             child: ListView(
+              shrinkWrap: true,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
                 _buildSideCategoryItem(
@@ -1586,37 +1615,39 @@ class _DashboardViewState extends State<DashboardView>
   Widget _buildRegistryHeaderTitle() {
     return Container(
       width: double.infinity,
-      // Pure, transparent container padding layout with NO colors or hard lines
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
+      // OverflowBar wraps to a second line when horizontal space is tight,
+      // preventing the yellow/black overflow stripe at small window widths.
+      child: OverflowBar(
+        alignment: MainAxisAlignment.spaceBetween,
+        overflowAlignment: OverflowBarAlignment.start,
+        overflowSpacing: 8,
         children: [
           // Left side: Title and subtitle Column
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _selectedCategory.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF0F172A), // Premium Dark Slate Text
-                    letterSpacing: 1.5,
-                  ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _selectedCategory.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F172A),
+                  letterSpacing: 1.5,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Managing system ${_selectedCategory.toLowerCase()} registry',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF64748B), // Slate Gray subtitle descriptor
-                  ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Managing system ${_selectedCategory.toLowerCase()} registry',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF64748B),
                 ),
-              ],
-            ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
 
           // Right side: Show [dropdown] rows control
@@ -1635,7 +1666,7 @@ class _DashboardViewState extends State<DashboardView>
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6.0),
                 child: SizedBox(
-                  width: 80, // Perfectly sized tracking footprint box
+                  width: 80,
                   height: 36,
                   child: DropdownButtonFormField<int>(
                     value: _entriesPerPage,
@@ -1686,7 +1717,7 @@ class _DashboardViewState extends State<DashboardView>
                       if (val != null) {
                         setState(() {
                           _entriesPerPage = val;
-                          _currentPage = 1; // Resets view index safely
+                          _currentPage = 1;
                         });
                       }
                     },

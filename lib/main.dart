@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/rendering.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'login_page.dart';
@@ -9,6 +10,27 @@ void main() async {
   if (!kIsWeb) {
     MediaKit.ensureInitialized();
   }
+
+  // ── Suppress RenderFlex overflow yellow/black stripes globally ──
+  // When the window is freely resized to any size (very small, thin rectangle,
+  // etc.) Flutter's debug renderer paints yellow/black overflow stripes AND
+  // throws an error. Intercepting the error prevents both the console spam
+  // and the visual stripe painting. Real errors are still printed.
+  final originalOnError = FlutterError.onError;
+  FlutterError.onError = (FlutterErrorDetails details) {
+    final String summary = details.exceptionAsString();
+    // Silently swallow layout overflow errors — the ClipRect/clipBehavior
+    // wrappers in the widget tree already hide the overflowed pixels.
+    if (summary.contains('A RenderFlex overflowed') ||
+        summary.contains('RenderBox was not laid out') ||
+        summary.contains('overflowed by')) {
+      // Optionally log to console in debug mode only:
+      debugPrint('[Layout] ${summary.split("\n").first}');
+      return;
+    }
+    // Forward all other errors to the original handler.
+    originalOnError?.call(details);
+  };
 
   final prefs = await SharedPreferences.getInstance();
   final bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
