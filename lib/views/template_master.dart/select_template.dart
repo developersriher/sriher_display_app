@@ -170,26 +170,57 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     if (selectedTemplateId == null || selectedCategoryId == null) return;
     if (!mounted) return;
     setState(() => isLoadingAvailableFiles = true);
+
+    // ── FIX #1: category_id in selectTemplate_availableFilesview is a MEDIA
+    // type (1 = images, 2 = videos), NOT the department id. Fetch both in
+    // parallel so that videos (category_id=2) are never silently excluded.
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/selectTemplate_availableFilesview'),
-        body: jsonEncode({
-          "api_key": _apiKey,
-          "template_id": selectedTemplateId,
-          "category_id": selectedCategoryId,
-        }),
-        headers: {'Content-Type': 'application/json'},
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (mounted) {
-          final files = List<dynamic>.from(data['data'] ?? []);
-          setState(() {
-            availableFiles = files;
-            for (var c in _availableFileControllers.values) c.dispose();
-            _availableFileControllers.clear();
-          });
+      final results = await Future.wait([
+        http.post(
+          Uri.parse('$_baseUrl/selectTemplate_availableFilesview'),
+          body: jsonEncode({
+            "api_key": _apiKey,
+            "template_id": selectedTemplateId,
+            "category_id": 1, // images
+          }),
+          headers: {'Content-Type': 'application/json'},
+        ),
+        http.post(
+          Uri.parse('$_baseUrl/selectTemplate_availableFilesview'),
+          body: jsonEncode({
+            "api_key": _apiKey,
+            "template_id": selectedTemplateId,
+            "category_id": 2, // videos
+          }),
+          headers: {'Content-Type': 'application/json'},
+        ),
+      ]);
+
+      if (mounted) {
+        final List<dynamic> merged = [];
+        final Set<String> seenIds = {};
+
+        for (final resp in results) {
+          if (resp.statusCode == 200) {
+            final data = jsonDecode(resp.body);
+            final files = List<dynamic>.from(data['data'] ?? []);
+            for (final f in files) {
+              final id = f['id']?.toString() ?? '';
+              if (seenIds.add(id)) merged.add(f);
+            }
+          }
         }
+
+        setState(() {
+          availableFiles = merged;
+          for (var c in _availableFileControllers.values) c.dispose();
+          _availableFileControllers.clear();
+        });
+
+        debugPrint(
+          '[AvailableFiles] fetched ${merged.length} file(s) '
+          '(images + videos) for template $selectedTemplateId',
+        );
       }
     } catch (e) {
       debugPrint("_fetchAvailableFiles error: $e");
@@ -197,14 +228,16 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       if (mounted) setState(() => isLoadingAvailableFiles = false);
     }
 
-    // After loading template-specific files (status=0), also pull in
-    // LIVE (status=1) video files from the global file list so that
-    // videos toggled ON as "live" in File Upload also appear here.
+    // Also pull in any extra video files that are marked LIVE in the
+    // file_upload screen, so they always appear in the video category.
     await _fetchAndMergeLiveVideos();
   }
 
-  /// Fetches all uploaded files, extracts the ones marked as LIVE (status=1)
-  /// or belonging to the selected department/category, and merges them into [availableFiles].
+  /// Fetches all uploaded files from /fileview and merges VIDEO files that are
+  /// LIVE (status=1) into [availableFiles] without duplicates.
+  /// NOTE: /fileview uses category_id as a DEPARTMENT id, which is unrelated
+  /// to the media-type category_id used by selectTemplate_availableFilesview.
+  /// We therefore only use the LIVE status flag here — no category_id filter.
   Future<void> _fetchAndMergeLiveVideos() async {
     if (!mounted) return;
     try {
@@ -223,11 +256,14 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       final existingIds =
           availableFiles.map((f) => f['id']?.toString() ?? '').toSet();
 
+      // ── FIX #1 (continued): Do NOT filter by category_id here because
+      // /fileview's category_id is a department id, not a media type. Only
+      // include files that are explicitly toggled LIVE.
       final matchingVideos = allFiles.where((f) {
         // Skip if already in the list
         if (existingIds.contains(f['id']?.toString() ?? '')) return false;
 
-        // Only video files
+        // Must be a video file
         final type = f['file_type']?.toString().toLowerCase() ?? '';
         final fmt  = f['file_format']?.toString().toLowerCase() ?? '';
         final name = f['file_name']?.toString().toLowerCase() ?? '';
@@ -241,17 +277,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             name.endsWith('.webm');
         if (!isVideo) return false;
 
-        // Either it belongs to the selected department (category_id)
-        // OR it is set as LIVE (status = 1)
-        final fileCatId = int.tryParse(f['category_id']?.toString() ?? '');
+        // Only include if the file is set as LIVE
         final status = f['file_status']?.toString() ?? f['status']?.toString() ?? '0';
-        final isLive = (status == '1');
-
-        return (fileCatId == selectedCategoryId) || isLive;
+        return status == '1';
       }).map((f) {
-        final status = f['file_status']?.toString() ?? f['status']?.toString() ?? '0';
-        final isLive = (status == '1');
-        return Map<String, dynamic>.from(f)..['_isLive'] = isLive;
+        return Map<String, dynamic>.from(f)..['_isLive'] = true;
       }).toList();
 
       if (mounted && matchingVideos.isNotEmpty) {
@@ -259,12 +289,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       }
 
       debugPrint(
-        '[LiveVideos] merged ${matchingVideos.length} matching video(s) into available files'
+        '[LiveVideos] merged ${matchingVideos.length} LIVE video(s) into available files'
       );
     } catch (e) {
       debugPrint("_fetchAndMergeLiveVideos error: $e");
     }
   }
+
 
 
   Future<void> _fetchAssignedFiles() async {
@@ -753,10 +784,16 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                     final bool isVideo = _isFileVideo(file);
 
                     if (!_availableFileControllers.containsKey(fileId)) {
-                      final rawDuration =
-                          file['file_duration'] ?? file['duration'] ?? '30';
-                      final rawSecs =
-                          int.tryParse(rawDuration.toString()) ?? 30;
+                      // ── FIX #3: video-specific fields (file_duration,
+                      // video_720p) may arrive as JSON null rather than a
+                      // missing key, so we guard against null before .toString().
+                      final rawDurationVal =
+                          file['file_duration'] ?? file['duration'];
+                      final rawDurationStr = (rawDurationVal != null &&
+                              rawDurationVal.toString() != 'null')
+                          ? rawDurationVal.toString()
+                          : '30';
+                      final rawSecs = double.tryParse(rawDurationStr)?.toInt() ?? 30;
                       _rawFileDurations[fileId] = rawSecs;
                       _availableFileControllers[fileId] = TextEditingController(
                         text: _formatSeconds(rawSecs),
@@ -808,9 +845,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  const Text(
-                                    'This video is set as Live — add it to play on displays',
-                                    style: TextStyle(
+                                  Text(
+                                    isVideo
+                                        ? 'This video is set as Live — add it to play on displays'
+                                        : 'This image is set as Live — add it to play on displays',
+                                    style: const TextStyle(
                                       fontSize: 11,
                                       color: Colors.green,
                                       fontStyle: FontStyle.italic,

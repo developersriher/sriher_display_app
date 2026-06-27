@@ -66,9 +66,17 @@ class _DashboardData {
         .map((e) => '$_kBaseUrl${e['file_name']}')
         .toList();
 
+    // 'vinci' = live-enabled videos (toggled ON via File Upload)
     if (json['vinci'] != null && (json['vinci'] as List).isNotEmpty) {
       vidUrls.addAll(
         (json['vinci'] as List).map((e) => '$_kBaseUrl${e['file_name']}'),
+      );
+    }
+
+    // 'live' = another possible key the backend may use for live-status videos
+    if (json['live'] != null && (json['live'] as List).isNotEmpty) {
+      vidUrls.addAll(
+        (json['live'] as List).map((e) => '$_kBaseUrl${e['file_name']}'),
       );
     }
 

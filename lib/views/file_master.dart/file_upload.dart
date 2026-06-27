@@ -986,7 +986,7 @@ class _FileUploadViewState extends State<FileUploadView> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(ctx),
-                    style: TextButton.styleFrom(
+                    style: TextButton.styleFrom(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
                       padding: const EdgeInsets.symmetric(
                         vertical: 10,
                         horizontal: 16,
