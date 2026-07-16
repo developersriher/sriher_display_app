@@ -142,6 +142,19 @@ class _DashboardViewState extends State<DashboardView>
   String _selectedCategory = 'Devices';
   int _entriesPerPage = 10;
   int _currentPage = 1;
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
+  
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  void _sortData(int columnIndex, bool ascending) {
+    setState(() {
+      _sortColumnIndex = columnIndex;
+      _sortAscending = ascending;
+    });
+  }
+
   String? _userName;
   String? _loginTime;
 
@@ -321,6 +334,7 @@ class _DashboardViewState extends State<DashboardView>
     _hideControlsTimer?.cancel();
     _pageCtrl.dispose();
     _player.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -438,7 +452,9 @@ class _DashboardViewState extends State<DashboardView>
                 foregroundColor: const Color(0xFF0F172A),
                 side: const BorderSide(color: Color(0xFFE2E8F0)),
                 elevation: 0,
+                shadowColor: Colors.transparent,
               ),
+              hoverColor: Colors.blue.withOpacity(0.1),
             ),
           ],
         ),
@@ -1303,6 +1319,7 @@ class _DashboardViewState extends State<DashboardView>
                             _player.playOrPause();
                             setState(() => _isPlaying = !_isPlaying);
                           },
+                          hoverColor: Colors.white24,
                         ),
                       ),
                     ),
@@ -1390,6 +1407,7 @@ class _DashboardViewState extends State<DashboardView>
               // Hide the 240px side panel when the card is narrower than 600px
               final showSidePanel = constraints.maxWidth >= 600;
               return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Side View (Category Selector) — hidden on narrow screens
                   if (showSidePanel) _buildRegistrySideView(),
@@ -1448,6 +1466,7 @@ class _DashboardViewState extends State<DashboardView>
               onTap: () => setState(() {
                 _selectedCategory = cat.$1;
                 _currentPage = 1;
+                _sortColumnIndex = null;
               }),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -1502,7 +1521,7 @@ class _DashboardViewState extends State<DashboardView>
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -1566,6 +1585,7 @@ class _DashboardViewState extends State<DashboardView>
       onTap: () => setState(() {
         _selectedCategory = title;
         _currentPage = 1;
+        _sortColumnIndex = null;
       }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
@@ -1658,11 +1678,47 @@ class _DashboardViewState extends State<DashboardView>
             ],
           ),
 
-          // Right side: Show [dropdown] rows control
+          // Right side: Search Bar and Show [dropdown] rows control
           Row(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Search Bar
+              SizedBox(
+                width: 200,
+                height: 36,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                      _currentPage = 1; // Reset to first page
+                    });
+                  },
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
+                  decoration: InputDecoration(
+                    hintText: 'Search records...',
+                    hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF94A3B8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF3B82F6)),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
               const Text(
                 'Show ',
                 style: TextStyle(
@@ -1733,7 +1789,7 @@ class _DashboardViewState extends State<DashboardView>
                 ),
               ),
               const Text(
-                'rows',
+                'entries',
                 style: TextStyle(
                   fontSize: 13,
                   color: Color(0xFF64748B),
@@ -1749,75 +1805,129 @@ class _DashboardViewState extends State<DashboardView>
 
   Widget _buildRegistryTable(_DashboardData d) {
     final rows = _getFilteredRows(d);
-    if (rows.isEmpty) {
-      return _buildMediaPlaceholder(
-        Icons.search_off_rounded,
-        'No records found',
-      );
-    }
 
     final startIndex = (_currentPage - 1) * _entriesPerPage;
     final endIndex = (startIndex + _entriesPerPage).clamp(0, rows.length);
     final pageRows = rows.sublist(startIndex, endIndex);
 
-    return Container(
-      width: double.infinity,
-      clipBehavior: Clip.antiAlias,
-      decoration: const BoxDecoration(),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                child: DataTable(
-                  columnSpacing: 40,
-                  horizontalMargin: 24,
-                  dataRowMaxHeight: 64,
-                  headingRowHeight: 56,
-                  headingTextStyle: const TextStyle(
-                    fontWeight: FontWeight.bold, // Keep headers bold
-                    color: Color(0xFF64748B),
-                    fontSize: 12,
-                    letterSpacing: 1.0,
+    final headers = _getTableHeaders();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double minWidth = headers.length * 150.0;
+        final double tableWidth = constraints.maxWidth > minWidth ? constraints.maxWidth : minWidth;
+        
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: tableWidth,
+            child: Column(
+              children: [
+                // Header
+                Container(
+                  height: 56,
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
                   ),
-                  columns: _getTableHeaders()
-                      .map((h) => DataColumn(label: Text(h.toUpperCase())))
-                      .toList(),
-                  rows: pageRows.asMap().entries.map((entry) {
-                    final row = entry.value;
-                    return DataRow(
-                      color: WidgetStateProperty.resolveWith<Color?>((states) {
-                        if (entry.key % 2 != 0) {
-                          return const Color(0xFFF8FAFC).withOpacity(0.5);
-                        }
-                        return null;
-                      }),
-                      cells: row.asMap().entries.map((cellEntry) {
-                        final cellValue = cellEntry.value.toString();
-                        return DataCell(
-                          Text(
-                            cellValue,
-                            style: const TextStyle(
-                              // FIXED: Cleaned colors to be uniform across all cells
-                              color: Color(0xFF334155),
-                              // FIXED: Changed from conditional check to normal weight across all columns
-                              fontWeight: FontWeight.normal,
-                              fontSize: 14,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: headers.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final h = entry.value;
+                      return Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                h.toUpperCase(),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF64748B),
+                                  fontSize: 12,
+                                  letterSpacing: 1.0,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  }).toList(),
+                            const SizedBox(width: 4),
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                GestureDetector(
+                                  onTap: () => _sortData(idx, true),
+                                  child: Align(
+                                    heightFactor: 0.4,
+                                    child: Icon(
+                                      Icons.arrow_drop_up,
+                                      size: 18,
+                                      color: _sortColumnIndex == idx && _sortAscending 
+                                          ? Colors.blue 
+                                          : const Color(0xFF94A3B8),
+                                    ),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => _sortData(idx, false),
+                                  child: Align(
+                                    heightFactor: 0.4,
+                                    child: Icon(
+                                      Icons.arrow_drop_down,
+                                      size: 18,
+                                      color: _sortColumnIndex == idx && !_sortAscending 
+                                          ? Colors.blue 
+                                          : const Color(0xFF94A3B8),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
-              ),
+                // Body
+                Expanded(
+                  child: pageRows.isEmpty
+                      ? _buildMediaPlaceholder(
+                          Icons.search_off_rounded,
+                          'No data available',
+                        )
+                      : ListView.builder(
+                          itemCount: pageRows.length,
+                          itemBuilder: (context, index) {
+                            final row = pageRows[index];
+                            final isOdd = index % 2 != 0;
+                            return Container(
+                              height: 64,
+                              color: isOdd ? const Color(0xFFF8FAFC).withOpacity(0.5) : Colors.transparent,
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: Row(
+                                children: row.map((cellValue) {
+                                  return Expanded(
+                                    child: Text(
+                                      cellValue.toString(),
+                                      style: const TextStyle(
+                                        color: Color(0xFF334155),
+                                        fontSize: 14,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -1830,16 +1940,17 @@ class _DashboardViewState extends State<DashboardView>
       case 'Locations':
         return ['Name', 'Floor', 'Sub-Location'];
       case 'Over Views':
-        return ['Device', 'Schedule', 'Template', 'Duration', 'Location'];
+        return ['Device Name', 'Schedule Name', 'Template Name', 'Template Duration', 'Location Name'];
       default:
         return [];
     }
   }
 
   List<List<dynamic>> _getFilteredRows(_DashboardData d) {
+    List<List<dynamic>> rows = [];
     switch (_selectedCategory) {
       case 'Devices':
-        return d.deviceList
+        rows = d.deviceList
             .map(
               (e) => [
                 e['device_name'] ?? '-',
@@ -1848,12 +1959,14 @@ class _DashboardViewState extends State<DashboardView>
               ],
             )
             .toList();
+        break;
       case 'Templates':
-        return d.tempList
+        rows = d.tempList
             .map((e) => [e['temp_name'] ?? '-', e['duration'] ?? '-'])
             .toList();
+        break;
       case 'Locations':
-        return d.locationList
+        rows = d.locationList
             .map(
               (e) => [
                 e['location_name'] ?? '-',
@@ -1862,8 +1975,9 @@ class _DashboardViewState extends State<DashboardView>
               ],
             )
             .toList();
+        break;
       case 'Over Views':
-        return d.overview
+        rows = d.overview
             .map(
               (e) => [
                 e['device_name'] ?? '-',
@@ -1874,9 +1988,36 @@ class _DashboardViewState extends State<DashboardView>
               ],
             )
             .toList();
+        break;
       default:
-        return [];
+        rows = [];
     }
+
+    // Apply Search Filter
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      rows = rows.where((row) {
+        return row.any((cell) => cell.toString().toLowerCase().contains(query));
+      }).toList();
+    }
+    
+    if (_sortColumnIndex != null && rows.isNotEmpty && _sortColumnIndex! < rows.first.length) {
+      rows.sort((a, b) {
+        final aVal = a[_sortColumnIndex!].toString().toLowerCase();
+        final bVal = b[_sortColumnIndex!].toString().toLowerCase();
+        
+        // Push empty or placeholder values to the absolute bottom
+        bool aEmpty = aVal == '-' || aVal.trim().isEmpty;
+        bool bEmpty = bVal == '-' || bVal.trim().isEmpty;
+        
+        if (aEmpty && !bEmpty) return 1;
+        if (!aEmpty && bEmpty) return -1;
+        if (aEmpty && bEmpty) return 0;
+        
+        return _sortAscending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
+      });
+    }
+    return rows;
   }
 
   Widget _buildRegistryFooter(_DashboardData d) {

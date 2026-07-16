@@ -37,6 +37,10 @@ class _ScheduleListViewState extends State<ScheduleListView> {
   String entriesValue = "10";
   int _currentPage = 1;
   final TextEditingController _searchCtrl = TextEditingController();
+  
+  // Sort State
+  int _sortColumnIndex = 1;
+  bool _sortAscending = true;
 
   @override
   void initState() {
@@ -173,6 +177,29 @@ class _ScheduleListViewState extends State<ScheduleListView> {
         return (item['schedule_name'] ?? '').toString().toLowerCase().contains(q) ||
             (item['temp_name'] ?? '').toString().toLowerCase().contains(q);
       }).toList();
+      
+      _filteredData.sort((a, b) {
+        String aVal = "";
+        String bVal = "";
+        
+        switch (_sortColumnIndex) {
+          case 1:
+            aVal = a['schedule_name']?.toString() ?? "";
+            bVal = b['schedule_name']?.toString() ?? "";
+            break;
+          case 2:
+            aVal = a['temp_name']?.toString() ?? "";
+            bVal = b['temp_name']?.toString() ?? "";
+            break;
+          default:
+            aVal = a['id']?.toString() ?? "";
+            bVal = b['id']?.toString() ?? "";
+            break;
+        }
+        return _sortAscending 
+             ? aVal.toLowerCase().compareTo(bVal.toLowerCase()) 
+             : bVal.toLowerCase().compareTo(aVal.toLowerCase());
+      });
       _currentPage = 1;
     });
   }
@@ -515,14 +542,14 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                   horizontalMargin: 20,
                   columnSpacing: 20,
                   columns: [
-                    _col('S.NO'),
-                    _col('SCHEDULE NAME'),
-                    _col('TEMPLATE NAME'),
-                    _col('FROM TIME – TO TIME'),
-                    _col('FROM DATE'),
-                    _col('TO DATE'),
-                    _col('STATUS'),
-                    _col('CHANGES'),
+                    _col('S.NO', -1),
+                    _col('SCHEDULE NAME', 1),
+                    _col('TEMPLATE NAME', 2),
+                    _col('FROM TIME – TO TIME', -1),
+                    _col('FROM DATE', -1),
+                    _col('TO DATE', -1),
+                    _col('STATUS', -1),
+                    _col('CHANGES', -1),
                   ],
                   rows: rows.asMap().entries.map((e) {
                     final sno =
@@ -679,13 +706,68 @@ class _ScheduleListViewState extends State<ScheduleListView> {
     );
   }
 
-  DataColumn _col(String label) => DataColumn(
-        label: Text(label,
-            style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 12)),
-      );
+  DataColumn _col(String label, int colIndex) {
+    return DataColumn(
+      label: InkWell(
+        onTap: colIndex < 0 ? null : () {
+          setState(() {
+            if (_sortColumnIndex == colIndex) {
+              _sortAscending = !_sortAscending;
+            } else {
+              _sortColumnIndex = colIndex;
+              _sortAscending = true;
+            }
+          });
+          _applyFilter();
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (colIndex >= 0) ...[
+              const SizedBox(width: 4),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    heightFactor: 0.4,
+                    child: Icon(
+                      Icons.arrow_drop_up,
+                      size: 18,
+                      color: _sortColumnIndex == colIndex && _sortAscending
+                          ? Colors.white
+                          : Colors.white38,
+                    ),
+                  ),
+                  Align(
+                    heightFactor: 0.4,
+                    child: Icon(
+                      Icons.arrow_drop_down,
+                      size: 18,
+                      color: _sortColumnIndex == colIndex && !_sortAscending
+                          ? Colors.white
+                          : Colors.white38,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 
   // ── List header ───────────────────────────────────────────────────────────
 

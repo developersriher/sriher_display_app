@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
+import '../../widgets/web_compat_image.dart';
 
 class SpecificRangesView extends StatefulWidget {
   const SpecificRangesView({super.key});
@@ -560,13 +561,22 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
   void _showAddSchedulePopup(BuildContext context) {
     StylishDialog.show(
       context: context,
-      title: "NEW SCHEDULE",
+      title: "New Schedule",
       subtitle: "Define a new department or purpose for scheduling.",
-      maxWidth: 480,
+      maxWidth: 500,
       builder: (context, setPopupState) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+              "Schedule Name",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF334155),
+              ),
+            ),
+            const SizedBox(height: 8),
             TextFormField(
               controller: _scheduleNameController,
               autofocus: true,
@@ -633,31 +643,31 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    final name = _scheduleNameController.text.trim();
-                    if (name.isNotEmpty) {
-                      Navigator.pop(context);
-                      _addNewSchedule(name);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 32,
-                    ),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text(
-                    "Create Schedule",
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-                  ),
-                ),
+               ElevatedButton(
+  onPressed: () {
+    final name = _scheduleNameController.text.trim();
+    if (name.isNotEmpty) {
+      Navigator.pop(context);
+      _addNewSchedule(name);
+    }
+  },
+  style: ElevatedButton.styleFrom(
+    backgroundColor: const Color(0xFF0F172A),
+    foregroundColor: Colors.white,
+    padding: const EdgeInsets.symmetric(
+      vertical: 12,
+      horizontal: 32,
+    ),
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(4), // 👈 Changed from 16 to 4 for a sharp square look with a tiny curve
+    ),
+  ),
+  child: const Text(
+    "Create Schedule",
+    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+  ),
+),
               ],
             ),
           ],
@@ -1160,15 +1170,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                               .toString()
                                               .trim()
                                               .isNotEmpty)
-                                      ? Image.network(
-                                          "$_baseUrl/uploads/${file['file_name']}",
+                                      ? WebCompatImage(
+                                          url: "$_baseUrl/uploads/${file['file_name']}",
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
-                                              const Icon(
-                                                Icons.broken_image,
-                                                size: 24,
-                                                color: Colors.grey,
-                                              ),
                                         )
                                       : const Icon(
                                           Icons.image,
@@ -1496,8 +1500,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           label,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: Color(0xFF64748B),
+            fontSize: 12,
+            color: Color(0xFF334155),
           ),
         ),
         const SizedBox(height: 8),
@@ -1526,21 +1530,24 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
               ),
             ),
             if (showAdd) ...[
-              const SizedBox(width: 8),
-              Container(
-                margin: const EdgeInsets.only(
-                  top: 0,
-                ), // Already aligned via CrossAxisAlignment.start
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.add, color: Colors.blue),
-                  onPressed: () => _showAddSchedulePopup(context),
-                ),
-              ),
-            ],
+               const SizedBox(width: 8),
+               Padding(
+                 padding: const EdgeInsets.only(top: 6.0),
+                 child: SizedBox(
+                   width: 36,
+                   height: 36,
+                   child: Material(
+                       color: Colors.blue.shade100,
+                     borderRadius: BorderRadius.circular(6),
+                     child: InkWell(
+                       borderRadius: BorderRadius.circular(6),
+                       onTap: () => _showAddSchedulePopup(context),
+                       child: const Icon(Icons.add, color: Colors.white, size: 20),
+                     ),
+                   ),
+                 ),
+               ),
+             ],
           ],
         ),
       ],
@@ -1559,8 +1566,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           label,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: Color.fromARGB(255, 83, 96, 115),
+            fontSize: 12,
+            color: Color(0xFF334155),
           ),
         ),
         const SizedBox(height: 8),

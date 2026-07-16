@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../api_config.dart';
@@ -28,6 +29,26 @@ class _DepartmentViewState extends State<DepartmentView> {
   int currentPage = 0;
   int? editingId;
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
+
+  void _applySort() {
+    if (_sortColumnIndex == 0) {
+      filteredList.sort((a, b) {
+        final aVal = (a['category_name']?.toString() ?? "").toLowerCase();
+        final bVal = (b['category_name']?.toString() ?? "").toLowerCase();
+        return _sortAscending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
+      });
+    } else {
+      // Default: sort by id descending (newest at the top)
+      filteredList.sort((a, b) {
+        final aId = int.tryParse(a['id']?.toString() ?? '0') ?? 0;
+        final bId = int.tryParse(b['id']?.toString() ?? '0') ?? 0;
+        return bId.compareTo(aId);
+      });
+    }
+  }
 
   // --- CONTROLLERS ---
   final TextEditingController _departmentNameController =
@@ -73,7 +94,8 @@ class _DepartmentViewState extends State<DepartmentView> {
           } else if (decoded is List) {
             categoryList = decoded;
           }
-          filteredList = categoryList;
+          filteredList = List.from(categoryList);
+          _applySort();
           isLoading = false;
         });
       }
@@ -216,6 +238,95 @@ class _DepartmentViewState extends State<DepartmentView> {
     }
   }
 
+  // 6. DELETE (deleteCategoryview)
+  Future<void> deleteCategory(dynamic id) async {
+    final confirm = await StylishDialog.show<bool>(
+      context: context,
+      title: "Delete Confirmation",
+      icon: Icons.delete_forever_rounded,
+      maxWidth: 400,
+      builder: (context, setPopupState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Are you sure you want to delete this department? This action cannot be undone.",
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 20,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 24,
+                    ),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    "Delete",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/deleteCategoryview'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"api_key": _apiKey, "id": id}),
+      );
+
+      if (response.statusCode == 200) {
+        if (!mounted) return;
+        _showSnackBar("Department deleted successfully!");
+        fetchCategories();
+      } else {
+        if (!mounted) return;
+        _showSnackBar("Failed to delete (${response.statusCode})");
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar("Delete error: $e");
+    }
+  }
+
   void _clearForm() {
     setState(() {
       editingId = null;
@@ -232,6 +343,7 @@ class _DepartmentViewState extends State<DepartmentView> {
             ),
           )
           .toList();
+      _applySort();
     });
   }
 
@@ -251,64 +363,84 @@ class _DepartmentViewState extends State<DepartmentView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextFormField(
-              controller: _departmentNameController,
-              validator: (v) => (v == null || v.isEmpty)
-                  ? 'Please enter the Department Name'
-                  : null,
-              autovalidateMode: AutovalidateMode.onUserInteraction,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-              decoration: InputDecoration(
-                hintText: 'Department Name',
-                hintStyle: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF94A3B8),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Color(0xFFCBD5E1),
-                    width: 1.2,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: const EdgeInsets.only(bottom: 6.0),
+                  child: Text(
+                    "Department Name",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF334155),
+                    ),
                   ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF334155),
-                    width: 1.6,
+                TextFormField(
+                  controller: _departmentNameController,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                  ],
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Please enter the Department Name'
+                      : null,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF1E293B),
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Enter Department Name',
+                    hintStyle: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFCBD5E1),
+                        width: 1.2,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF334155),
+                        width: 1.6,
+                      ),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFCBD5E1),
+                        width: 1.2,
+                      ),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF334155),
+                        width: 1.6,
+                      ),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFCBD5E1),
+                        width: 1.2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
+                    ),
                   ),
                 ),
-                errorBorder: OutlineInputBorder(
-                  // ← add this
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Color(0xFFCBD5E1), // ← same grey, border stays
-                    width: 1.2,
-                  ),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  // ← add this
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF334155), // ← dark when focused with error
-                    width: 1.6,
-                  ),
-                ),
-                border: OutlineInputBorder(
-                  // ← add this as fallback
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Color(0xFFCBD5E1),
-                    width: 1.2,
-                  ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 14,
-                ),
-              ),
+              ],
             ),
           ],
         ),
@@ -579,22 +711,77 @@ class _DepartmentViewState extends State<DepartmentView> {
   }
 
   List<DataColumn> _getColumns() {
-    return ['Department', 'Edit', 'Action']
-        .map(
-          (label) => DataColumn(
-            label: Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.blue.shade800,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+    final titles = ['Department', 'Edit', 'Action', 'Delete'];
+    return List.generate(titles.length, (index) {
+      final isSortable = index == 0;
+      return DataColumn(
+        label: Expanded(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  titles[index],
+                  style: TextStyle(
+                    color: Colors.blue.shade800,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
+              if (isSortable) ...[
+                const SizedBox(width: 4),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _sortColumnIndex = index;
+                          _sortAscending = true;
+                          _applySort();
+                        });
+                      },
+                      child: Align(
+                        heightFactor: 0.4,
+                        child: Icon(
+                          Icons.arrow_drop_up,
+                          size: 18,
+                          color: _sortColumnIndex == index && _sortAscending
+                              ? Colors.blue
+                              : const Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _sortColumnIndex = index;
+                          _sortAscending = false;
+                          _applySort();
+                        });
+                      },
+                      child: Align(
+                        heightFactor: 0.4,
+                        child: Icon(
+                          Icons.arrow_drop_down,
+                          size: 18,
+                          color: _sortColumnIndex == index && !_sortAscending
+                              ? Colors.blue
+                              : const Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
           ),
-        )
-        .toList();
+        ),
+      );
+    });
   }
 
   List<DataRow> _getCurrentPageRows() {
@@ -629,6 +816,7 @@ class _DepartmentViewState extends State<DepartmentView> {
           IconButton(
             icon: const Icon(Icons.edit, color: Colors.blueAccent, size: 18),
             onPressed: () => loadForEdit(item['id']),
+            hoverColor: Colors.blueAccent.withOpacity(0.1),
           ),
         ),
         DataCell(
@@ -639,6 +827,13 @@ class _DepartmentViewState extends State<DepartmentView> {
               activeColor: Colors.greenAccent,
               onChanged: (v) => toggleStatus(item['id'], item['status']),
             ),
+          ),
+        ),
+        DataCell(
+          IconButton(
+            icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+            onPressed: () => deleteCategory(item['id']),
+            tooltip: "Delete",
           ),
         ),
       ],
@@ -867,7 +1062,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                         : Colors.grey.shade300,
                   ),
                 ),
-              
+
                 child: Text(
                   "Next",
                   style: TextStyle(
@@ -885,7 +1080,6 @@ class _DepartmentViewState extends State<DepartmentView> {
       ],
     );
   }
-  
 
   void _showSnackBar(String msg) {
     if (!mounted) return;

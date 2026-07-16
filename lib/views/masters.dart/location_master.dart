@@ -1,5 +1,6 @@
 import '../../api_config.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
@@ -28,6 +29,8 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   String searchQuery = "";
   int currentPage = 1;
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
 
   // --- FORM CONTROLLERS ---
   final TextEditingController _buildingAreaController = TextEditingController();
@@ -115,7 +118,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"api_key": _apiKey, "id": id.toString()}),
+        body: jsonEncode({"api_key": _apiKey, "id": int.tryParse(id.toString())}),
       );
 
       if (response.statusCode == 200) {
@@ -140,7 +143,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
     final url = Uri.parse('$_baseUrl/locationUpdateview');
     final Map<String, dynamic> body = {
       "api_key": _apiKey,
-      "id": editingId.toString(),
+      "id": editingId,
       "location_name": _buildingAreaController.text,
       "floor": _floorNameController.text,
       "sublocation": _subLocationController.text,
@@ -176,7 +179,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "api_key": _apiKey,
-          "location_id": id.toString(),
+          "location_id": int.tryParse(id.toString()),
           "status": newStatus,
         }),
       );
@@ -219,15 +222,16 @@ void _showLocationDialog() {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildSmallTextField(
-              'Building/Area Name',
+              'Enter Building/Area Name',
               _buildingAreaController,
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
               validator: (v) => (v == null || v.isEmpty)
                   ? 'Please enter the Building/Area Name'
                   : null,
             ),
             const SizedBox(height: 20),
             _buildSmallTextField(
-              'Floor Name',
+              'Enter Floor Name',
               _floorNameController,
               validator: (v) => (v == null || v.isEmpty)
                   ? 'Please enter the Floor Name'
@@ -235,7 +239,7 @@ void _showLocationDialog() {
             ),
             const SizedBox(height: 20),
             _buildSmallTextField(
-              'Sub Location Name',
+              'Enter Sub Location Name',
               _subLocationController, 
               validator: (v) => (v == null || v.isEmpty)
                   ? 'Please enter the Sub Location Name'
@@ -256,7 +260,7 @@ void _showLocationDialog() {
               horizontal: 20,
             ),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(4),
             ),
           ),
           child: const Text(
@@ -270,36 +274,37 @@ void _showLocationDialog() {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: () async {
-            if (_formKey.currentState!.validate()) {
-              Navigator.pop(context); // ← close first before submit
-              if (editingId == null) {
-                await submitNewLocation();
-              } else {
-                await updateLocation();
-              }
-            }
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF0F172A),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(
-              vertical: 12,
-              horizontal: 32,
-            ),
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-          child: Text(
-            editingId == null ? "Submit" : "Update",
-            style: const TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 13,
-            ),
-          ),
-        ),
+  onPressed: () async {
+    if (_formKey.currentState!.validate()) {
+      Navigator.pop(context); // ← close first before submit
+      if (editingId == null) {
+        await submitNewLocation();
+      } else {
+        await updateLocation();
+      }
+    }
+  },
+  style: ElevatedButton.styleFrom(
+    backgroundColor: const Color(0xFF0F172A),
+    foregroundColor: Colors.white,
+    padding: const EdgeInsets.symmetric(
+      vertical: 12,
+      horizontal: 32,
+    ),
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      // 👇 CHANGED FROM 4 TO 30 FOR FULLY CURVED/ROUNDED SIDES
+      borderRadius: BorderRadius.circular(30), 
+    ),
+  ),
+  child: Text(
+    editingId == null ? "Submit" : "Update",
+    style: const TextStyle(
+      fontWeight: FontWeight.w900,
+      fontSize: 13,
+    ),
+  ),
+)
       ],
     );
   }
@@ -325,7 +330,10 @@ void _showLocationDialog() {
                   ),
                 ),
                 ElevatedButton.icon(
-                  onPressed: _showLocationDialog,
+                  onPressed: () {
+                    _clearForm();
+                    _showLocationDialog();
+                  },
                   icon: const Icon(Icons.add_location_alt_rounded, size: 20),
                   label: const Text(
                     "ADD LOCATION MASTER",
@@ -357,7 +365,7 @@ void _showLocationDialog() {
                       const SizedBox(height: 16),
                       _buildDataTableContainer(),
                       const SizedBox(height: 16),
-                      _buildTableFooter(),
+                      _buildTableFooter(_filteredListForFooter()),
                     ],
                   ),
                 ),
@@ -370,6 +378,16 @@ void _showLocationDialog() {
     );
   }
 
+  List<dynamic> _filteredListForFooter() {
+    return locationList.where((loc) {
+      final name = (loc['location_name'] ?? "").toString().toLowerCase();
+      final floor = (loc['floor'] ?? "").toString().toLowerCase();
+      final sub = (loc['sublocation'] ?? "").toString().toLowerCase();
+      final query = searchQuery.toLowerCase();
+      return name.contains(query) || floor.contains(query) || sub.contains(query);
+    }).toList();
+  }
+
   Widget _buildDataTableContainer() {
     final filteredList = locationList.where((loc) {
       final name = (loc['location_name'] ?? "").toString().toLowerCase();
@@ -378,6 +396,38 @@ void _showLocationDialog() {
       final query = searchQuery.toLowerCase();
       return name.contains(query) || floor.contains(query) || sub.contains(query);
     }).toList();
+
+    if (_sortColumnIndex != null) {
+      filteredList.sort((a, b) {
+        String aVal = "";
+        String bVal = "";
+        switch (_sortColumnIndex) {
+          case 0:
+            aVal = (a['location_name'] ?? "").toString();
+            bVal = (b['location_name'] ?? "").toString();
+            break;
+          case 1:
+            aVal = (a['floor'] ?? "").toString();
+            bVal = (b['floor'] ?? "").toString();
+            break;
+          case 2:
+            aVal = (a['sublocation'] ?? "").toString();
+            bVal = (b['sublocation'] ?? "").toString();
+            break;
+        }
+        return _sortAscending
+            ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
+            : bVal.toLowerCase().compareTo(aVal.toLowerCase());
+      });
+    } else {
+      // Default sort by id to maintain consistent order
+      filteredList.sort((a, b) => (int.tryParse(b['id']?.toString() ?? '0') ?? 0).compareTo(int.tryParse(a['id']?.toString() ?? '0') ?? 0));
+    }
+
+    final int perPage = int.tryParse(entriesValue) ?? 10;
+    final int startIdx = (currentPage - 1) * perPage;
+    final int endIdx = (startIdx + perPage > filteredList.length) ? filteredList.length : (startIdx + perPage);
+    final pagedList = filteredList.sublist(startIdx, endIdx);
 
     return Expanded(
       child: LayoutBuilder(
@@ -437,13 +487,13 @@ void _showLocationDialog() {
                                   Colors.blue.shade50,
                                 ),
                                 columns: [
-                                  _buildSortableColumn('Location Name'),
-                                  _buildSortableColumn('Floor'),
-                                  _buildSortableColumn('Sub Location'),
+                                  _buildSortableColumn('Building/Area Name', columnIndex: 0, sortable: true),
+                                  _buildSortableColumn('Floor', columnIndex: 1, sortable: true),
+                                  _buildSortableColumn('Sub Location', columnIndex: 2, sortable: true),
                                   _buildSortableColumn('Edit'),
                                   _buildSortableColumn('Action'),
                                 ],
-                                rows: filteredList.map((loc) {
+                                rows: pagedList.map((loc) {
                                   return DataRow(
                                     cells: [
                                       DataCell(
@@ -451,12 +501,19 @@ void _showLocationDialog() {
                                           padding: const EdgeInsets.only(left: 8.0),
                                           child: Text(
                                             loc['location_name']?.toString() ?? "-",
+                                            style: const TextStyle(color: Colors.black87),
                                           ),
                                         ),
                                       ),
-                                      DataCell(Text(loc['floor']?.toString() ?? "-")),
+                                      DataCell(Text(
+                                        loc['floor']?.toString() ?? "-",
+                                        style: const TextStyle(color: Colors.black87),
+                                      )),
                                       DataCell(
-                                        Text(loc['sublocation']?.toString() ?? "-"),
+                                        Text(
+                                          loc['sublocation']?.toString() ?? "-",
+                                          style: const TextStyle(color: Colors.black87),
+                                        ),
                                       ),
                                       DataCell(
                                         IconButton(
@@ -507,60 +564,82 @@ void _showLocationDialog() {
     );
   }
 
-Widget _buildSmallTextField(String hint, TextEditingController controller, {String? Function(String?)? validator}) {
-    return TextFormField(
-      controller: controller,
-      validator: validator,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(
-          fontSize: 12,
-          color: Color(0xFF94A3B8),
-        ),
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: Color(0xFFCBD5E1),
-            width: 1.2,
+Widget _buildSmallTextField(String hint, TextEditingController controller, {String? Function(String?)? validator, List<TextInputFormatter>? inputFormatters}) {
+    String label = hint;
+    if (label.toLowerCase().startsWith('enter ')) {
+      label = label.substring(6);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6.0),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF334155),
+            ),
           ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: Color(0xFF334155),
-            width: 1.6,
+        TextFormField(
+          controller: controller,
+          validator: validator,
+          inputFormatters: inputFormatters,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF94A3B8),
+            ),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFFCBD5E1),
+                width: 1.2,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFF334155),
+                width: 1.6,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFFCBD5E1), // ← border stays visible on error
+                width: 1.2,
+              ),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFF334155), // ← dark when focused with error
+                width: 1.6,
+              ),
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFFCBD5E1),
+                width: 1.2,
+              ),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 10,
+            ),
           ),
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: Color(0xFFCBD5E1), // ← border stays visible on error
-            width: 1.2,
-          ),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: Color(0xFF334155), // ← dark when focused with error
-            width: 1.6,
-          ),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: Color(0xFFCBD5E1),
-            width: 1.2,
-          ),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: 10,
-        ),
-      ),
+      ],
     );
   }
  Widget _buildListHeader() {
@@ -674,58 +753,140 @@ Widget _buildSmallTextField(String hint, TextEditingController controller, {Stri
     );
   }
 
-  DataColumn _buildSortableColumn(String label) {
+  DataColumn _buildSortableColumn(String label, {int? columnIndex, bool sortable = false}) {
     return DataColumn(
       label: Expanded(
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 8.0),
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.blue.shade800,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11,
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.blue.shade800,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
-            const Spacer(),
-            Icon(Icons.unfold_more, color: Colors.blue.shade300, size: 14),
+            if (sortable && columnIndex != null) ...[
+              const SizedBox(width: 4),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _sortColumnIndex = columnIndex;
+                        _sortAscending = true;
+                      });
+                    },
+                    child: Align(
+                      heightFactor: 0.4,
+                      child: Icon(
+                        Icons.arrow_drop_up,
+                        size: 18,
+                        color: _sortColumnIndex == columnIndex && _sortAscending
+                            ? Colors.blue
+                            : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _sortColumnIndex = columnIndex;
+                        _sortAscending = false;
+                      });
+                    },
+                    child: Align(
+                      heightFactor: 0.4,
+                      child: Icon(
+                        Icons.arrow_drop_down,
+                        size: 18,
+                        color: _sortColumnIndex == columnIndex && !_sortAscending
+                            ? Colors.blue
+                            : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTableFooter() {
+  Widget _buildTableFooter(List<dynamic> filtered) {
+    final total = filtered.length;
+    final perPage = int.tryParse(entriesValue) ?? 10;
+    final start = (currentPage - 1) * perPage + 1;
+    final end = (start + perPage - 1 < total) ? start + perPage - 1 : total;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          "Showing 1 to ${locationList.length} of ${locationList.length} entries",
+          "Showing ${total == 0 ? 0 : start} to $end of $total entries",
           style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.bold,
             color: Colors.black54,
           ),
         ),
-        _buildPagination(),
+        _buildPagination(total, perPage),
       ],
     );
   }
 
-  Widget _buildPagination() {
-    return Row(
-      children: [
-        _pageBtn("Prev"),
-        _pageBtn("1", active: true),
-        _pageBtn("Next"),
-      ],
+  Widget _buildPagination(int total, int perPage) {
+    final totalPages = (total / perPage).ceil();
+    if (totalPages <= 1) return const SizedBox.shrink();
+
+    List<Widget> buttons = [];
+    
+    // Prev button
+    buttons.add(
+      _pageBtn(
+        "Prev",
+        onPressed: currentPage > 1 ? () => setState(() => currentPage--) : null,
+      ),
     );
+
+    // Page numbers
+    for (int i = 1; i <= totalPages; i++) {
+      if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+        buttons.add(
+          _pageBtn(
+            i.toString(),
+            active: i == currentPage,
+            onPressed: () => setState(() => currentPage = i),
+          ),
+        );
+      } else if (i == currentPage - 2 || i == currentPage + 2) {
+        buttons.add(const Text(" ... "));
+      }
+    }
+
+    // Next button
+    buttons.add(
+      _pageBtn(
+        "Next",
+        onPressed: currentPage < totalPages ? () => setState(() => currentPage++) : null,
+      ),
+    );
+
+    return Row(children: buttons);
   }
 
-  Widget _pageBtn(String label, {bool active = false}) {
+  Widget _pageBtn(String label, {bool active = false, VoidCallback? onPressed}) {
     return Container(
       margin: EdgeInsets.zero,
       child: OutlinedButton(
@@ -739,7 +900,7 @@ Widget _buildSmallTextField(String hint, TextEditingController controller, {Stri
           minimumSize: const Size(40, 36),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         ),
-        onPressed: () {},
+        onPressed: onPressed ?? () {},
         child: Text(
           label,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),

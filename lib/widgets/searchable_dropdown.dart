@@ -55,7 +55,25 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
     super.didUpdateWidget(oldWidget);
     if (widget.value != oldWidget.value) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         _fieldKey.currentState?.didChange(widget.value);
+      });
+    }
+    // Check if the items' contents have actually changed
+    bool itemsChanged = widget.items.length != oldWidget.items.length;
+    if (!itemsChanged) {
+      for (int i = 0; i < widget.items.length; i++) {
+        if (widget.items[i].value != oldWidget.items[i].value ||
+            widget.items[i].label != oldWidget.items[i].label) {
+          itemsChanged = true;
+          break;
+        }
+      }
+    }
+    if (itemsChanged) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _overlayEntry?.markNeedsBuild();
       });
     }
   }
@@ -225,6 +243,36 @@ class _DropdownContentState<T> extends State<_DropdownContent<T>> {
   }
 
   @override
+  void didUpdateWidget(covariant _DropdownContent<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Compare items to see if the contents are different
+    bool itemsChanged = widget.items.length != oldWidget.items.length;
+    if (!itemsChanged) {
+      for (int i = 0; i < widget.items.length; i++) {
+        if (widget.items[i].value != oldWidget.items[i].value ||
+            widget.items[i].label != oldWidget.items[i].label) {
+          itemsChanged = true;
+          break;
+        }
+      }
+    }
+    if (itemsChanged) {
+      setState(() {
+        final query = _searchController.text;
+        if (query.isEmpty) {
+          filteredItems = widget.items;
+        } else {
+          filteredItems = widget.items
+              .where((item) => item.label
+                  .toLowerCase()
+                  .contains(query.toLowerCase()))
+              .toList();
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -242,7 +290,7 @@ class _DropdownContentState<T> extends State<_DropdownContent<T>> {
               controller: _searchController,
               autofocus: true,
               decoration: InputDecoration(
-                hintText: "Search ${widget.hint}...",
+                hintText: "Search",
                 hintStyle: const TextStyle(fontSize: 13),
                 prefixIcon: const Icon(Icons.search, size: 18),
                 isDense: true,

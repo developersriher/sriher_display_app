@@ -45,6 +45,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
   final TextEditingController _fromDateController = TextEditingController();
   final TextEditingController _toDateController = TextEditingController();
   final TextEditingController _fromTimeController = TextEditingController();
+  final TextEditingController _toTimeController = TextEditingController();
   final TextEditingController _newScheduleController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
 
@@ -81,6 +82,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       _fromDateController.text =
           widget.editData!['from_date']?.toString() ?? '';
       _toDateController.text = widget.editData!['to_date']?.toString() ?? '';
+      
       String rawTime = widget.editData!['from_time']?.toString() ?? '';
       if (rawTime.length > 5) {
         _fromTimeController.text = rawTime.substring(0, 5);
@@ -88,11 +90,19 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         _fromTimeController.text = rawTime;
       }
 
+      String rawToTime = widget.editData!['to_time']?.toString() ?? '';
+      if (rawToTime.length > 5) {
+        _toTimeController.text = rawToTime.substring(0, 5);
+      } else {
+        _toTimeController.text = rawToTime;
+      }
+
       if (selectedTemplateId != null) {
         _fetchTemplateFiles(selectedTemplateId!);
       }
 
       if (_fromTimeController.text.isNotEmpty &&
+          _toTimeController.text.isNotEmpty &&
           _fromDateController.text.isNotEmpty &&
           _toDateController.text.isNotEmpty) {
         _prepopulateSlots();
@@ -110,6 +120,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     _fromDateController.dispose();
     _toDateController.dispose();
     _fromTimeController.dispose();
+    _toTimeController.dispose();
     _newScheduleController.dispose();
     _searchController.dispose();
     _durationPanelController.dispose();
@@ -133,7 +144,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       isSelectionComplete &&
       _fromDateController.text.isNotEmpty &&
       _toDateController.text.isNotEmpty &&
-      _fromTimeController.text.isNotEmpty;
+      _fromTimeController.text.isNotEmpty &&
+      _toTimeController.text.isNotEmpty;
 
   List<String> get slotPairs {
     List<String> pairs = [];
@@ -151,22 +163,41 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     try {
       DateTime start = DateFormat('yyyy-MM-dd').parse(_fromDateController.text);
       DateTime end = DateFormat('yyyy-MM-dd').parse(_toDateController.text);
-      String time = _fromTimeController.text;
+      String fromTime = _fromTimeController.text;
+      String toTime = _toTimeController.text;
 
-      String? matchedSlot;
+      int timeToMinutes(String timeStr) {
+        final parts = timeStr.split(':');
+        final h = int.parse(parts[0]);
+        final m = int.parse(parts[1]);
+        return h * 60 + m;
+      }
+
+      int startMin = timeToMinutes(fromTime);
+      int endMin = timeToMinutes(toTime);
+
+      List<String> matchedSlots = [];
       for (var pair in slotPairs) {
-        if (pair.startsWith(time)) {
-          matchedSlot = pair;
-          break;
+        String slotStartStr = pair.split(' - ')[0];
+        int slotStartMin = timeToMinutes(slotStartStr);
+        if (endMin > startMin) {
+          if (slotStartMin >= startMin && slotStartMin < endMin) {
+            matchedSlots.add(pair);
+          }
+        } else {
+          // Crosses midnight, e.g. 22:00 to 02:00
+          if (slotStartMin >= startMin || slotStartMin < endMin) {
+            matchedSlots.add(pair);
+          }
         }
       }
 
-      if (matchedSlot != null) {
+      if (matchedSlots.isNotEmpty) {
         for (int i = 0; i <= end.difference(start).inDays; i++) {
           String key = DateFormat(
             'yyyy-MM-dd',
           ).format(start.add(Duration(days: i)));
-          selectedSlotsByDay[key] = [matchedSlot];
+          selectedSlotsByDay[key] = List.from(matchedSlots);
         }
       }
     } catch (e) {
@@ -247,6 +278,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           "from_date": _fromDateController.text,
           "to_date": _toDateController.text,
           "from_time": _fromTimeController.text,
+          "to_time": _toTimeController.text,
         }),
       );
       if (response.statusCode == 200) {
@@ -276,7 +308,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     final GlobalKey<FormState> _popupFormKey = GlobalKey<FormState>();
     StylishDialog.show(
       context: context,
-      title: "NEW SCHEDULE",
+      title: "New Schedule",
       subtitle: "Define a new department or purpose for scheduling.",
       maxWidth: 480,
       builder: (context, setPopupState) {
@@ -522,8 +554,17 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                         value: selectedScheduleId,
                         items: scheduleList,
                         showAdd: true,
-                        onChanged: (val) =>
-                            setState(() => selectedScheduleId = val),
+                        onChanged: (val) {
+                          setState(() {
+                            selectedScheduleId = val;
+                            _fromDateController.clear();
+                            _fromTimeController.clear();
+                            _toDateController.clear();
+                            _toTimeController.clear();
+                            selectAllSlot = false;
+                            selectedSlotsByDay.clear();
+                          });
+                        },
                       ),
                     ),
                     const SizedBox(width: 25),
@@ -537,6 +578,12 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                           setState(() {
                             selectedTemplateId = val;
                             templateFiles = [];
+                            _fromDateController.clear();
+                            _fromTimeController.clear();
+                            _toDateController.clear();
+                            _toTimeController.clear();
+                            selectAllSlot = false;
+                            selectedSlotsByDay.clear();
                           });
                           if (val != null) _fetchTemplateFiles(val);
                         },
@@ -550,77 +597,79 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   children: [
                     Expanded(
                       flex: 2,
-                      child: _buildDateField("From Date", _fromDateController),
+                      child: _buildDateField(
+                        "From Date",
+                        _fromDateController,
+                        enabled: selectedScheduleId != null && selectedTemplateId != null,
+                        onChanged: () {
+                          setState(() {
+                            _fromTimeController.clear();
+                            _toDateController.clear();
+                            _toTimeController.clear();
+                            selectAllSlot = false;
+                            selectedSlotsByDay.clear();
+                          });
+                        },
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       flex: 2,
                       child: _buildTimeDropdown(
                         "From Time",
+                        "From Time",
                         _fromTimeController,
-                        enabled: _fromDateController.text.isNotEmpty,
+                        enabled: selectedScheduleId != null &&
+                            selectedTemplateId != null &&
+                            _fromDateController.text.isNotEmpty,
+                        onChanged: () {
+                          setState(() {
+                            _toDateController.clear();
+                            _toTimeController.clear();
+                            selectAllSlot = false;
+                            selectedSlotsByDay.clear();
+                          });
+                        },
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       flex: 2,
-                      child: _buildDateField("To Date", _toDateController),
+                      child: _buildDateField(
+                        "To Date",
+                        _toDateController,
+                        enabled: selectedScheduleId != null &&
+                            selectedTemplateId != null &&
+                            _fromDateController.text.isNotEmpty &&
+                            _fromTimeController.text.isNotEmpty,
+                        onChanged: () {
+                          setState(() {
+                            _toTimeController.clear();
+                            selectAllSlot = false;
+                            selectedSlotsByDay.clear();
+                          });
+                        },
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       flex: 2,
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 2),
-                        child: Row(
-                          children: [
-                            Checkbox(
-                              value: selectAllSlot,
-                              activeColor: Colors.blue,
-                              side: BorderSide(color: Colors.grey.shade400),
-                              onChanged: (val) => setState(() {
-                                selectAllSlot = val!;
-                                if (selectAllSlot) {
-                                  try {
-                                    DateTime start = DateFormat(
-                                      'yyyy-MM-dd',
-                                    ).parse(_fromDateController.text);
-                                    DateTime end = DateFormat(
-                                      'yyyy-MM-dd',
-                                    ).parse(_toDateController.text);
-                                    if (end.isBefore(start)) end = start;
-                                    for (
-                                      int i = 0;
-                                      i <= end.difference(start).inDays;
-                                      i++
-                                    ) {
-                                      String key = DateFormat(
-                                        'yyyy-MM-dd',
-                                      ).format(start.add(Duration(days: i)));
-                                      selectedSlotsByDay[key] = List.from(
-                                        slotPairs,
-                                      );
-                                    }
-                                  } catch (e) {
-                                    debugPrint(e.toString());
-                                  }
-                                } else {
-                                  selectedSlotsByDay.clear();
-                                }
-                              }),
-                            ),
-                            const Expanded(
-                              child: Text(
-                                "Select All",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12.0,
-                                  color: Colors.black87,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
+                      child: _buildTimeDropdown(
+                        "To Time",
+                        "To Time",
+                        _toTimeController,
+                        enabled: selectedScheduleId != null &&
+                            selectedTemplateId != null &&
+                            _fromDateController.text.isNotEmpty &&
+                            _fromTimeController.text.isNotEmpty &&
+                            _toDateController.text.isNotEmpty,
+                        onChanged: () {
+                          setState(() {
+                            selectAllSlot = false;
+                            selectedSlotsByDay.clear();
+                            _prepopulateSlots();
+                          });
+                        },
                       ),
                     ),
                   ],
@@ -630,6 +679,58 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           ),
           const SizedBox(height: 10),
           if (isAllFilled) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: selectAllSlot,
+                    activeColor: Colors.blue,
+                    side: BorderSide(color: Colors.grey.shade400),
+                    onChanged: (val) => setState(() {
+                      selectAllSlot = val!;
+                      if (selectAllSlot) {
+                        try {
+                          DateTime start = DateFormat(
+                            'yyyy-MM-dd',
+                          ).parse(_fromDateController.text);
+                          DateTime end = DateFormat(
+                            'yyyy-MM-dd',
+                          ).parse(_toDateController.text);
+                          if (end.isBefore(start)) end = start;
+                          for (
+                            int i = 0;
+                            i <= end.difference(start).inDays;
+                            i++
+                          ) {
+                            String key = DateFormat(
+                              'yyyy-MM-dd',
+                            ).format(start.add(Duration(days: i)));
+                            selectedSlotsByDay[key] = List.from(
+                              slotPairs,
+                            );
+                          }
+                        } catch (e) {
+                          debugPrint(e.toString());
+                        }
+                      } else {
+                        selectedSlotsByDay.clear();
+                      }
+                    }),
+                  ),
+                  const Text(
+                    "Select All",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12.0,
+                      color: Colors.black87,
+                    ),
+                  ),
+
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
             _buildSlotSelectionCard(),
             const SizedBox(height: 30),
             Align(
@@ -893,6 +994,34 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     bool showAdd = false,
     required ValueChanged<int?> onChanged,
   }) {
+    final seenLabels = <String>{};
+    final seenValues = <int>{};
+    final List<SearchableDropdownItem<int>> dropdownItems = [];
+
+    for (var item in items) {
+      final idStr = item['schedule_id']?.toString() ?? item['id']?.toString() ?? '';
+      final id = int.tryParse(idStr) ?? 0;
+      
+      final itemLabel =
+          item['schedule_name']?.toString() ??
+          item['template_name']?.toString() ??
+          item['temp_name']?.toString() ??
+          item['name']?.toString() ??
+          item['role_name']?.toString() ??
+          item['device_name']?.toString() ??
+          item['location_name']?.toString() ??
+          item['department_name']?.toString() ??
+          'Unnamed';
+
+      final normLabel = itemLabel.toLowerCase().trim();
+      if (seenLabels.add(normLabel) && seenValues.add(id)) {
+        dropdownItems.add(SearchableDropdownItem<int>(
+          value: id,
+          label: itemLabel,
+        ));
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -911,21 +1040,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               child: SearchableDropdown<int>(
                 value: value,
                 hint: hint,
-                items: items.map((item) {
-                  return SearchableDropdownItem<int>(
-                    value: int.tryParse(item['id']?.toString() ?? '') ?? 0,
-                    label:
-                        item['schedule_name']?.toString() ??
-                        item['template_name']?.toString() ??
-                        item['temp_name']?.toString() ??
-                        item['name']?.toString() ??
-                        item['role_name']?.toString() ??
-                        item['device_name']?.toString() ??
-                        item['location_name']?.toString() ??
-                        item['department_name']?.toString() ??
-                        'Unnamed',
-                  );
-                }).toList(),
+                items: dropdownItems,
                 onChanged: onChanged,
               ),
             ),
@@ -949,9 +1064,11 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
   }
 
   Widget _buildTimeDropdown(
+    String label,
     String hint,
     TextEditingController controller, {
     bool enabled = true,
+    VoidCallback? onChanged,
   }) {
     final List<String> slots = _generateTimeSlots();
     final String? currentValue =
@@ -962,9 +1079,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "From Time",
-          style: TextStyle(
+        Text(
+          label,
+          style: const TextStyle(
             fontWeight: FontWeight.w900,
             fontSize: 12.0,
             color: Color(0xFF64748B),
@@ -984,6 +1101,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                     setState(() {
                       controller.text = v;
                     });
+                    if (onChanged != null) onChanged();
                   }
                 }
               : null,
@@ -992,7 +1110,12 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     );
   }
 
-  Widget _buildDateField(String label, TextEditingController controller) {
+  Widget _buildDateField(
+    String label,
+    TextEditingController controller, {
+    bool enabled = true,
+    VoidCallback? onChanged,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1009,7 +1132,11 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         TextFormField(
           controller: controller,
           readOnly: true,
-          style: const TextStyle(fontSize: 13.0, color: Colors.black87),
+          enabled: enabled,
+          style: const TextStyle(
+            fontSize: 13.0,
+            color: Colors.black87,
+          ),
           decoration: InputDecoration(
             hintText: 'MM/DD/YYYY',
             hintStyle: const TextStyle(color: Colors.black38, fontSize: 13.0),
@@ -1023,6 +1150,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               borderRadius: BorderRadius.zero,
               borderSide: BorderSide(color: Colors.grey.shade300),
             ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 12,
@@ -1033,21 +1164,24 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               color: Colors.blue,
             ),
           ),
-          onTap: () async {
-            DateTime? pickedDate = await showDatePicker(
-              context: context,
-              initialDate: DateTime.now(),
-              firstDate: DateTime(2000),
-              lastDate: DateTime(2101),
-            );
-            if (pickedDate != null) {
-              setState(
-                () => controller.text = DateFormat(
-                  'yyyy-MM-dd',
-                ).format(pickedDate),
-              );
-            }
-          },
+          onTap: enabled
+              ? () async {
+                  DateTime? pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2101),
+                  );
+                  if (pickedDate != null) {
+                    setState(
+                      () => controller.text = DateFormat(
+                        'yyyy-MM-dd',
+                      ).format(pickedDate),
+                    );
+                    if (onChanged != null) onChanged();
+                  }
+                }
+              : null,
         ),
       ],
     );
@@ -1279,10 +1413,18 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         ),
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: slotPairs.map((slot) {
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 2.5,
+            ),
+            itemCount: slotPairs.length,
+            itemBuilder: (context, index) {
+              String slot = slotPairs[index];
               List<String> daySlots = selectedSlotsByDay[key] ?? [];
               bool isSelected = daySlots.contains(slot);
 
@@ -1298,10 +1440,6 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   });
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
                   decoration: BoxDecoration(
                     color: isSelected ? Colors.blue : Colors.white,
                     borderRadius: BorderRadius.circular(6),
@@ -1309,19 +1447,21 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                       color: isSelected ? Colors.blue : Colors.grey.shade300,
                     ),
                   ),
-                  child: Text(
-                    slot,
-                    style: TextStyle(
-                      fontSize: 11.0,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                      color: isSelected ? Colors.white : Colors.black87,
+                  child: Center(
+                    child: Text(
+                      slot,
+                      style: TextStyle(
+                        fontSize: 10.0,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color: isSelected ? Colors.white : Colors.black87,
+                      ),
                     ),
                   ),
                 ),
               );
-            }).toList(),
+            },
           ),
         ),
       ],

@@ -37,6 +37,10 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
   int currentPage = 1;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
+  
+  // Sorting State
+  int _sortColumnIndex = -1;
+  bool _sortAscending = false;
 
   // Form Controller
   final TextEditingController _templateNameController = TextEditingController();
@@ -234,12 +238,41 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
   }
 
   List<dynamic> get _filteredList {
-    if (_searchQuery.isEmpty) return templateList;
-    return templateList.where((item) {
-      return (item['temp_name'] ?? '').toString().toLowerCase().contains(
-        _searchQuery,
-      );
-    }).toList();
+    List<dynamic> filtered = List.from(templateList);
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((item) {
+        return (item['temp_name'] ?? '').toString().toLowerCase().contains(
+          _searchQuery,
+        );
+      }).toList();
+    }
+    
+    filtered.sort((a, b) {
+      String aVal = "";
+      String bVal = "";
+      
+      switch (_sortColumnIndex) {
+        case 0:
+          aVal = a['temp_name']?.toString() ?? a['template_name']?.toString() ?? "";
+          bVal = b['temp_name']?.toString() ?? b['template_name']?.toString() ?? "";
+          break;
+        default:
+          aVal = a['id']?.toString() ?? "";
+          bVal = b['id']?.toString() ?? "";
+          break;
+      }
+      
+      if (_sortColumnIndex == -1) {
+        int idA = int.tryParse(aVal) ?? 0;
+        int idB = int.tryParse(bVal) ?? 0;
+        return _sortAscending ? idA.compareTo(idB) : idB.compareTo(idA);
+      }
+      
+      return _sortAscending
+          ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
+          : bVal.toLowerCase().compareTo(aVal.toLowerCase());
+    });
+    return filtered;
   }
 
   List<dynamic> get _pagedList {
@@ -267,39 +300,62 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
   child: Form(
     key: _formKey,
     autovalidateMode: AutovalidateMode.onUserInteraction,
-    child: TextFormField(
-        controller: _templateNameController,
-        validator: (v) => (v == null || v.isEmpty) ? 'Enter the template name' : null,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        style: const TextStyle(fontSize: 14),
-        decoration: InputDecoration(
-          hintText: 'Enter the template name',
-          filled: true,
-          fillColor: Colors.white,
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.zero,
-            borderSide: BorderSide(
-              color: Colors.grey.shade400,
-              width: 1.0,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 6.0),
+          child: Text(
+            "Template Name",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF334155),
             ),
-          ),
-          focusedBorder: const OutlineInputBorder(
-            borderRadius: BorderRadius.zero,
-            borderSide: BorderSide(
-              color: Color(0xFF0F172A),
-              width: 1.5,
-            ),
-          ),
-          errorBorder: const OutlineInputBorder(
-            borderRadius: BorderRadius.zero,
-            borderSide: BorderSide(color: Colors.red, width: 1.0),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 18,
           ),
         ),
-      ),
+        TextFormField(
+          controller: _templateNameController,
+          validator: (v) {
+            if (v == null || v.isEmpty) return 'Enter the template name';
+            if (!RegExp(r'^[a-zA-Z0-9\s\-_]+$').hasMatch(v.trim())) {
+              return 'Only letters, numbers, and basic special chars allowed';
+            }
+            return null;
+          },
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            hintText: 'Enter the template name',
+            filled: true,
+            fillColor: Colors.white,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Colors.grey.shade400,
+                width: 1.0,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Color(0xFF0F172A),
+                width: 1.5,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.red, width: 1.0),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 18,
+            ),
+          ),
+        ),
+      ],
+    ),
     ),
     actions: [
         TextButton(
@@ -494,9 +550,9 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
                 headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
                 border: TableBorder.all(color: Colors.grey.shade100),
                 columns: [
-                  _buildCol('TEMPLATE NAME'),
-                  _buildCol('EDIT'),
-                  _buildCol('ACTION'),
+                  _buildCol('TEMPLATE NAME', 0),
+                  _buildCol('EDIT', -1),
+                  _buildCol('ACTION', -1),
                 ],
                 rows: _pagedList.map((item) {
                   return DataRow(
@@ -511,6 +567,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
                         IconButton(
                           icon: const Icon(Icons.edit, color: Colors.blue),
                           onPressed: () => loadTemplateForEdit(item),
+                          hoverColor: Colors.blue.withOpacity(0.1),
                         ),
                       ),
                       DataCell(
@@ -539,14 +596,64 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
     );
   }
 
-  DataColumn _buildCol(String label) {
+  DataColumn _buildCol(String label, int colIndex) {
     return DataColumn(
-      label: Text(
-        label,
-        style: TextStyle(
-          color: Colors.blue.shade800,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
+      label: InkWell(
+        onTap: colIndex < 0 ? null : () {
+          setState(() {
+            if (_sortColumnIndex == colIndex) {
+              _sortAscending = !_sortAscending;
+            } else {
+              _sortColumnIndex = colIndex;
+              _sortAscending = true;
+            }
+            currentPage = 1;
+          });
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: Colors.blue.shade800,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (colIndex >= 0) ...[
+              const SizedBox(width: 4),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    heightFactor: 0.4,
+                    child: Icon(
+                      Icons.arrow_drop_up,
+                      size: 18,
+                      color: _sortColumnIndex == colIndex && _sortAscending
+                          ? Colors.blue
+                          : Colors.grey.withOpacity(0.5),
+                    ),
+                  ),
+                  Align(
+                    heightFactor: 0.4,
+                    child: Icon(
+                      Icons.arrow_drop_down,
+                      size: 18,
+                      color: _sortColumnIndex == colIndex && !_sortAscending
+                          ? Colors.blue
+                          : Colors.grey.withOpacity(0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );

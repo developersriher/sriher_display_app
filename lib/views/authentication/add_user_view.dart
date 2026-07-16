@@ -23,16 +23,15 @@ class _AddUserViewState extends State<AddUserView> {
   bool isLoading = true;
   bool isSubmitting = false;
   String entriesValue = "10";
+  int currentPage = 1;
   String searchQuery = "";
 
-  // Form State
-  int? editingDatabaseId;
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _userIdController = TextEditingController();
-  final TextEditingController _userNameController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  // Sorting State
+  int _sortColumnIndex = -1;
+  bool _sortAscending = false;
+
+  // Table search controller (NOT form)
   final TextEditingController _searchController = TextEditingController();
-  String? selectedRoleId;
 
   @override
   void initState() {
@@ -42,9 +41,6 @@ class _AddUserViewState extends State<AddUserView> {
 
   @override
   void dispose() {
-    _userIdController.dispose();
-    _userNameController.dispose();
-    _passwordController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -86,6 +82,12 @@ class _AddUserViewState extends State<AddUserView> {
     final id = int.tryParse(user['id']?.toString() ?? '');
     if (id == null) return;
 
+    // Prefill data from table row immediately, then refresh from API
+    String userId = user['user_id']?.toString() ?? '';
+    String userName = user['user_name']?.toString() ?? '';
+    String password = user['user_password']?.toString() ?? '';
+    String? roleId = user['role_id']?.toString();
+
     try {
       final response = await http
           .post(
@@ -103,73 +105,70 @@ class _AddUserViewState extends State<AddUserView> {
         final u = (payload is List && payload.isNotEmpty)
             ? payload[0]
             : payload;
-
-        editingDatabaseId = id;
-        _userIdController.text =
-            u['user_id']?.toString() ?? user['user_id']?.toString() ?? '';
-        _userNameController.text =
-            u['user_name']?.toString() ?? user['user_name']?.toString() ?? '';
-        _passwordController.text = '';
-        selectedRoleId =
-            u['role_id']?.toString() ?? user['role_id']?.toString();
-
-        _showFormDialog();
+        userId = u['user_id']?.toString() ?? userId;
+        userName = u['user_name']?.toString() ?? userName;
+        password = u['user_password']?.toString() ?? password;
+        roleId = u['role_id']?.toString() ?? roleId;
       }
-    } catch (e) {
-      editingDatabaseId = id;
-      _userIdController.text = user['user_id']?.toString() ?? '';
-      _userNameController.text = user['user_name']?.toString() ?? '';
-      selectedRoleId = user['role_id']?.toString();
-      _showFormDialog();
-    }
+    } catch (_) {}
+
+    if (!mounted) return;
+    _openFormDialog(
+      editId: id,
+      initUserId: userId,
+      initUserName: userName,
+      initPassword: password,
+      initRoleId: roleId,
+    );
   }
 
-  Future<void> handleSubmit() async {
-    setState(() => isSubmitting = true);
-
-    final bool isUpdating = editingDatabaseId != null;
+  Future<void> _handleSubmit({
+    required int? editId,
+    required String userId,
+    required String userName,
+    required String password,
+    required String? roleId,
+  }) async {
+    final bool isUpdating = editId != null;
     final url = isUpdating
         ? '${getBaseUrl()}/regUpdateview'
         : '${getBaseUrl()}/insertRegisterview';
 
     final Map<String, dynamic> body = {
       "api_key": _apiKey,
-      "user_id": _userIdController.text.trim(),
-      "user_name": _userNameController.text.trim(),
-      "user_password": _passwordController.text.trim(),
-      "role_id": selectedRoleId ?? "1",
+      "user_id": userId,
+      "user_name": userName,
+      "role_id": roleId!, // always validated non-null before calling
     };
-    if (isUpdating) body["id"] = editingDatabaseId;
+    if (password.isNotEmpty) body["user_password"] = password;
+    if (isUpdating) body["id"] = editId;
 
-    // Optimistic local update — show immediately in table
+    // Optimistic update — insert at top immediately
     if (!isUpdating) {
       setState(() {
         allUsers.insert(0, {
           'id': 'temp_${DateTime.now().millisecondsSinceEpoch}',
-          'user_id': _userIdController.text.trim(),
-          'user_name': _userNameController.text.trim(),
-          'role_id': selectedRoleId ?? '1',
-          'status': 1,
+          'user_id': userId,
+          'user_name': userName,
+          'role_id': roleId,
+          'status': 0,
         });
       });
     } else {
-      // Update existing row optimistically
       setState(() {
         final idx = allUsers.indexWhere(
-          (u) => u['id']?.toString() == editingDatabaseId.toString(),
+          (u) => u['id']?.toString() == editId.toString(),
         );
         if (idx != -1) {
           allUsers[idx] = {
             ...allUsers[idx],
-            'user_id': _userIdController.text.trim(),
-            'user_name': _userNameController.text.trim(),
-            'role_id': selectedRoleId ?? '1',
+            'user_id': userId,
+            'user_name': userName,
+            'role_id': roleId,
           };
         }
       });
     }
-
-    _resetForm();
 
     try {
       final response = await http
@@ -179,29 +178,15 @@ class _AddUserViewState extends State<AddUserView> {
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 15));
-
       if (response.statusCode == 200) {
-        _showSnack(
-          isUpdating
-              ? "User updated successfully!"
-              : "User added successfully!",
-        );
-        // Sync with server in background to get real IDs
-        fetchUserList();
+        _showSnack(isUpdating ? "User updated!" : "User added!");
       } else {
-        _showSnack(
-          "Server error (${response.statusCode}). Try again.",
-          isError: true,
-        );
-        // Revert optimistic update on failure
-        fetchUserList();
+        _showSnack("Server error (${response.statusCode}).", isError: true);
       }
     } catch (e) {
-      _showSnack("Connection failed. Check network.", isError: true);
-      fetchUserList();
-    } finally {
-      if (mounted) setState(() => isSubmitting = false);
+      _showSnack("Connection failed.", isError: true);
     }
+    fetchUserList();
   }
 
   Future<void> toggleStatus(dynamic user, bool newStatus) async {
@@ -240,14 +225,145 @@ class _AddUserViewState extends State<AddUserView> {
     }
   }
 
-  void _resetForm() {
-    setState(() {
-      editingDatabaseId = null;
-      _userIdController.clear();
-      _userNameController.clear();
-      _passwordController.clear();
-      selectedRoleId = null;
-    });
+  Future<void> deleteUser(dynamic user) async {
+    final id = int.tryParse(user['id']?.toString() ?? '');
+    if (id == null) return;
+
+    final confirm = await StylishDialog.show<bool>(
+      context: context,
+      title: "Delete Confirmation",
+      icon: Icons.delete_forever_rounded,
+      maxWidth: 400,
+      builder: (context, setPopupState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Are you sure you want to delete this user? This action cannot be undone.",
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 20,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 24,
+                    ),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    "Delete",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    // Save index and item for potential rollback
+    final deletedIndex = allUsers.indexWhere(
+      (u) => u['id']?.toString() == user['id']?.toString(),
+    );
+    final deletedItem = deletedIndex != -1 ? allUsers[deletedIndex] : null;
+
+    if (deletedIndex != -1) {
+      setState(() {
+        allUsers.removeAt(deletedIndex);
+      });
+    }
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${getBaseUrl()}/regUpdateview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "api_key": _apiKey,
+              "device_id": id,
+              "status": 0,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        _showSnack("User deleted successfully.");
+        // Don't re-fetch — the server marks status:0 but still returns the user.
+        // The row is already removed optimistically above.
+      } else {
+        // Rollback on failure
+        if (deletedItem != null && deletedIndex != -1) {
+          setState(() {
+            allUsers.insert(deletedIndex, deletedItem);
+          });
+        }
+        _showSnack("Failed to delete user.", isError: true);
+      }
+    } catch (e) {
+      // Rollback on network error
+      if (deletedItem != null && deletedIndex != -1) {
+        setState(() {
+          allUsers.insert(deletedIndex, deletedItem);
+        });
+      }
+      _showSnack("Failed to delete user.", isError: true);
+    }
+  }
+
+  void _openFormDialog({
+    int? editId,
+    String initUserId = '',
+    String initUserName = '',
+    String initPassword = '',
+    String? initRoleId,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _UserFormDialog(
+        editId: editId,
+        initUserId: initUserId,
+        initUserName: initUserName,
+        initPassword: initPassword,
+        initRoleId: initRoleId,
+        allRoles: allRoles,
+        onSubmit: _handleSubmit,
+      ),
+    );
   }
 
   void _showSnack(String msg, {bool isError = false}) {
@@ -257,7 +373,9 @@ class _AddUserViewState extends State<AddUserView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(msg),
-          backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+          backgroundColor: isError
+              ? Colors.red.shade700
+              : Colors.green.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           margin: const EdgeInsets.all(16),
@@ -268,253 +386,150 @@ class _AddUserViewState extends State<AddUserView> {
     }
   }
 
-void _showFormDialog() {
-    StylishDialog.show(
-      context: context,
-      title: editingDatabaseId == null ? "Add User" : "Edit User",
-      subtitle: "Provide system credentials and role",
-      icon: editingDatabaseId == null
-          ? Icons.person_add_rounded
-          : Icons.edit_note_rounded,
-      child: StatefulBuilder(
-        builder: (context, setDialogState) {
-          return Form(
-            key: _formKey,
-            autovalidateMode: AutovalidateMode.disabled, // ← no red until submit
-            child: Column(
-              children: [
-                _buildUserIdInput(),
-                const SizedBox(height: 20),
-                _buildInput(
-                  "User Name",
-                  _userNameController,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty)
-                          ? "Please enter the User Name"
-                          : null,
-                ),
-                const SizedBox(height: 20),
-                _buildInput(
-                  "Password",
-                  _passwordController,
-                  isPass: true,
-                  validator: (v) {
-                    if (editingDatabaseId != null) return null;
-                    if (v == null || v.trim().isEmpty)
-                      return "Please enter the Password";
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-                DropdownButtonFormField<String>(
-                  value: selectedRoleId,
-                  autovalidateMode: AutovalidateMode.onUserInteraction, // ← clears once selected
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Colors.black87, fontSize: 13),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 12,
-                    ),
-                    hintText: "Select Role",
-                    hintStyle: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                  items: allRoles.map((r) {
-                    return DropdownMenuItem<String>(
-                      value: r['id']?.toString() ?? '',
-                      child: Text(r['role_name']?.toString() ?? ''),
-                    );
-                  }).toList(),
-                  validator: (v) =>
-                      (v == null || v.isEmpty)
-                          ? 'Please select the Role'
-                          : null,
-                  onChanged: (v) {
-                    setDialogState(() => selectedRoleId = v);
-                    setState(() => selectedRoleId = v);
-                  },
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            _resetForm();
-            Navigator.pop(context);
-          },
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(
-              vertical: 12,
-              horizontal: 20,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-          child: const Text(
-            "Cancel",
-            style: TextStyle(
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        StatefulBuilder(
-          builder: (context, setBtnState) {
-            return ElevatedButton(
-              onPressed: isSubmitting
-                  ? null
-                  : () async {
-                      if (_formKey.currentState!.validate()) {
-                        Navigator.pop(context);
-                        handleSubmit();
-                      }
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F172A),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 12,
-                  horizontal: 32,
-                ),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: isSubmitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(
-                      editingDatabaseId == null ? "Submit" : "Update",
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13,
-                      ),
-                    ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
   // ──────────────────────────── BUILD ────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final int limit = int.tryParse(entriesValue) ?? 10;
-    final List<dynamic> filtered = searchQuery.isEmpty
-        ? allUsers
+    List<dynamic> filtered = searchQuery.isEmpty
+        ? List.from(allUsers)
         : allUsers.where((u) {
             final q = searchQuery.toLowerCase();
             return (u['user_id']?.toString().toLowerCase().contains(q) ??
                     false) ||
                 (u['user_name']?.toString().toLowerCase().contains(q) ?? false);
           }).toList();
-    final List<dynamic> pagedUsers = filtered.take(limit).toList();
+
+    filtered.sort((a, b) {
+      String aVal = "";
+      String bVal = "";
+
+      switch (_sortColumnIndex) {
+        case 0:
+          aVal = a['user_id']?.toString() ?? "";
+          bVal = b['user_id']?.toString() ?? "";
+          break;
+        case 1:
+          aVal = a['user_name']?.toString() ?? "";
+          bVal = b['user_name']?.toString() ?? "";
+          break;
+        case 2:
+          final rA =
+              allRoles.firstWhere(
+                (r) => r['id']?.toString() == a['role_id']?.toString(),
+                orElse: () => {'role_name': 'User'},
+              )['role_name'] ??
+              'User';
+          final rB =
+              allRoles.firstWhere(
+                (r) => r['id']?.toString() == b['role_id']?.toString(),
+                orElse: () => {'role_name': 'User'},
+              )['role_name'] ??
+              'User';
+          aVal = rA.toString();
+          bVal = rB.toString();
+          break;
+        default:
+          aVal = a['id']?.toString() ?? "";
+          bVal = b['id']?.toString() ?? "";
+          break;
+      }
+
+      if (_sortColumnIndex == 0) {
+        final intA = int.tryParse(aVal) ?? 0;
+        final intB = int.tryParse(bVal) ?? 0;
+        return _sortAscending ? intA.compareTo(intB) : intB.compareTo(intA);
+      } else if (_sortColumnIndex == -1) {
+        // Default sort: by DB id descending, placing temp_ optimistic rows at top
+        final intA = aVal.startsWith('temp_')
+            ? 999999999
+            : (int.tryParse(aVal) ?? 0);
+        final intB = bVal.startsWith('temp_')
+            ? 999999999
+            : (int.tryParse(bVal) ?? 0);
+        return intB.compareTo(intA);
+      }
+      return _sortAscending
+          ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
+          : bVal.toLowerCase().compareTo(aVal.toLowerCase());
+    });
+
+    int totalFiltered = filtered.length;
+    int start = (currentPage - 1) * limit;
+    if (start >= totalFiltered && totalFiltered > 0) {
+      currentPage = (totalFiltered / limit).ceil();
+      if (currentPage < 1) currentPage = 1;
+      start = (currentPage - 1) * limit;
+    }
+    int end = start + limit;
+    if (end > totalFiltered) end = totalFiltered;
+
+    final List<dynamic> pagedUsers = filtered.sublist(start, end);
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SelectionArea(child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const AnimatedHeading(
-                  text: "User List",
-                  style: TextStyle(  color: Color.fromARGB(255, 64, 164, 246),  fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    _resetForm(); // clear any leftover edit state
-                    _showFormDialog();
-                  },
-                  icon: const Icon(Icons.person_add_alt_1, size: 20),
-                  label: const Text(
-                    "ADD USER",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 25),
-
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color.fromARGB(
-                      255,
-                      37,
-                      37,
-                      37,
-                    ).withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+      body: SelectionArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildListHeader(),
-                  const SizedBox(height: 20),
-                  _buildTableContainer(pagedUsers),
-                  const SizedBox(height: 20),
-                  _buildPagination(pagedUsers.length, filtered.length),
+                  const AnimatedHeading(
+                    text: "User List",
+                    style: TextStyle(
+                      color: Color.fromARGB(255, 64, 164, 246),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _openFormDialog(),
+                    icon: const Icon(Icons.person_add_alt_1, size: 20),
+                    label: const Text(
+                      "ADD USER",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 25),
+
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color.fromARGB(
+                        255,
+                        37,
+                        37,
+                        37,
+                      ).withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildListHeader(),
+                    const SizedBox(height: 20),
+                    _buildTableContainer(pagedUsers),
+                    const SizedBox(height: 20),
+                    _buildPagination(pagedUsers.length, filtered.length),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -557,10 +572,7 @@ void _showFormDialog() {
                     const SizedBox(height: 4),
                     const Text(
                       "Try a different search term",
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 13.0,
-                      ),
+                      style: TextStyle(color: Colors.grey, fontSize: 13.0),
                     ),
                   ],
                 ),
@@ -577,7 +589,7 @@ void _showFormDialog() {
                       headingRowHeight: 52,
                       dataRowMaxHeight: 56,
                       headingRowColor: WidgetStateProperty.all(
-                          Colors.blue.shade50,
+                        Colors.blue.shade50,
                       ),
                       showCheckboxColumn: false,
                       border: TableBorder.all(color: Colors.grey.shade100),
@@ -591,168 +603,78 @@ void _showFormDialog() {
     );
   }
 
-  // ── User ID field with up/down stepper ──────────────────────────────────
- Widget _buildUserIdInput() {
-    return TextFormField(
-      controller: _userIdController,
-      keyboardType: TextInputType.number,
-      autovalidateMode: AutovalidateMode.onUserInteraction, // ← clears red once typed
-      validator: (v) =>
-          (v == null || v.trim().isEmpty) ? "Please enter the User ID" : null,
-      style: const TextStyle(
-        fontSize: 13,
-        color: Color(0xFF475569),
-      ),
-      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      decoration: InputDecoration(
-        hintText: "User ID",
-        hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 16,
-        ),
-        suffixIcon: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+  List<DataColumn> _buildColumns() {
+    return [
+      _buildSortableColumn("USER ID", 0),
+      _buildSortableColumn("USER NAME", 1),
+      _buildSortableColumn("ROLE", 2),
+      _buildSortableColumn("EDIT", -1),
+      _buildSortableColumn("ACTION", -1),
+    ];
+  }
+
+  DataColumn _buildSortableColumn(String label, int columnIndex) {
+    return DataColumn(
+      label: InkWell(
+        onTap: columnIndex < 0
+            ? null
+            : () {
+                setState(() {
+                  if (_sortColumnIndex == columnIndex) {
+                    _sortAscending = !_sortAscending;
+                  } else {
+                    _sortColumnIndex = columnIndex;
+                    _sortAscending = true;
+                  }
+                });
+              },
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: 28,
-              height: 22,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                iconSize: 16,
-                icon: const Icon(
-                  Icons.keyboard_arrow_up,
-                  color: Colors.black54,
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: Colors.blue.shade800,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
                 ),
-                onPressed: () {
-                  final current =
-                      int.tryParse(_userIdController.text.trim()) ?? 0;
-                  _userIdController.text = (current + 1).toString();
-                  _userIdController.selection = TextSelection.fromPosition(
-                    TextPosition(offset: _userIdController.text.length),
-                  );
-                },
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            SizedBox(
-              width: 28,
-              height: 22,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                iconSize: 16,
-                icon: const Icon(
-                  Icons.keyboard_arrow_down,
-                  color: Colors.black54,
-                ),
-                onPressed: () {
-                  final current =
-                      int.tryParse(_userIdController.text.trim()) ?? 0;
-                  _userIdController.text = (current - 1).toString();
-                  _userIdController.selection = TextSelection.fromPosition(
-                    TextPosition(offset: _userIdController.text.length),
-                  );
-                },
+            if (columnIndex >= 0) ...[
+              const SizedBox(width: 4),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    heightFactor: 0.4,
+                    child: Icon(
+                      Icons.arrow_drop_up,
+                      size: 18,
+                      color: _sortColumnIndex == columnIndex && _sortAscending
+                          ? Colors.blue
+                          : Colors.grey.withOpacity(0.5),
+                    ),
+                  ),
+                  Align(
+                    heightFactor: 0.4,
+                    child: Icon(
+                      Icons.arrow_drop_down,
+                      size: 18,
+                      color: _sortColumnIndex == columnIndex && !_sortAscending
+                          ? Colors.blue
+                          : Colors.grey.withOpacity(0.5),
+                    ),
+                  ),
+                ],
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
-  }
-  // ── Generic text input ────────────────────────────────────────────────────
-Widget _buildInput(
-    String hint,
-    TextEditingController c, {
-    bool isPass = false,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: c,
-      obscureText: isPass,
-      validator: validator,
-      autovalidateMode: AutovalidateMode.onUserInteraction, // ← clears red once typed
-      style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 14,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRoleDrop() {
-    return SearchableDropdown<String>(
-      value: selectedRoleId,
-      hint: "Select Role",
-      items: allRoles.map((r) {
-        return SearchableDropdownItem<String>(
-          value: r['id'].toString(),
-          label: r['role_name'] ?? '',
-        );
-      }).toList(),
-      onChanged: (v) => setState(() => selectedRoleId = v),
-    );
-  }
-
-  List<DataColumn> _buildColumns() {
-    return ["USER ID", "USER NAME", "ROLE", "EDIT", "ACTION"]
-        .map(
-          (c) => DataColumn(
-            label: Text(
-              c,
-              style: TextStyle(
-                color: Colors.blue.shade800,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        )
-        .toList();
   }
 
   DataRow _buildRow(dynamic u) {
@@ -795,7 +717,7 @@ Widget _buildInput(
           IconButton(
             icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
             onPressed: () => loadForEdit(u),
-            tooltip: "Edit User",
+            tooltip: "Edit",
           ),
         ),
         DataCell(
@@ -818,7 +740,14 @@ Widget _buildInput(
       children: [
         Row(
           children: [
-            const Text("Show ", style: TextStyle(fontSize: 14)),
+            const Text(
+              "Show ",
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black87,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             // STYLED ENTRIES BOX
             SizedBox(
               width: 75,
@@ -849,24 +778,29 @@ Widget _buildInput(
                   ),
                 ),
                 items: ["10", "25", "50", "100"]
-                    .map((v) => DropdownMenuItem(
-                          value: v,
-                          child: Text(v),
-                        ))
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                     .toList(),
                 onChanged: (v) {
                   if (v != null) {
                     setState(() {
                       entriesValue = v;
+                      currentPage = 1;
                     });
                   }
                 },
               ),
             ),
-            const Text(" entries", style: TextStyle(fontSize: 14)),
+            const Text(
+              " entries",
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black87,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
-       SizedBox(
+        SizedBox(
           width: 250,
           child: TextField(
             controller: _searchController,
@@ -880,9 +814,7 @@ Widget _buildInput(
               ),
               prefixIcon: const Icon(Icons.search, size: 16),
               contentPadding: const EdgeInsets.symmetric(vertical: 0),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.zero),
             ),
           ),
         ),
@@ -891,25 +823,66 @@ Widget _buildInput(
   }
 
   Widget _buildPagination(int showing, int total) {
+    if (total == 0) return const SizedBox.shrink();
+
+    int limit = int.tryParse(entriesValue) ?? 10;
+    int maxPages = (total / limit).ceil();
+    if (maxPages == 0) maxPages = 1;
+
+    // Calculate current block of 4 pages
+    int currentBlock = ((currentPage - 1) ~/ 4);
+    int startPage = currentBlock * 4 + 1;
+    int endPage = (startPage + 3) > maxPages ? maxPages : (startPage + 3);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          "Showing 1 to $showing of $total entries",
-          style: const TextStyle(color: Colors.grey, fontSize: 13),
+          "Showing $showing out of $total entries",
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: Colors.black54,
+          ),
         ),
         Row(
           children: [
-            _buildPageBtn("Previous", enabled: false),
-            _buildPageBtn("1", active: true),
-            _buildPageBtn("Next", enabled: true),
+            _buildPageBtn(
+              "Previous",
+              enabled: currentPage > 1,
+              onTap: () {
+                if (currentPage > 1) {
+                  setState(() => currentPage--);
+                }
+              },
+            ),
+            for (int i = startPage; i <= endPage; i++)
+              _buildPageBtn(
+                i.toString(),
+                active: i == currentPage,
+                onTap: () => setState(() => currentPage = i),
+              ),
+            _buildPageBtn(
+              "Next",
+              enabled: currentPage < maxPages,
+              onTap: () {
+                if (currentPage < maxPages) {
+                  setState(() => currentPage++);
+                }
+              },
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildPageBtn(String t, {bool active = false, bool enabled = true}) {
+  Widget _buildPageBtn(
+    String t, {
+    bool active = false,
+    bool enabled = true,
+    VoidCallback? onTap,
+  }) {
     return Container(
       margin: EdgeInsets.zero,
       child: ElevatedButton(
@@ -917,11 +890,13 @@ Widget _buildInput(
           backgroundColor: active ? Colors.blue : Colors.white,
           foregroundColor: active ? Colors.white : Colors.black87,
           elevation: 0,
-          side: BorderSide(color: active ? Colors.blue : Colors.grey.shade300),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          side: BorderSide(
+            color: active ? Colors.blue : const Color(0xFFE2E8F0),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         ),
-        onPressed: enabled ? () {} : null,
+        onPressed: enabled ? onTap : null,
         child: Text(
           t,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
@@ -929,4 +904,407 @@ Widget _buildInput(
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Self-contained dialog — owns ALL its own local state. No shared controllers.
+// ─────────────────────────────────────────────────────────────────────────────
+class _UserFormDialog extends StatefulWidget {
+  final int? editId;
+  final String initUserId;
+  final String initUserName;
+  final String initPassword;
+  final String? initRoleId;
+  final List<dynamic> allRoles;
+  final Future<void> Function({
+    required int? editId,
+    required String userId,
+    required String userName,
+    required String password,
+    required String? roleId,
+  })
+  onSubmit;
+
+  const _UserFormDialog({
+    this.editId,
+    this.initUserId = '',
+    this.initUserName = '',
+    this.initPassword = '',
+    this.initRoleId,
+    required this.allRoles,
+    required this.onSubmit,
+  });
+
+  @override
+  State<_UserFormDialog> createState() => _UserFormDialogState();
+}
+
+class _UserFormDialogState extends State<_UserFormDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _userIdCtrl;
+  late final TextEditingController _userNameCtrl;
+  late final TextEditingController _passCtrl;
+  String? _selectedRoleId;
+  bool _submitting = false;
+  bool _obscurePass = true;
+
+  bool get _isEditing => widget.editId != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _userIdCtrl = TextEditingController(text: widget.initUserId);
+    _userNameCtrl = TextEditingController(text: widget.initUserName);
+    _passCtrl = TextEditingController(text: widget.initPassword);
+
+    // Only set selectedRoleId if initRoleId actually exists in the roles list.
+    // If it doesn't match (e.g. deleted role or ID mismatch), leave null so
+    // the user is forced to select a valid role before submitting.
+    final roleExists = widget.allRoles.any(
+      (r) => r['id']?.toString() == widget.initRoleId,
+    );
+    _selectedRoleId = roleExists ? widget.initRoleId : null;
+  }
+
+  @override
+  void dispose() {
+    _userIdCtrl.dispose();
+    _userNameCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    // Explicit guard — validator may not catch all cases with SearchableDropdown
+    if (_selectedRoleId == null || _selectedRoleId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a Role'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    setState(() => _submitting = true);
+    Navigator.of(context).pop();
+    await widget.onSubmit(
+      editId: widget.editId,
+      userId: _userIdCtrl.text.trim(),
+      userName: _userNameCtrl.text.trim(),
+      password: _passCtrl.text.trim(),
+      roleId: _selectedRoleId,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: const EdgeInsets.all(16),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 50,
+                offset: const Offset(0, 20),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Blue gradient header — matches StylishDialog exactly ──
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 20,
+                ),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(
+                        _isEditing
+                            ? Icons.edit_note_rounded
+                            : Icons.person_add_rounded,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _isEditing ? 'Edit User' : 'Add User',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const Text(
+                            'Provide system credentials and role',
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white70,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ── Form fields ──
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(32),
+                  child: Form(
+                    key: _formKey,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // User ID
+                        _label('User ID'),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          controller: _userIdCtrl,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          maxLength: 10,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF475569),
+                          ),
+                          decoration: _deco('Enter User ID'),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Please enter the User ID'
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // User Name
+                        _label('User Name'),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          controller: _userNameCtrl,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[a-zA-Z\s]'),
+                            ),
+                          ],
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF475569),
+                          ),
+                          decoration: _deco('Enter User Name'),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Please enter the User Name'
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Password
+                        _label('Password'),
+                        const SizedBox(height: 6),
+                        StatefulBuilder(
+                          builder: (_, setLocal) => TextFormField(
+                            controller: _passCtrl,
+                            obscureText: _obscurePass,
+                            maxLength: 20,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF475569),
+                            ),
+                            decoration:
+                                _deco(
+                                  _isEditing
+                                      ? 'Leave blank to keep current'
+                                      : 'Enter Password',
+                                ).copyWith(
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePass
+                                          ? Icons.visibility_off
+                                          : Icons.visibility,
+                                      color: Colors.grey,
+                                      size: 20,
+                                    ),
+                                    onPressed: () => setLocal(
+                                      () => _obscurePass = !_obscurePass,
+                                    ),
+                                  ),
+                                ),
+                            validator: (v) {
+                              if (_isEditing && (v == null || v.trim().isEmpty))
+                                return null;
+                              if (v == null || v.trim().isEmpty)
+                                return 'Please enter the Password';
+                              if (v.trim().length < 6)
+                                return 'Minimum 6 characters';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Role
+                        _label('Role'),
+                        const SizedBox(height: 6),
+                        SearchableDropdown<String>(
+                          value: _selectedRoleId,
+                          hint: 'Select Role',
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          items: widget.allRoles.map((r) {
+                            return SearchableDropdownItem<String>(
+                              value: r['id']?.toString() ?? '',
+                              label: r['role_name']?.toString() ?? '',
+                            );
+                          }).toList(),
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Please select the Role'
+                              : null,
+                          onChanged: (v) => setState(() => _selectedRoleId = v),
+                        ),
+                        const SizedBox(height: 28),
+
+                        // Action buttons
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 20,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton(
+                              onPressed: _submitting ? null : _submit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0F172A),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 32,
+                                ),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: _submitting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : Text(
+                                      _isEditing ? 'Update' : 'Submit',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _label(String text) => Text(
+    text,
+    style: const TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.bold,
+      color: Color(0xFF334155),
+    ),
+  );
+
+  InputDecoration _deco(String hint) => InputDecoration(
+    hintText: hint,
+    counterText: '',
+    hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+    filled: true,
+    fillColor: const Color(0xFFF8FAFC),
+    isDense: true,
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+    ),
+    focusedErrorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+  );
 }

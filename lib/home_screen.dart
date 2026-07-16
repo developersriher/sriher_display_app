@@ -283,7 +283,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                   _buildSidebarItem(
                     Icons.cleaning_services_rounded,
-                    'Maintenance',
+                    'Copy and wipe off',
                     10,
                   ),
                   const SizedBox(height: 16),
@@ -350,6 +350,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       size: 20,
                     ),
                     onPressed: () => _handleLogout(),
+                    hoverColor: Colors.red.withOpacity(0.2),
                   ),
                 ],
               ),

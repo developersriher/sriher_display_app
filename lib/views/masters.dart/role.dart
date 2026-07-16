@@ -1,6 +1,7 @@
 import '../../api_config.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
@@ -56,6 +57,10 @@ class _RoleViewState extends State<RoleView>
   int currentPage = 0;
   final TextEditingController _searchController = TextEditingController();
 
+  // ── sorting state ──
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
+
   // ── form state ──
   int? editingId; // null = create, non-null = update
   bool isFetchingDetails = false;
@@ -64,6 +69,10 @@ class _RoleViewState extends State<RoleView>
   StateSetter? _dialogSetState;
   final TextEditingController _roleNameController = TextEditingController();
   final Set<String> _selectedPrivs = {}; // e.g. {"1,1", "3,2"}
+
+  // ── workaround for backend dropping exact privilege pairs ──
+  final Map<int, Set<String>> _exactPrivilegesCache = {};
+  final Map<String, Set<String>> _exactPrivilegesCacheByName = {};
 
   @override
   void initState() {
@@ -104,6 +113,16 @@ class _RoleViewState extends State<RoleView>
                       ? payload
                       : (payload['roles'] ?? payload['data'] ?? []))
                   as List;
+
+          for (var r in allRoles) {
+            final name = r['role_name']?.toString().trim();
+            final id = int.tryParse(r['id']?.toString() ?? '');
+            if (name != null && id != null && _exactPrivilegesCacheByName.containsKey(name)) {
+              _exactPrivilegesCache[id] = _exactPrivilegesCacheByName[name]!;
+              _exactPrivilegesCacheByName.remove(name);
+            }
+          }
+          
           isLoading = false;
         });
       } else {
@@ -184,32 +203,78 @@ class _RoleViewState extends State<RoleView>
             ? payload[0]
             : payload;
 
-        final rawPrivs = r['previliges'] ?? r['privileges'] ?? [];
-        final Set<String> privSet = {};
-        if (rawPrivs is List) {
-          for (final p in rawPrivs) {
-            if (p is Map) {
-              final mId = p['menu_id']?.toString() ?? p['menuId']?.toString();
-              final sId =
-                  p['sub_menu_id']?.toString() ??
-                  p['subMenuId']?.toString() ??
-                  p['sub_id']?.toString() ??
-                  p['type']?.toString();
-              if (mId != null && sId != null) {
-                privSet.add("$mId,$sId");
-              }
-            } else {
-              privSet.add(p.toString());
+        // Update role name from the API response to ensure latest name is shown
+        if (r is Map) {
+          final roleObj = r['roles'] ?? r;
+          if (roleObj is Map) {
+            final serverRoleName = roleObj['role_name']?.toString();
+            if (serverRoleName != null && serverRoleName.trim().isNotEmpty) {
+              _roleNameController.text = serverRoleName;
             }
           }
-        } else if (rawPrivs is String && rawPrivs.isNotEmpty) {
-          final parts = rawPrivs.split(',').map((s) => s.trim()).toList();
-          if (parts.length > 1 && !parts[0].contains(',')) {
-            for (int i = 0; i < parts.length - 1; i += 2) {
-              privSet.add("${parts[i]},${parts[i + 1]}");
+        }
+
+        final rawPrivs = r['previliges'] ?? r['privileges'] ?? [];
+        final Set<String> privSet = {};
+        
+        // 0. Use local cache if available (workaround for backend returning ambiguous arrays)
+        if (_exactPrivilegesCache.containsKey(id)) {
+          privSet.addAll(_exactPrivilegesCache[id]!);
+        }
+        // 1. Try parsing exact privileges if the backend provides them
+        else if (rawPrivs.isNotEmpty) {
+          dynamic parsedPrivs = rawPrivs;
+          if (rawPrivs is String) {
+            try {
+              parsedPrivs = jsonDecode(rawPrivs);
+            } catch (_) {
+              parsedPrivs = rawPrivs;
             }
-          } else {
-            privSet.addAll(parts);
+          }
+  
+          if (parsedPrivs is List) {
+            for (final p in parsedPrivs) {
+              if (p is Map) {
+                final mId = p['menu_id']?.toString() ?? p['menuId']?.toString();
+                final sId =
+                    p['sub_menu_id']?.toString() ??
+                    p['subMenuId']?.toString() ??
+                    p['sub_id']?.toString() ??
+                    p['type']?.toString();
+                if (mId != null && sId != null) {
+                  privSet.add("$mId,$sId");
+                }
+              } else {
+                privSet.add(p.toString());
+              }
+            }
+          } else if (parsedPrivs is String) {
+            final parts = parsedPrivs.split(',').map((s) => s.trim()).toList();
+            if (parts.length > 1 && !parts[0].contains(',')) {
+              for (int i = 0; i < parts.length - 1; i += 2) {
+                privSet.add("${parts[i]},${parts[i + 1]}");
+              }
+            } else {
+              privSet.addAll(parts);
+            }
+          }
+        } 
+        
+        // 2. Fallback to PreviligesMain and PreviligesSub provided by some endpoints
+        if (privSet.isEmpty) {
+          final List<dynamic> mainPrivs = r['PreviligesMain'] ?? [];
+          final List<dynamic> subPrivs = r['PreviligesSub'] ?? [];
+          
+          if (mainPrivs.isNotEmpty && subPrivs.isNotEmpty) {
+            for (var m in mainPrivs) {
+              for (var s in subPrivs) {
+                final perm = "$m,$s";
+                // Add if it's a known valid privilege
+                if (_allPrivileges.any((p) => p.id == perm)) {
+                  privSet.add(perm);
+                }
+              }
+            }
           }
         }
 
@@ -256,12 +321,20 @@ class _RoleViewState extends State<RoleView>
         ? '${getBaseUrl()}/updateRoleview'
         : '${getBaseUrl()}/createRoleview';
 
+    final roleName = _roleNameController.text.trim();
+    final privsList = _selectedPrivs.toList();
+
     final Map<String, dynamic> body = {
       "api_key": _apiKey,
-      "role_name": _roleNameController.text.trim(),
-      "previliges": _selectedPrivs.toList(),
+      "role_name": roleName,
+      "previliges": privsList,
     };
-    if (isUpdate) body["id"] = editingId;
+    if (isUpdate) {
+      body["id"] = editingId;
+      _exactPrivilegesCache[editingId!] = Set.from(_selectedPrivs);
+    } else {
+      _exactPrivilegesCacheByName[roleName] = Set.from(_selectedPrivs);
+    }
 
     try {
       final res = await http
@@ -423,13 +496,28 @@ class _RoleViewState extends State<RoleView>
   Widget build(BuildContext context) {
     final int limit = int.parse(entriesValue);
     final filtered = searchQuery.isEmpty
-        ? allRoles
+        ? List<dynamic>.from(allRoles)
         : allRoles
               .where(
                 (r) => (r['role_name']?.toString().toLowerCase() ?? '')
                     .contains(searchQuery.toLowerCase()),
               )
               .toList();
+
+    if (_sortColumnIndex == 1) {
+      filtered.sort((a, b) {
+        final aVal = a['role_name']?.toString().toLowerCase() ?? '';
+        final bVal = b['role_name']?.toString().toLowerCase() ?? '';
+        return _sortAscending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
+      });
+    } else {
+      // Default: sort by id descending (newest at the top)
+      filtered.sort((a, b) {
+        final aId = int.tryParse(a['id']?.toString() ?? '0') ?? 0;
+        final bId = int.tryParse(b['id']?.toString() ?? '0') ?? 0;
+        return bId.compareTo(aId);
+      });
+    }
 
     final int totalPages = (filtered.length / limit).ceil();
     if (currentPage >= totalPages && totalPages > 0) {
@@ -570,7 +658,17 @@ class _RoleViewState extends State<RoleView>
                   headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
                   columns: [
                     _buildCol('#'),
-                    _buildCol('Role'),
+                    _buildCol(
+                      'Role',
+                      sortable: true,
+                      columnIndex: 1,
+                      onSort: (columnIndex, ascending) {
+                        setState(() {
+                          _sortColumnIndex = columnIndex;
+                          _sortAscending = ascending;
+                        });
+                      },
+                    ),
                     _buildCol('Edit'),
                     _buildCol('Action'),
                   ],
@@ -597,7 +695,7 @@ class _RoleViewState extends State<RoleView>
       children: [
         Text(
           "Showing ${totalCount == 0 ? 0 : currentPage * limit + 1} to ${currentPage * limit + pagedCount} of $totalCount entries",
-          style: const TextStyle(color: Colors.grey, fontSize: 13),
+          style: const TextStyle(color: Color.fromARGB(255, 11, 9, 9), fontSize: 13),
         ),
         _buildPagination(totalCount, limit),
       ],
@@ -675,51 +773,86 @@ class _RoleViewState extends State<RoleView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Role Name",
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-          ),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _roleNameController,
-            validator: (v) => (v == null || v.trim().isEmpty)
-                ? "Please enter the Role Name"
-                : null,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-            decoration: InputDecoration(
-              hintText: 'Enter the Role Name',
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF94A3B8),
-              ),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFCBD5E1),
-                  width: 1.2,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: const EdgeInsets.only(bottom: 6.0),
+                child: Text(
+                  "Role Name",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF334155),
+                  ),
                 ),
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFF334155),
-                  width: 1.6,
+              TextFormField(
+                controller: _roleNameController,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                ],
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return "Please enter the Role Name";
+                  }
+                  if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
+                    return "Numeric values and special characters are not allowed";
+                  }
+                  return null;
+                },
+                style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+                decoration: InputDecoration(
+                  hintText: 'Enter Role Name',
+                  hintStyle: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF334155),
+                      width: 1.6,
+                    ),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF334155),
+                      width: 1.6,
+                    ),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
                 ),
               ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFCBD5E1),
-                  width: 1.2,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 14,
-              ),
-            ),
+            ],
           ),
           const SizedBox(height: 20),
 
@@ -853,14 +986,68 @@ class _RoleViewState extends State<RoleView>
     );
   }
 
-  DataColumn _buildCol(String label) {
+  DataColumn _buildCol(
+    String label, {
+    bool sortable = false,
+    int? columnIndex,
+    void Function(int, bool)? onSort,
+  }) {
     return DataColumn(
-      label: Text(
-        label,
-        style: TextStyle(
-          color: Colors.blue.shade800,
-          fontWeight: FontWeight.bold,
-          fontSize: 11,
+      label: Expanded(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: Colors.blue.shade800,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (sortable && columnIndex != null) ...[
+              const SizedBox(width: 4),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      if (onSort != null) onSort(columnIndex, true);
+                    },
+                    child: Align(
+                      heightFactor: 0.4,
+                      child: Icon(
+                        Icons.arrow_drop_up,
+                        size: 18,
+                        color: _sortColumnIndex == columnIndex && _sortAscending
+                            ? Colors.blue
+                            : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      if (onSort != null) onSort(columnIndex, false);
+                    },
+                    child: Align(
+                      heightFactor: 0.4,
+                      child: Icon(
+                        Icons.arrow_drop_down,
+                        size: 18,
+                        color: _sortColumnIndex == columnIndex && !_sortAscending
+                            ? Colors.blue
+                            : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -910,7 +1097,7 @@ class _RoleViewState extends State<RoleView>
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
-                color: Color(0xFF64748B),
+                color: Color(0xFF334155),
               ),
             ),
             const SizedBox(width: 6),
@@ -961,7 +1148,7 @@ class _RoleViewState extends State<RoleView>
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
-                color: Color(0xFF64748B),
+                color: Color(0xFF334155),
               ),
             ),
           ],

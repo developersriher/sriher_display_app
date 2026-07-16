@@ -40,6 +40,7 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
     super.initState();
     selectedDay = today.day;
     _fetchDevices();
+    _fetchSchedules(null);
 
     _controller = AnimationController(
       vsync: this,
@@ -82,13 +83,17 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
     }
   }
 
-  Future<void> _fetchSchedules(int deviceId) async {
+  Future<void> _fetchSchedules(int? deviceId) async {
     setState(() => isLoadingSchedules = true);
     try {
+      final Map<String, dynamic> requestBody = {"api_key": _apiKey};
+      if (deviceId != null) {
+        requestBody["device_id"] = deviceId;
+      }
       final response = await http.post(
         Uri.parse('$_baseUrl/assignDevice_scheduleListview'),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"api_key": _apiKey, "device_id": deviceId}),
+        body: jsonEncode(requestBody),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -162,6 +167,8 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
     }
   }
 
+
+
   void _showSnackBar(String msg) => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(msg),
@@ -224,6 +231,8 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
                                 _fetchSchedules(val);
                                 _fetchAssignedSchedules(val);
                                 _controller.forward(from: 0.0);
+                              } else {
+                                _fetchSchedules(null);
                               }
                             },
                           ),
@@ -244,30 +253,33 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
                           ),
                         ),
                         const SizedBox(width: 24),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade600,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 40,
-                              vertical: 18,
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6.0),
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 40,
+                                vertical: 18,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 3,
+                              disabledBackgroundColor: Colors.grey.shade200,
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 3,
-                            disabledBackgroundColor: Colors.grey.shade200,
-                          ),
-                          onPressed:
-                              (selectedDeviceId != null &&
-                                  selectedScheduleId != null)
-                              ? _handleAssignmentSubmit
-                              : null,
-                          child: const Text(
-                            "SUBMIT",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
+                            onPressed:
+                                (selectedDeviceId != null &&
+                                    selectedScheduleId != null)
+                                ? _handleAssignmentSubmit
+                                : null,
+                            child: const Text(
+                              "SUBMIT",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
+                              ),
                             ),
                           ),
                         ),
@@ -296,8 +308,7 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
           ),
         ],
       ),
-    ),
-    );
+    ));
   }
 
   Widget _buildCagedCalendar() {
@@ -345,39 +356,50 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
     required List<dynamic> items,
     required ValueChanged<int?> onChanged,
   }) {
+    final seenLabels = <String>{};
+    final seenValues = <int>{};
+    final List<SearchableDropdownItem<int>> dropdownItems = [];
+
+    for (var item in items) {
+      final idStr = item['schedule_id']?.toString() ?? item['id']?.toString() ?? '';
+      final id = int.tryParse(idStr) ?? 0;
+      
+      final itemLabel =
+          item['device_name']?.toString() ??
+          item['schedule_name']?.toString() ??
+          item['temp_name']?.toString() ??
+          item['template_name']?.toString() ??
+          item['device_code']?.toString() ??
+          item['name']?.toString() ??
+          '';
+
+      if (itemLabel.trim().isEmpty) continue;
+
+      final normLabel = itemLabel.toLowerCase().trim();
+      if (seenLabels.add(normLabel) && seenValues.add(id)) {
+        dropdownItems.add(SearchableDropdownItem<int>(
+          value: id,
+          label: itemLabel,
+        ));
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: const TextStyle(
+            fontSize: 12,
             fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: Color(0xFF64748B),
+            color: Color(0xFF334155),
           ),
         ),
         const SizedBox(height: 8),
         SearchableDropdown<int>(
           value: value,
           hint: hint,
-          items: items.where((e) {
-            final name = e['device_name'] ??
-                e['schedule_name'] ??
-                e['device_code'] ??
-                '';
-            return name.toString().trim().isNotEmpty;
-          }).map((e) {
-            final id = int.tryParse(e['id'].toString());
-            final name =
-                e['device_name'] ??
-                e['schedule_name'] ??
-                e['device_code'] ??
-                '';
-            return SearchableDropdownItem<int>(
-              value: id ?? 0,
-              label: name.toString(),
-            );
-          }).toList(),
+          items: dropdownItems,
           onChanged: onChanged,
         ),
       ],

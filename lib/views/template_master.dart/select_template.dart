@@ -9,6 +9,7 @@ import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
 import '../../widgets/video_thumbnail.dart';
+import '../../widgets/web_compat_image.dart';
 
 class SelectTemplateView extends StatefulWidget {
   const SelectTemplateView({super.key});
@@ -111,7 +112,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     setState(() => isLoadingTemplates = true);
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/new_templateview?_t=${DateTime.now().millisecondsSinceEpoch}'),
+        Uri.parse(
+          '$_baseUrl/new_templateview?_t=${DateTime.now().millisecondsSinceEpoch}',
+        ),
         body: jsonEncode({"api_key": _apiKey}),
         headers: {'Content-Type': 'application/json'},
       );
@@ -141,7 +144,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     setState(() => isLoadingCategories = true);
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/categoryview?_t=${DateTime.now().millisecondsSinceEpoch}'),
+        Uri.parse(
+          '$_baseUrl/categoryview?_t=${DateTime.now().millisecondsSinceEpoch}',
+        ),
         body: jsonEncode({"api_key": _apiKey}),
         headers: {'Content-Type': 'application/json'},
       );
@@ -253,50 +258,60 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       final allFiles = List<dynamic>.from(data['data'] ?? []);
 
       // IDs already in the available list (to avoid duplicates)
-      final existingIds =
-          availableFiles.map((f) => f['id']?.toString() ?? '').toSet();
+      final existingIds = availableFiles
+          .map((f) => f['id']?.toString() ?? '')
+          .toSet();
 
       // ── FIX #1 (continued): Do NOT filter by category_id here because
       // /fileview's category_id is a department id, not a media type. Only
       // include files that are explicitly toggled LIVE.
-      final matchingVideos = allFiles.where((f) {
-        // Skip if already in the list
-        if (existingIds.contains(f['id']?.toString() ?? '')) return false;
+      final matchingVideos = allFiles
+          .where((f) {
+            // Skip if already in the list
+            if (existingIds.contains(f['id']?.toString() ?? '')) return false;
 
-        // Must be a video file
-        final type = f['file_type']?.toString().toLowerCase() ?? '';
-        final fmt  = f['file_format']?.toString().toLowerCase() ?? '';
-        final name = f['file_name']?.toString().toLowerCase() ?? '';
-        final isVideo = type.contains('video') ||
-            type == 'mp4' || type == 'avi' || type == 'mov' ||
-            type == 'mkv' || type == 'webm' || type == 'vinci' ||
-            type == 'live' ||
-            fmt.contains('video') ||
-            name.endsWith('.mp4') || name.endsWith('.avi') ||
-            name.endsWith('.mov') || name.endsWith('.mkv') ||
-            name.endsWith('.webm');
-        if (!isVideo) return false;
+            // Must be a video file
+            final type = f['file_type']?.toString().toLowerCase() ?? '';
+            final fmt = f['file_format']?.toString().toLowerCase() ?? '';
+            final name = f['file_name']?.toString().toLowerCase() ?? '';
+            final isVideo =
+                type.contains('video') ||
+                type == 'mp4' ||
+                type == 'avi' ||
+                type == 'mov' ||
+                type == 'mkv' ||
+                type == 'webm' ||
+                type == 'vinci' ||
+                type == 'live' ||
+                fmt.contains('video') ||
+                name.endsWith('.mp4') ||
+                name.endsWith('.avi') ||
+                name.endsWith('.mov') ||
+                name.endsWith('.mkv') ||
+                name.endsWith('.webm');
+            if (!isVideo) return false;
 
-        // Only include if the file is set as LIVE
-        final status = f['file_status']?.toString() ?? f['status']?.toString() ?? '0';
-        return status == '1';
-      }).map((f) {
-        return Map<String, dynamic>.from(f)..['_isLive'] = true;
-      }).toList();
+            // Only include if the file is set as LIVE
+            final status =
+                f['file_status']?.toString() ?? f['status']?.toString() ?? '0';
+            return status == '1';
+          })
+          .map((f) {
+            return Map<String, dynamic>.from(f)..['_isLive'] = true;
+          })
+          .toList();
 
       if (mounted && matchingVideos.isNotEmpty) {
         setState(() => availableFiles = [...availableFiles, ...matchingVideos]);
       }
 
       debugPrint(
-        '[LiveVideos] merged ${matchingVideos.length} LIVE video(s) into available files'
+        '[LiveVideos] merged ${matchingVideos.length} LIVE video(s) into available files',
       );
     } catch (e) {
       debugPrint("_fetchAndMergeLiveVideos error: $e");
     }
   }
-
-
 
   Future<void> _fetchAssignedFiles() async {
     if (selectedTemplateId == null) return;
@@ -322,7 +337,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
   }
 
-  Future<void> _assignFile(int fileId, String formattedDuration, String fileName) async {
+  Future<void> _assignFile(
+    int fileId,
+    String formattedDuration,
+    String fileName,
+  ) async {
     // Use stored raw duration or parse formatted back to seconds
     final int durationSecs =
         _rawFileDurations[fileId] ?? _parseFormattedDuration(formattedDuration);
@@ -394,7 +413,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             SnackBar(
               content: Text(
                 "'$fileName' has been removed.",
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               backgroundColor: Colors.red.shade600,
               behavior: SnackBarBehavior.floating,
@@ -444,219 +466,222 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SelectionArea(child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // LEFT PANEL: Configuration Card
-            Expanded(
-              flex: 5,
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
-                            blurRadius: 15,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                        border: Border.all(color: Colors.blue.shade50),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const AnimatedHeading(text: "TEMPLATE CONFIGURATION"),
-                          const SizedBox(height: 32),
-                          _buildFormRow(
-                            context,
-                            "--Select Template Name--",
-                            selectedTemplateId,
-                            "Template",
-                            templates,
-                            (v) {
-                              setState(() {
-                                selectedTemplateId = v;
-                                availableFiles.clear();
-                                assignedFiles.clear();
-                              });
-                              if (v != null) {
-                                _fetchAssignedFiles();
-                                _fetchAvailableFiles();
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _buildFormRow(
-                            context,
-                            "--Select Department Name--",
-                            selectedCategoryId,
-                            "Department",
-                            categories,
-                            (v) {
-                              setState(() {
-                                selectedCategoryId = v;
-                                availableFiles.clear();
-                              });
-                              if (v != null) _fetchAvailableFiles();
-                            },
-                          ),
-                          const SizedBox(height: 24),
-                          const Text(
-                            "FILE TYPE",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              letterSpacing: 1.1,
-                              color: Colors.blueAccent,
+      body: SelectionArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // LEFT PANEL: Configuration Card
+              Expanded(
+                flex: 5,
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 15,
+                              offset: const Offset(0, 4),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(8),
+                          ],
+                          border: Border.all(color: Colors.blue.shade50),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const AnimatedHeading(
+                              text: "TEMPLATE CONFIGURATION",
                             ),
-                            child: Row(
-                              children: [
-                                Radio<String>(
-                                  value: "images",
-                                  groupValue: fileType,
-                                  activeColor: Colors.blue,
-                                  onChanged: (v) =>
-                                      setState(() => fileType = v!),
-                                ),
-                                const Text(
-                                  "Images",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(width: 20),
-                                Radio<String>(
-                                  value: "videos",
-                                  groupValue: fileType,
-                                  activeColor: Colors.blue,
-                                  onChanged: (v) =>
-                                      setState(() => fileType = v!),
-                                ),
-                                const Text(
-                                  "Videos",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(height: 32),
+                            _buildFormRow(
+                              context,
+                              "Select Template Name",
+                              selectedTemplateId,
+                              "Template",
+                              templates,
+                              (v) {
+                                setState(() {
+                                  selectedTemplateId = v;
+                                  availableFiles.clear();
+                                  assignedFiles.clear();
+                                });
+                                if (v != null) {
+                                  _fetchAssignedFiles();
+                                  _fetchAvailableFiles();
+                                }
+                              },
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (isSelectionComplete && fileType != null) ...[
-                      const SizedBox(height: 32),
-                      _buildAvailableFilesTable(),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 32),
-            // RIGHT PANEL: Content Area
-            Expanded(
-              flex: 5,
-              child: isSelectionComplete
-                  ? Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
-                            blurRadius: 15,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                        border: Border.all(color: Colors.grey.shade100),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 16,
-                              horizontal: 24,
+                            const SizedBox(height: 10),
+                            _buildFormRow(
+                              context,
+                              "Select Department Name",
+                              selectedCategoryId,
+                              "Department",
+                              categories,
+                              (v) {
+                                setState(() {
+                                  selectedCategoryId = v;
+                                  availableFiles.clear();
+                                });
+                                if (v != null) _fetchAvailableFiles();
+                              },
                             ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(16),
-                              ),
-                            ),
-                            child: Text(
-                              "CURRENT SELECTION LIST",
+                            const SizedBox(height: 24),
+                            const Text(
+                              "FILE TYPE",
                               style: TextStyle(
-                                color: Colors.blue.shade800,
-                                fontSize: 16,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
+                                color: Color(0xFF334155),
                               ),
                             ),
-                          ),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.all(24.0),
-                              child: Column(
+                            const SizedBox(height: 8),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
                                 children: [
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: ElevatedButton.icon(
-                                      icon: const Icon(Icons.sort, size: 18),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green.shade600,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 20,
-                                          vertical: 14,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                      ),
-                                      onPressed: () =>
-                                          _showPlayOrderDialog(context),
-                                      label: const Text(
-                                        "Change Play Order",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
+                                  Radio<String>(
+                                    value: "images",
+                                    groupValue: fileType,
+                                    activeColor: Colors.blue,
+                                    onChanged: (v) =>
+                                        setState(() => fileType = v!),
+                                  ),
+                                  const Text(
+                                    "Images",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  const SizedBox(height: 24),
-                                  _buildAssignedDataTable(),
+                                  const SizedBox(width: 20),
+                                  Radio<String>(
+                                    value: "videos",
+                                    groupValue: fileType,
+                                    activeColor: Colors.blue,
+                                    onChanged: (v) =>
+                                        setState(() => fileType = v!),
+                                  ),
+                                  const Text(
+                                    "Videos",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    )
-                  : Center(),
-            ),
-          ],
+                      if (isSelectionComplete && fileType != null) ...[
+                        const SizedBox(height: 32),
+                        _buildAvailableFilesTable(),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 32),
+              // RIGHT PANEL: Content Area
+              Expanded(
+                flex: 5,
+                child: isSelectionComplete
+                    ? Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 15,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                          border: Border.all(color: Colors.grey.shade100),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 16,
+                                horizontal: 24,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(16),
+                                ),
+                              ),
+                              child: Text(
+                                "CURRENT SELECTION LIST",
+                                style: TextStyle(
+                                  color: Colors.blue.shade800,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(24.0),
+                                child: Column(
+                                  children: [
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: ElevatedButton.icon(
+                                        icon: const Icon(Icons.sort, size: 18),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              Colors.green.shade600,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 20,
+                                            vertical: 14,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                        ),
+                                        onPressed: () =>
+                                            _showPlayOrderDialog(context),
+                                        label: const Text(
+                                          "Change Play Order",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    _buildAssignedDataTable(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Center(),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -732,7 +757,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               Expanded(
                 flex: 2,
                 child: Text(
-                  "Action",
+                  "Delete",
                   textAlign: TextAlign.center,
                   style: _headerStyle(),
                 ),
@@ -777,9 +802,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   itemBuilder: (c, i) {
                     final file = filteredFiles[i];
                     final fileId = int.tryParse(file['id'].toString()) ?? 0;
-                    final bool isLive = file['_isLive'] == true ||
+                    final bool isLive =
+                        file['_isLive'] == true ||
                         (file['file_status']?.toString() ??
-                                file['status']?.toString() ?? '0') ==
+                                file['status']?.toString() ??
+                                '0') ==
                             '1';
                     final bool isVideo = _isFileVideo(file);
 
@@ -789,11 +816,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                       // missing key, so we guard against null before .toString().
                       final rawDurationVal =
                           file['file_duration'] ?? file['duration'];
-                      final rawDurationStr = (rawDurationVal != null &&
+                      final rawDurationStr =
+                          (rawDurationVal != null &&
                               rawDurationVal.toString() != 'null')
                           ? rawDurationVal.toString()
                           : '30';
-                      final rawSecs = double.tryParse(rawDurationStr)?.toInt() ?? 30;
+                      final rawSecs =
+                          double.tryParse(rawDurationStr)?.toInt() ?? 30;
                       _rawFileDurations[fileId] = rawSecs;
                       _availableFileControllers[fileId] = TextEditingController(
                         text: _formatSeconds(rawSecs),
@@ -807,9 +836,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                         horizontal: 15,
                       ),
                       // Tint the row green for live files so they stand out.
-                      color: isLive
-                          ? Colors.green.shade50
-                          : null,
+                      color: isLive ? Colors.green.shade50 : null,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -821,7 +848,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: Colors.green.shade600,
                                       borderRadius: BorderRadius.circular(4),
@@ -829,8 +858,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                     child: const Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.wifi_tethering,
-                                            color: Colors.white, size: 12),
+                                        Icon(
+                                          Icons.wifi_tethering,
+                                          color: Colors.white,
+                                          size: 12,
+                                        ),
                                         SizedBox(width: 4),
                                         Text(
                                           'LIVE',
@@ -886,7 +918,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                 flex: 4,
                                 child: Text(
                                   file['user_filename'] ??
-                                      file['file_name'] ?? '',
+                                      file['file_name'] ??
+                                      '',
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
@@ -915,9 +948,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                         isDense: true,
                                         contentPadding:
                                             const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 8,
-                                        ),
+                                              horizontal: 6,
+                                              vertical: 8,
+                                            ),
                                         border: OutlineInputBorder(
                                           borderRadius: BorderRadius.zero,
                                           borderSide: BorderSide(
@@ -978,10 +1011,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                 ),
                               ),
                             ], // end inner Row children
-                          ),   // end inner Row
-                        ],     // end Column children
-                      ),       // end Column
-                    );         // end Container
+                          ), // end inner Row
+                        ], // end Column children
+                      ), // end Column
+                    ); // end Container
                   },
                 ),
             ],
@@ -1038,11 +1071,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         title: userFileName.isNotEmpty ? userFileName : fileName,
       );
     } else {
-      return Image.network(
-        fileUrl,
+      return WebCompatImage(
+        url: fileUrl,
         fit: BoxFit.cover,
-        errorBuilder: (c, e, s) =>
-            const Icon(Icons.broken_image, size: 30, color: Colors.grey),
       );
     }
   }
@@ -1135,7 +1166,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                             ),
                             onPressed: () => _removeFile(
                               int.parse(file['id'].toString()),
-                              file['user_filename'] ?? file['file_name'] ?? 'File',
+                              file['user_filename'] ??
+                                  file['file_name'] ??
+                                  'File',
                             ),
                           ),
                         ),
@@ -1196,15 +1229,14 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         Text(
           label.toUpperCase(),
           style: const TextStyle(
-            fontWeight: FontWeight.bold,
             fontSize: 12,
-            letterSpacing: 1.1,
-            color: Colors.blueAccent,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF334155),
           ),
         ),
         const SizedBox(height: 8),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
               child: SearchableDropdown<int>(
@@ -1221,18 +1253,21 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               ),
             ),
             const SizedBox(width: 8),
-            SizedBox(
-              width: 36,
-              height: 36,
-              child: Material(
-                color: Colors.blue.shade600,
-                borderRadius: BorderRadius.circular(6),
-                child: InkWell(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 24.0),
+              child: SizedBox(
+                width: 36,
+                height: 36,
+                child: Material(
+                   color: Colors.blue.shade100,
                   borderRadius: BorderRadius.circular(6),
-                  onTap: (label == 'Template')
-                      ? () => _showAddTemplateDialog()
-                      : () => _showAddDepartmentDialog(),
-                  child: const Icon(Icons.add, color: Colors.white, size: 20),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: (label == 'Template')
+                        ? () => _showAddTemplateDialog()
+                        : () => _showAddDepartmentDialog(),
+                    child: const Icon(Icons.add, color: Colors.white, size: 20),
+                  ),
                 ),
               ),
             ),
@@ -1277,7 +1312,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(found ? "Template added successfully" : "Processing...")),
+            SnackBar(
+              content: Text(
+                found ? "Template added successfully" : "Processing...",
+              ),
+            ),
           );
         }
       }
@@ -1318,7 +1357,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(found ? "Department added successfully" : "Processing...")),
+            SnackBar(
+              content: Text(
+                found ? "Department added successfully" : "Processing...",
+              ),
+            ),
           );
         }
       }
@@ -1331,7 +1374,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     _newTemplateNameController.clear();
     StylishDialog.show(
       context: context,
-      title: "ADD NEW TEMPLATE",
+      title: "Add Template",
       subtitle: "Define a new template for your display layout.",
       maxWidth: 480,
       builder: (ctx, setPopupState) {
@@ -1341,38 +1384,59 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextFormField(
-                controller: _newTemplateNameController,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Please enter the template name' : null,
-                decoration: InputDecoration(
-                  hintText: "Enter the template name",
-                  hintStyle: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: Color(0xFFCBD5E1),
-                      width: 1.2,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 6.0),
+                    child: Text(
+                      "Template Name",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF334155),
+                      ),
                     ),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF334155),
-                      width: 1.6,
+                  TextFormField(
+                    controller: _newTemplateNameController,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF1E293B),
+                    ),
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? 'Please enter the template name'
+                        : null,
+                    decoration: InputDecoration(
+                      hintText: "Enter the template name",
+                      hintStyle: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFCBD5E1),
+                          width: 1.2,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF334155),
+                          width: 1.6,
+                        ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
                     ),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 14,
-                  ),
-                ),
+                ],
               ),
               const SizedBox(height: 24),
               Row(
@@ -1416,7 +1480,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                       ),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     child: const Text(
@@ -1440,7 +1504,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     _newDepartmentNameController.clear();
     StylishDialog.show(
       context: context,
-      title: "ADD NEW DEPARTMENT",
+      title: "Add Department",
       subtitle: "Define a new department for your organization.",
       maxWidth: 480,
       builder: (ctx, setPopupState) {
@@ -1450,38 +1514,59 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextFormField(
-                controller: _newDepartmentNameController,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Please enter the department name' : null,
-                decoration: InputDecoration(
-                  hintText: "Enter the department name",
-                  hintStyle: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: Color(0xFFCBD5E1),
-                      width: 1.2,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 6.0),
+                    child: Text(
+                      "Department Name",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF334155),
+                      ),
                     ),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF334155),
-                      width: 1.6,
+                  TextFormField(
+                    controller: _newDepartmentNameController,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF1E293B),
+                    ),
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? 'Please enter the department name'
+                        : null,
+                    decoration: InputDecoration(
+                      hintText: "Enter the department name",
+                      hintStyle: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFCBD5E1),
+                          width: 1.2,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF334155),
+                          width: 1.6,
+                        ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
                     ),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 14,
-                  ),
-                ),
+                ],
               ),
               const SizedBox(height: 24),
               Row(
@@ -1525,7 +1610,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                       ),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     child: const Text(
@@ -1551,7 +1636,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
     StylishDialog.show(
       context: context,
-      title: "CHANGE PLAY ORDER",
+      title: "Change Play Order",
       subtitle:
           "Drag and drop to reorder files. This sequence determines the display loop.",
       subtitleStyle: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
@@ -1719,7 +1804,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                       ),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     child: const Text(

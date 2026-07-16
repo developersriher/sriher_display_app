@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'login_page.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,19 +58,19 @@ class MyApp extends StatelessWidget {
           secondary: const Color(0xFF3B82F6),
           surface: Colors.white,
         ),
-        fontFamily:
-            'Inter', // Modern sans-serif (will fallback to Roboto if not found)
-        textTheme: const TextTheme(
-          displayLarge: TextStyle(
-            color: Color(0xFF0F172A),
-            fontWeight: FontWeight.bold,
+        textTheme: GoogleFonts.poppinsTextTheme(
+          const TextTheme(
+            displayLarge: TextStyle(
+              color: Color(0xFF0F172A),
+              fontWeight: FontWeight.bold,
+            ),
+            titleLarge: TextStyle(
+              color: Color(0xFF0F172A),
+              fontWeight: FontWeight.w600,
+            ),
+            bodyMedium: TextStyle(color: Color(0xFF334155)), // Slate 700
+            bodySmall: TextStyle(color: Color(0xFF64748B)), // Slate 500
           ),
-          titleLarge: TextStyle(
-            color: Color(0xFF0F172A),
-            fontWeight: FontWeight.w600,
-          ),
-          bodyMedium: TextStyle(color: Color(0xFF334155)), // Slate 700
-          bodySmall: TextStyle(color: Color(0xFF64748B)), // Slate 500
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(

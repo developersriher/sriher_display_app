@@ -30,6 +30,10 @@ class _MappingViewState extends State<MappingView> {
   int? _editingId;
   GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
+  // Sorting
+  int _sortColumnIndex = 0;
+  bool _sortAscending = false;
+
   // Pagination & search
   String _entries = '10';
   int _page = 1;
@@ -113,6 +117,14 @@ class _MappingViewState extends State<MappingView> {
           final first = dataField.values.first;
           if (first is List) _locationList = first;
         }
+
+        final seen = <String>{};
+        _locationList = _locationList.where((item) {
+          final locName = item['location_name']?.toString() ?? '';
+          if (seen.contains(locName)) return false;
+          seen.add(locName);
+          return true;
+        }).toList();
       }
     } catch (e) {
       debugPrint('Dropdown Load Error: $e');
@@ -313,7 +325,8 @@ class _MappingViewState extends State<MappingView> {
   Future<void> _delete(dynamic id) async {
     final confirm = await StylishDialog.show<bool>(
       context: context,
-      title: "CONFIRM DELETE",
+      title: "Delete Confirmation",
+      icon: Icons.delete_forever_rounded,
       maxWidth: 400,
       builder: (context, setPopupState) {
         return Column(
@@ -325,43 +338,46 @@ class _MappingViewState extends State<MappingView> {
             ),
             const SizedBox(height: 32),
             Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 20,
                     ),
-                    child: const Text(
-                      "Cancel",
-                      style: TextStyle(
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.bold,
-                      ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEF4444),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 24,
                     ),
-                    child: const Text(
-                      "Delete Mapping",
-                      style: TextStyle(fontWeight: FontWeight.w900),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
+                  ),
+                  child: const Text(
+                    "Delete",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ),
               ],
@@ -394,7 +410,7 @@ class _MappingViewState extends State<MappingView> {
 
   // ──────────────────────────── POPUP DIALOG ────────────────────────────────
 
- void _showMappingDialog() {
+  void _showMappingDialog() {
     _formKey = GlobalKey<FormState>();
     StylishDialog.show(
       context: context,
@@ -433,7 +449,8 @@ class _MappingViewState extends State<MappingView> {
                                 .map(
                                   (d) => SearchableDropdownItem<String>(
                                     value: d['id'].toString(),
-                                    label: d['device_code']?.toString() ??
+                                    label:
+                                        d['device_code']?.toString() ??
                                         d['id'].toString(),
                                   ),
                                 )
@@ -496,7 +513,8 @@ class _MappingViewState extends State<MappingView> {
                           .map(
                             (l) => SearchableDropdownItem<String>(
                               value: l['id'].toString(),
-                              label: l['location_name']?.toString() ??
+                              label:
+                                  l['location_name']?.toString() ??
                                   l['id'].toString(),
                             ),
                           )
@@ -524,7 +542,7 @@ class _MappingViewState extends State<MappingView> {
                         horizontal: 20,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                     child: const Text(
@@ -559,7 +577,7 @@ class _MappingViewState extends State<MappingView> {
                       ),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                     child: _submitting
@@ -572,7 +590,7 @@ class _MappingViewState extends State<MappingView> {
                             ),
                           )
                         : Text(
-                            _editingId == null ? "Submit": "Update",
+                            _editingId == null ? "Submit" : "Update",
                             style: const TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 13,
@@ -620,21 +638,86 @@ class _MappingViewState extends State<MappingView> {
   }
 
   List<dynamic> get _filtered {
-    if (_searchQ.isEmpty) return _mappingList;
-    return _mappingList.where((item) {
-      final code = (item['device_code'] ?? '').toString().toLowerCase();
-      final name = (item['device_name'] ?? '').toString().toLowerCase();
-      final model = (item['device_model'] ?? '').toString().toLowerCase();
-      final loc = (item['location_name'] ?? '').toString().toLowerCase();
-      final floor = (item['floor'] ?? '').toString().toLowerCase();
-      final sub = (item['sublocation'] ?? '').toString().toLowerCase();
-      return code.contains(_searchQ) ||
-          name.contains(_searchQ) ||
-          model.contains(_searchQ) ||
-          loc.contains(_searchQ) ||
-          floor.contains(_searchQ) ||
-          sub.contains(_searchQ);
-    }).toList();
+    List<dynamic> list = List.from(_mappingList);
+
+    if (_searchQ.isNotEmpty) {
+      list = list.where((item) {
+        final code = (item['device_code'] ?? '').toString().toLowerCase();
+        final name = (item['device_name'] ?? '').toString().toLowerCase();
+        final model = (item['device_model'] ?? '').toString().toLowerCase();
+        final loc = (item['location_name'] ?? '').toString().toLowerCase();
+        final floor = (item['floor'] ?? '').toString().toLowerCase();
+        final sub = (item['sublocation'] ?? '').toString().toLowerCase();
+        return code.contains(_searchQ) ||
+            name.contains(_searchQ) ||
+            model.contains(_searchQ) ||
+            loc.contains(_searchQ) ||
+            floor.contains(_searchQ) ||
+            sub.contains(_searchQ);
+      }).toList();
+    }
+
+    list.sort((a, b) {
+      String aVal = "";
+      String bVal = "";
+
+      String val(Map data, List<String> keys) {
+        for (var k in keys) {
+          if (data.containsKey(k) && data[k] != null) return data[k].toString();
+        }
+        return "-";
+      }
+
+      final dataA = (a is Map)
+          ? Map<String, dynamic>.from(a)
+          : <String, dynamic>{};
+      final dataB = (b is Map)
+          ? Map<String, dynamic>.from(b)
+          : <String, dynamic>{};
+
+      switch (_sortColumnIndex) {
+        case 1:
+          aVal = val(dataA, ['device_code']);
+          bVal = val(dataB, ['device_code']);
+          break;
+        case 2:
+          aVal = val(dataA, ['device_name']);
+          bVal = val(dataB, ['device_name']);
+          break;
+        case 3:
+          aVal = val(dataA, ['device_model']);
+          bVal = val(dataB, ['device_model']);
+          break;
+        case 4:
+          aVal = val(dataA, ['location_name']);
+          bVal = val(dataB, ['location_name']);
+          break;
+        case 5:
+          aVal = val(dataA, ['floor']);
+          bVal = val(dataB, ['floor']);
+          break;
+        case 6:
+          aVal = val(dataA, ['sublocation']);
+          bVal = val(dataB, ['sublocation']);
+          break;
+        default:
+          aVal = val(dataA, ['id']);
+          bVal = val(dataB, ['id']);
+          break;
+      }
+
+      if (_sortColumnIndex == 0) {
+        final intA = int.tryParse(aVal) ?? 0;
+        final intB = int.tryParse(bVal) ?? 0;
+        return _sortAscending ? intA.compareTo(intB) : intB.compareTo(intA);
+      }
+
+      return _sortAscending
+          ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
+          : bVal.toLowerCase().compareTo(aVal.toLowerCase());
+    });
+
+    return list;
   }
 
   List<dynamic> get _paged {
@@ -824,7 +907,7 @@ class _MappingViewState extends State<MappingView> {
                             vertical: 14,
                           ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(4),
                           ),
                         ),
                         child: const Text('Cancel'),
@@ -840,7 +923,7 @@ class _MappingViewState extends State<MappingView> {
                           vertical: 14,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                       ),
                       onPressed: _submitting
@@ -900,43 +983,84 @@ class _MappingViewState extends State<MappingView> {
 
   InputDecoration _hintDec(String hint) => _inputDec(hint);
 
- Widget _buildTextField(String hint, TextEditingController controller, {
+  Widget _buildTextField(
+    String hint,
+    TextEditingController controller, {
     bool readOnly = false,
     String? Function(String?)? validator,
   }) {
-    return TextFormField(
-      controller: controller,
-      readOnly: readOnly,
-      validator: validator,
-      autovalidateMode: AutovalidateMode.onUserInteraction, // ← clears red once typed
-      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+    String label = hint;
+    if (label.toLowerCase().startsWith('enter ')) {
+      label = label.substring(6);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6.0),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF334155),
+            ),
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+        TextFormField(
+          controller: controller,
+          readOnly: readOnly,
+          validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFFCBD5E1),
+                width: 1.2,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFF334155),
+                width: 1.6,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFFCBD5E1),
+                width: 1.2,
+              ),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFF334155),
+                width: 1.6,
+              ),
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFFCBD5E1),
+                width: 1.2,
+              ),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
+          ),
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      ),
+      ],
     );
   }
 
@@ -947,13 +1071,34 @@ class _MappingViewState extends State<MappingView> {
     required ValueChanged<String?> onChanged,
     String? Function(String?)? validator,
   }) {
-    return SearchableDropdown<String>(
-      value: value,
-      hint: hint,
-      onChanged: onChanged,
-      items: items,
-      validator: validator,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
+    String label = hint;
+    if (label.toLowerCase().startsWith('select ')) {
+      label = label.substring(7);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6.0),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF334155),
+            ),
+          ),
+        ),
+        SearchableDropdown<String>(
+          value: value,
+          hint: hint,
+          onChanged: onChanged,
+          items: items,
+          validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+        ),
+      ],
     );
   }
 
@@ -1056,7 +1201,10 @@ class _MappingViewState extends State<MappingView> {
                     height: 40,
                     child: TextField(
                       controller: _searchCtrl,
-                      style: const TextStyle(fontSize: 12, color: Colors.black87),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black87,
+                      ),
                       decoration: InputDecoration(
                         hintText: 'Search mappings...',
                         hintStyle: const TextStyle(
@@ -1157,10 +1305,7 @@ class _MappingViewState extends State<MappingView> {
             const SizedBox(height: 4),
             const Text(
               "Try a different search term",
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 13.0,
-              ),
+              style: TextStyle(color: Colors.grey, fontSize: 13.0),
             ),
           ],
         ),
@@ -1175,21 +1320,23 @@ class _MappingViewState extends State<MappingView> {
             child: ConstrainedBox(
               constraints: BoxConstraints(minWidth: constraints.maxWidth),
               child: DataTable(
+                columnSpacing: 20,
+                horizontalMargin: 16,
                 headingRowHeight: 46,
                 dataRowMinHeight: 40,
                 dataRowMaxHeight: 48,
                 headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
                 border: TableBorder.all(color: Colors.grey.shade100, width: 1),
                 columns: [
-                  _col('S.No'),
-                  _col('Device Code'),
-                  _col('Device Name'),
-                  _col('Device Model'),
-                  _col('Location'),
-                  _col('Floor'),
-                  _col('Sub Location'),
-                  _col('Edit'),
-                  _col('Delete'),
+                  _col('S.No', 0),
+                  _col('Device Code', 1),
+                  _col('Device Name', 2),
+                  _col('Device Model', 3),
+                  _col('Location', 4),
+                  _col('Floor', 5),
+                  _col('Sub Location', 6),
+                  _col('Edit', -1),
+                  _col('Delete', -1),
                 ],
                 rows: rows.isEmpty
                     ? [
@@ -1222,67 +1369,38 @@ class _MappingViewState extends State<MappingView> {
                                 i.isEven ? Colors.grey.shade50 : Colors.white,
                           ),
                           cells: [
+                            DataCell(_cellText('$sno', 40)),
                             DataCell(
-                              Text(
-                                '$sno',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              Text(
+                              _cellText(
                                 item['device_code']?.toString() ?? '-',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black87,
-                                ),
+                                80,
                               ),
                             ),
                             DataCell(
-                              Text(
+                              _cellText(
                                 item['device_name']?.toString() ?? '-',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black87,
-                                ),
+                                120,
                               ),
                             ),
                             DataCell(
-                              Text(
+                              _cellText(
                                 item['device_model']?.toString() ?? '-',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black87,
-                                ),
+                                120,
                               ),
                             ),
                             DataCell(
-                              Text(
+                              _cellText(
                                 item['location_name']?.toString() ?? '-',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black87,
-                                ),
+                                120,
                               ),
                             ),
                             DataCell(
-                              Text(
-                                item['floor']?.toString() ?? '-',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black87,
-                                ),
-                              ),
+                              _cellText(item['floor']?.toString() ?? '-', 100),
                             ),
                             DataCell(
-                              Text(
+                              _cellText(
                                 item['sublocation']?.toString() ?? '-',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black87,
-                                ),
+                                100,
                               ),
                             ),
                             DataCell(
@@ -1318,13 +1436,76 @@ class _MappingViewState extends State<MappingView> {
     );
   }
 
-  DataColumn _col(String label) => DataColumn(
-    label: Text(
-      label,
-      style: TextStyle(
-        color: Colors.blue.shade800,
-        fontWeight: FontWeight.bold,
-        fontSize: 11,
+  Widget _cellText(String text, double width) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: width),
+      child: Text(
+        text,
+        style: const TextStyle(color: Colors.black87),
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  DataColumn _col(String label, int colIndex) => DataColumn(
+    label: InkWell(
+      onTap: colIndex < 0
+          ? null
+          : () {
+              setState(() {
+                if (_sortColumnIndex == colIndex) {
+                  _sortAscending = !_sortAscending;
+                } else {
+                  _sortColumnIndex = colIndex;
+                  _sortAscending = true;
+                }
+                _page = 1;
+              });
+            },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Colors.blue.shade800,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (colIndex >= 0) ...[
+            const SizedBox(width: 4),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  heightFactor: 0.4,
+                  child: Icon(
+                    Icons.arrow_drop_up,
+                    size: 18,
+                    color: _sortColumnIndex == colIndex && _sortAscending
+                        ? Colors.blue
+                        : Colors.grey.withOpacity(0.5),
+                  ),
+                ),
+                Align(
+                  heightFactor: 0.4,
+                  child: Icon(
+                    Icons.arrow_drop_down,
+                    size: 18,
+                    color: _sortColumnIndex == colIndex && !_sortAscending
+                        ? Colors.blue
+                        : Colors.grey.withOpacity(0.5),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     ),
   );

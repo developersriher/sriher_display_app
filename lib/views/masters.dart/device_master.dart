@@ -1,5 +1,6 @@
 import '../../api_config.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../widgets/animated_heading.dart';
@@ -27,6 +28,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   bool isSubmitting = false;
   GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   String searchQuery = "";
+  int currentPage = 0;
   final TextEditingController _searchController = TextEditingController();
 
   // --- FORM CONTROLLERS ---
@@ -186,10 +188,28 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   }
 
   // 3. EDIT DEVICE (FETCH SINGLE DATA)
-  Future<void> loadDeviceToEdit(dynamic id) async {
+  Future<void> loadDeviceToEdit(dynamic id, Map<String, dynamic> localData) async {
+    final intId = int.tryParse(id.toString());
+    
+    // 1. Immediately pre-populate with local table data to ensure fields are never empty
+    setState(() {
+      editingId = intId ?? (id is int ? id : null);
+      _deviceCodeController.text = localData['device_code']?.toString() ?? "";
+      _deviceNameController.text = localData['device_name']?.toString() ?? "";
+      _modelController.text = localData['device_model']?.toString() ?? "";
+      _osController.text = localData['device_os']?.toString() ?? "";
+      _yearController.text = localData['device_yr_model']?.toString() ?? localData['year']?.toString() ?? "";
+      _warrantyController.text = localData['device_warranty']?.toString() ?? localData['warranty']?.toString() ?? "";
+      _serialNoController.text = localData['device_s_no']?.toString() ?? localData['serial_number']?.toString() ?? "";
+      _manufacturerController.text = localData['Manufacture']?.toString() ?? localData['manufacture']?.toString() ?? "";
+      selectedDeviceType = localData['type_of_device']?.toString() ?? localData['device_type']?.toString();
+    });
+
+    // Show dialog immediately with local data
+    _showDeviceDialog();
+
     final url = Uri.parse('$_baseUrl/deviceEditview');
     try {
-      final intId = int.tryParse(id.toString());
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
@@ -216,30 +236,16 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
         if (!mounted) return;
         if (device != null && device is Map) {
           setState(() {
-            editingId = intId ?? (id is int ? id : null);
-            _deviceCodeController.text =
-                device['device_code']?.toString() ?? "";
-            _deviceNameController.text =
-                device['device_name']?.toString() ?? "";
-            _modelController.text = device['device_model']?.toString() ?? "";
-            _osController.text = device['device_os']?.toString() ?? "";
-            _yearController.text = device['device_yr_model']?.toString() ?? "";
-            _warrantyController.text =
-                device['device_warranty']?.toString() ?? "";
-            _serialNoController.text = device['device_s_no']?.toString() ?? "";
-            _manufacturerController.text =
-                device['Manufacture']?.toString() ?? "";
-            selectedDeviceType = device['type_of_device']?.toString();
+            _deviceCodeController.text = device['device_code']?.toString() ?? _deviceCodeController.text;
+            _deviceNameController.text = device['device_name']?.toString() ?? _deviceNameController.text;
+            _modelController.text = device['device_model']?.toString() ?? _modelController.text;
+            _osController.text = device['device_os']?.toString() ?? _osController.text;
+            _yearController.text = device['device_yr_model']?.toString() ?? _yearController.text;
+            _warrantyController.text = device['device_warranty']?.toString() ?? _warrantyController.text;
+            _serialNoController.text = device['device_s_no']?.toString() ?? _serialNoController.text;
+            _manufacturerController.text = device['Manufacture']?.toString() ?? _manufacturerController.text;
+            selectedDeviceType = device['type_of_device']?.toString() ?? selectedDeviceType;
           });
-          _showDeviceDialog();
-        } else {
-          setState(() {
-            editingId = intId ?? (id is int ? id : null);
-          });
-          _showDeviceDialog();
-          _showSnackBar(
-            "Could not load full device details — showing available data.",
-          );
         }
       } else {
         if (!mounted) return;
@@ -247,9 +253,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       }
     } catch (e) {
       if (!mounted) return;
-      _showSnackBar("Error loading details for edit: $e");
-      setState(() => editingId = int.tryParse(id.toString()));
-      _showDeviceDialog();
+      debugPrint("API Error loading full edit data: $e");
     }
   }
 
@@ -340,6 +344,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     child: _buildTextField(
                       "Enter Device ID/Code",
                       _deviceCodeController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       validator: (v) => (v == null || v.isEmpty)
                           ? 'Please enter the Device ID/Code'
                           : null,
@@ -351,13 +357,19 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
               _buildDropdownField(
                 hint: "Select Device Type",
                 value: selectedDeviceType,
-                items: [
-                  "Android Smart TV",
-                  "LED Display",
-                  "Projector",
-                  "Linux Player",
-                ],
-                validator: (v) => (v == null || v.isEmpty)
+                items: () {
+                  final List<String> defaultTypes = [
+                    "Android Smart TV",
+                    "LED Display",
+                    "Projector",
+                    "Linux Player",
+                  ];
+                  if (selectedDeviceType != null && selectedDeviceType!.isNotEmpty && !defaultTypes.contains(selectedDeviceType)) {
+                    defaultTypes.add(selectedDeviceType!);
+                  }
+                  return defaultTypes;
+                }(),
+                validator: (v) => (v == null || v.trim().isEmpty)
                     ? 'Please select the Device Type'
                     : null,
                 onChanged: (val) {
@@ -397,6 +409,11 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     child: _buildTextField(
                       "Enter Year of Model",
                       _yearController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(4),
+                      ],
                       validator: (v) => (v == null || v.isEmpty)
                           ? 'Please enter the Year of Model'
                           : null,
@@ -407,6 +424,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     child: _buildTextField(
                       "Enter Serial Number",
                       _serialNoController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       validator: (v) => (v == null || v.isEmpty)
                           ? 'Please enter the Serial Number'
                           : null,
@@ -432,6 +451,9 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     child: _buildTextField(
                       "Enter Warranty Status",
                       _warrantyController,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                      ],
                       validator: (v) => (v == null || v.isEmpty)
                           ? 'Please enter the Warranty Status'
                           : null,
@@ -702,7 +724,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     );
   }
 
-  List<dynamic> get _filteredList {
+  List<dynamic> get _allFilteredList {
     if (searchQuery.isEmpty) return deviceList;
     return deviceList.where((device) {
       final code = (device['device_code'] ?? '').toString().toLowerCase();
@@ -711,6 +733,14 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       final q = searchQuery.toLowerCase();
       return code.contains(q) || name.contains(q) || model.contains(q);
     }).toList();
+  }
+
+  List<dynamic> get _filteredList {
+    final all = _allFilteredList;
+    final limit = int.tryParse(entriesValue) ?? 10;
+    final start = currentPage * limit;
+    if (start >= all.length) return [];
+    return all.sublist(start, (start + limit).clamp(0, all.length));
   }
 
   List<DataColumn> _getColumns() {
@@ -723,6 +753,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           'Year of Model',
           'Warranty',
           'Serial No',
+          'Manufacture',
           'Edit',
           'Action',
         ]
@@ -806,9 +837,18 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           ),
         ),
         DataCell(
+          Text(
+            val(['Manufacture', 'manufacture']),
+            style: const TextStyle(color: Colors.black87),
+          ),
+        ),
+        DataCell(
           IconButton(
             icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
-            onPressed: () => loadDeviceToEdit(data['id'] ?? data['ID']),
+            onPressed: () {
+               Map<String, dynamic> localData = data is Map<String, dynamic> ? data : Map<String, dynamic>.from(data);
+               loadDeviceToEdit(data['id'] ?? data['ID'], localData);
+            }
           ),
         ),
 
@@ -837,45 +877,70 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     String hint,
     TextEditingController controller, {
     bool readOnly = false,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
   }) {
-    return TextFormField(
-      controller: controller,
-      readOnly: readOnly,
-      validator: validator,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+    String label = hint;
+    if (label.toLowerCase().startsWith('enter ')) {
+      label = label.substring(6);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6.0),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF334155),
+            ),
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+        TextFormField(
+          controller: controller,
+          readOnly: readOnly,
+          validator: validator,
+          keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
+            helperText: ' ', // Reserve space
+          ),
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 14,
-        ),
-        helperText: ' ', // Reserve space
-      ),
+      ],
     );
   }
 
@@ -886,56 +951,42 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     required void Function(String?) onChanged,
     String? Function(String?)? validator,
   }) {
-    return DropdownButtonFormField<String>(
-      value: value,
-      autovalidateMode:
-          AutovalidateMode.onUserInteraction, // ← clears red once selected
-      validator: validator,
-      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-        helperText: ' ', // Reserve space
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 14,
-        ),
-      ),
-      hint: Text(
-        hint,
-        style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-      ),
-      items: items
-          .map(
-            (item) => DropdownMenuItem<String>(
-              value: item,
-              child: Text(item, style: const TextStyle(fontSize: 13)),
+    String label = hint;
+    if (label.toLowerCase().startsWith('select ')) {
+      label = label.substring(7);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6.0),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF334155),
             ),
-          )
-          .toList(),
-      onChanged: onChanged,
+          ),
+        ),
+        SearchableDropdown<String>(
+          value: value,
+          hint: hint,
+          onChanged: onChanged,
+          items: items
+              .map(
+                (item) => SearchableDropdownItem<String>(
+                  value: item,
+                  label: item,
+                ),
+              )
+              .toList(),
+          validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          helperText: ' ',
+        ),
+      ],
     );
   }
 
@@ -958,6 +1009,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
               width: 75,
               height: 35,
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: entriesValue,
                 dropdownColor: Colors.white,
                 style: const TextStyle(color: Colors.black87, fontSize: 13),
@@ -987,6 +1039,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     .toList(),
                 onChanged: (v) => setState(() {
                   entriesValue = v!;
+                  currentPage = 0; // reset to first page on entries change
                 }),
               ),
             ),
@@ -1011,6 +1064,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 onChanged: (val) {
                   setState(() {
                     searchQuery = val;
+                    currentPage = 0; // reset to page 1 on new search
                   });
                 },
                 style: const TextStyle(fontSize: 12, color: Colors.black87),
@@ -1047,48 +1101,82 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   }
 
   Widget _buildTableFooter() {
+    final limit = int.tryParse(entriesValue) ?? 10;
+    final total = _allFilteredList.length;
+    final totalPages = (total / limit).ceil().clamp(1, double.maxFinite).toInt();
+    final start = total == 0 ? 0 : currentPage * limit + 1;
+    final end = (currentPage * limit + limit).clamp(0, total);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          "Showing 1 to ${deviceList.length} of ${deviceList.length} entries",
+          "Showing $start to $end of $total entries",
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 11,
-            color: Colors.white54,
+            color: Colors.black54,
           ),
         ),
         Row(
           children: [
-            _buildPageBtn("Previous"),
-
-            _buildPageBtn("1", active: true),
-
-            _buildPageBtn("Next"),
+            _buildPageBtn(
+              "Previous",
+              enabled: currentPage > 0,
+              onTap: () => setState(() => currentPage--),
+            ),
+            ...List.generate(totalPages, (i) {
+              return _buildPageBtn(
+                "${i + 1}",
+                active: i == currentPage,
+                onTap: () => setState(() => currentPage = i),
+              );
+            }),
+            _buildPageBtn(
+              "Next",
+              enabled: currentPage < totalPages - 1,
+              onTap: () => setState(() => currentPage++),
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildPageBtn(String label, {bool active = false}) {
+  Widget _buildPageBtn(
+    String label, {
+    bool active = false,
+    bool enabled = true,
+    VoidCallback? onTap,
+  }) {
     return Container(
       margin: EdgeInsets.zero,
       child: OutlinedButton(
         style: OutlinedButton.styleFrom(
-          backgroundColor: active ? Colors.blue : Colors.grey.shade100,
-          foregroundColor: active ? Colors.white : Colors.black87,
+          backgroundColor: active
+              ? Colors.blue
+              : enabled
+                  ? Colors.grey.shade100
+                  : Colors.grey.shade50,
+          foregroundColor: active
+              ? Colors.white
+              : enabled
+                  ? Colors.black87
+                  : Colors.grey.shade400,
           side: active
               ? const BorderSide(color: Colors.blue)
               : BorderSide(color: Colors.grey.shade300),
-          padding: EdgeInsets.symmetric(horizontal: label.length > 1 ? 15 : 12),
+          padding: EdgeInsets.symmetric(
+              horizontal: label.length > 1 ? 15 : 12),
           minimumSize: const Size(40, 36),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.zero),
         ),
-        onPressed: () {},
+        onPressed: enabled ? onTap : null,
         child: Text(
           label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+              fontSize: 12, fontWeight: FontWeight.bold),
         ),
       ),
     );

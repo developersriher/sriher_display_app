@@ -4,7 +4,6 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
-import '../../widgets/searchable_dropdown.dart';
 
 class DefaultTemplateView extends StatefulWidget {
   const DefaultTemplateView({super.key});
@@ -38,14 +37,31 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   String _entriesValue = "10";
   String _searchQuery = "";
   int _currentPage = 1;
+  
+  // Sort State
+  int _sortColumnIndex = -1;
+  bool _sortAscending = false;
 
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _fetchDropdownData();
-    _fetchTableData();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoading = true);
+    try {
+      await _fetchDropdownData();
+      await _fetchTableData(showLoading: false);
+    } catch (e) {
+      debugPrint("Error loading initial data: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -96,8 +112,10 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     }
   }
 
-  Future<void> _fetchTableData() async {
-    setState(() => _isLoading = true);
+  Future<void> _fetchTableData({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() => _isLoading = true);
+    }
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/new_templateview'), // Reusing this for the list
@@ -107,20 +125,24 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         final dataField = decoded['data'];
-        setState(() {
-          if (dataField is List) {
-            _templateList = dataField;
-          } else if (dataField is Map) {
-            _templateList = dataField.values.first ?? [];
-          } else {
-            _templateList = [];
-          }
-        });
+        if (mounted) {
+          setState(() {
+            if (dataField is List) {
+              _templateList = dataField;
+            } else if (dataField is Map) {
+              _templateList = dataField.values.first ?? [];
+            } else {
+              _templateList = [];
+            }
+          });
+        }
       }
     } catch (e) {
       _showSnackBar("Sync Error: $e");
     } finally {
-      setState(() => _isLoading = false);
+      if (showLoading && mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -131,34 +153,14 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     // DISMISS NOW HANDLED IN BUTTON PRESS
 
     try {
-      // Find the name of the selected device to send as device_name
-      final selectedDevice = _deviceDropdownList.firstWhere(
-        (element) => element['id'].toString() == _selectedDeviceId,
-        orElse: () => {},
-      );
-      final String deviceName = selectedDevice['device_name'] ?? "Unknown";
-
-      // Find the name of the selected template to send as template_name
-      final selectedTemplate = _templateDropdownList.firstWhere(
-        (element) => element['id'].toString() == _selectedCategoryId,
-        orElse: () => {},
-      );
-      final String templateName = selectedTemplate['temp_name'] ?? "Unknown";
-
-      final url = _editingId == null
-          ? '/insertNew_templateview'
-          : '/new_templateUpdateview';
-      Map<String, dynamic> body = {
-        "api_key": _apiKey,
-        "device_name": deviceName,
-        "template_name": templateName,
-      };
-      if (_editingId != null) body["id"] = _editingId!;
-
       final response = await http.post(
-        Uri.parse('$_baseUrl$url'),
+        Uri.parse('$_baseUrl/api/insert_default'),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode(body),
+        body: jsonEncode({
+          "api_key": _apiKey,
+          "device_id": _selectedDeviceId,
+          "temp_id": _selectedCategoryId,
+        }),
       );
 
       if (response.statusCode == 200) {
@@ -212,43 +214,32 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     debugPrint("Item keys: ${item.keys.toList()}");
     debugPrint("Item data: $item");
 
-    // Resolve the device name from the item using all possible keys
-    final String itemDeviceName =
-        (item['device_name'] ??
-                item['Device_name'] ??
-                item['device_code'] ??
-                '')
-            .toString()
-            .trim();
+    // The new_templateview only returns [id, temp_name, status, default_status, sync_status]
+    // It does NOT contain device_id or device_name. So deviceId will always be null here.
     final String? itemDeviceId = item['device_id']?.toString();
 
-    debugPrint("Resolved device name from item: '$itemDeviceName'");
     debugPrint("Device ID from item: '$itemDeviceId'");
 
-    // Find matching device from dropdown list
+    // Find matching device from dropdown list only if we have a device_id
     String? deviceId;
-    for (var d in _deviceDropdownList) {
-      final dName = (d['device_name'] ?? '').toString().trim();
-      final dId = d['id']?.toString();
-      final dDevId = d['device_id']?.toString();
-
-      if ((itemDeviceId != null &&
-              itemDeviceId.isNotEmpty &&
-              (dId == itemDeviceId || dDevId == itemDeviceId)) ||
-          (itemDeviceName.isNotEmpty &&
-              dName.toLowerCase() == itemDeviceName.toLowerCase())) {
-        deviceId = dId;
-        debugPrint("MATCHED device: dName='$dName', dId='$dId'");
-        break;
+    if (itemDeviceId != null && itemDeviceId.isNotEmpty) {
+      for (var d in _deviceDropdownList) {
+        final dId = d['id']?.toString();
+        if (dId == itemDeviceId) {
+          deviceId = dId;
+          debugPrint("MATCHED device: dId='$dId'");
+          break;
+        }
       }
     }
 
     // Resolve the template name from the item
     final String itemTempName =
         (item['temp_name'] ?? item['template_name'] ?? '').toString().trim();
-    final String? itemTemplateId = item['template_id']?.toString();
+    final String? itemTemplateId = (item['template_id'] ?? item['temp_id'] ?? item['id'])?.toString();
 
     debugPrint("Resolved template name from item: '$itemTempName'");
+    debugPrint("Template ID from item: '$itemTemplateId'");
 
     // Find matching template from dropdown list
     String? templateId;
@@ -314,6 +305,15 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+            const Text(
+              "Device Type",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF334155),
+              ),
+            ),
+            const SizedBox(height: 8),
             _buildDropdown(
               dialogDeviceId,
               _deviceDropdownList,
@@ -327,6 +327,15 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
               validator: (v) => (v == null || v.isEmpty) ? 'Select the Device Type' : null,
             ),
             const SizedBox(height: 16),
+            const Text(
+              "Template Name",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF334155),
+              ),
+            ),
+            const SizedBox(height: 8),
             _buildDropdown(
               dialogCategoryId,
               _templateDropdownList,
@@ -354,7 +363,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                       horizontal: 20,
                     ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                   ),
                   child: const Text(
@@ -385,9 +394,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                     ),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        4,
-                      ), // ← was 16, now sharp
+                      borderRadius: BorderRadius.circular(6),
                     ),
                   ),
                   child: _isSubmitting
@@ -477,16 +484,67 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   }
 
   Widget _buildRightListContent() {
+    if (_isLoading && _templateList.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.blue),
+      );
+    }
+
     List<dynamic> filtered = _templateList.where((item) {
       final name = (item['temp_name'] ?? "").toString().toLowerCase();
       return name.contains(_searchQuery.toLowerCase());
     }).toList();
 
-    filtered.sort(
-      (a, b) => (int.tryParse(b['id'].toString()) ?? 0).compareTo(
-        int.tryParse(a['id'].toString()) ?? 0,
-      ),
-    );
+    filtered.sort((a, b) {
+      String aVal = "";
+      String bVal = "";
+      
+      switch (_sortColumnIndex) {
+        case 0:
+          final devIdA = a['device_id']?.toString() ?? a['id']?.toString();
+          String? nameA;
+          if (devIdA != null) {
+             final dev = _deviceDropdownList.firstWhere(
+                 (d) => d['id'].toString() == devIdA || d['device_id']?.toString() == devIdA,
+                 orElse: () => null,
+             );
+             if (dev != null) nameA = dev['device_name'] ?? dev['device_code'];
+          }
+          nameA ??= a['device_name'] ?? a['Device_name'] ?? a['device_code'] ?? "";
+          aVal = nameA.toString();
+          
+          final devIdB = b['device_id']?.toString() ?? b['id']?.toString();
+          String? nameB;
+          if (devIdB != null) {
+             final dev = _deviceDropdownList.firstWhere(
+                 (d) => d['id'].toString() == devIdB || d['device_id']?.toString() == devIdB,
+                 orElse: () => null,
+             );
+             if (dev != null) nameB = dev['device_name'] ?? dev['device_code'];
+          }
+          nameB ??= b['device_name'] ?? b['Device_name'] ?? b['device_code'] ?? "";
+          bVal = nameB.toString();
+          break;
+        case 1:
+          aVal = a['temp_name']?.toString() ?? "";
+          bVal = b['temp_name']?.toString() ?? "";
+          break;
+        default:
+          aVal = a['id']?.toString() ?? "";
+          bVal = b['id']?.toString() ?? "";
+          break;
+      }
+      
+      if (_sortColumnIndex == -1) {
+        int idA = int.tryParse(aVal) ?? 0;
+        int idB = int.tryParse(bVal) ?? 0;
+        return _sortAscending ? idA.compareTo(idB) : idB.compareTo(idA);
+      }
+      
+      return _sortAscending
+          ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
+          : bVal.toLowerCase().compareTo(aVal.toLowerCase());
+    });
 
     final int perPage = int.tryParse(_entriesValue) ?? 10;
     final int startIdx = (_currentPage - 1) * perPage;
@@ -559,9 +617,9 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                                       color: Colors.grey.shade100,
                                     ),
                                     columns: [
-                                      _buildTableCol('Device Name'),
-                                      _buildTableCol('Template Name'),
-                                      _buildTableCol('Edit'),
+                                      _buildTableCol('Device Name', 0),
+                                      _buildTableCol('Template Name', 1),
+                                      _buildTableCol('Edit', -1),
                                     ],
                                     rows: paginated.map((item) {
                                       final devId =
@@ -645,15 +703,48 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     Function(String?) onChanged, {
     String? Function(String?)? validator,
   }) {
-    return SearchableDropdown<String>(
-      value: items.any((i) => i[idKey].toString() == value) ? value : null,
-      hint: hint,
+    String? validValue = items.any((i) => i[idKey].toString() == value) ? value : null;
+
+    return DropdownButtonFormField<String>(
+      value: validValue,
+      isExpanded: true,
+      menuMaxHeight: 250,
+      dropdownColor: Colors.white,
       validator: validator,
       autovalidateMode: AutovalidateMode.onUserInteraction,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      ),
+      style: const TextStyle(color: Colors.black87, fontSize: 13),
       items: items.map((item) {
-        return SearchableDropdownItem<String>(
+        final displayName = item[nameKey] ?? item['device_code'] ?? item['temp_name'] ?? item['Device_name'] ?? "";
+        return DropdownMenuItem<String>(
           value: item[idKey].toString(),
-          label: item[nameKey] ?? "",
+          child: Text(displayName.toString()),
         );
       }).toList(),
       onChanged: onChanged,
@@ -761,16 +852,68 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     );
   }
 
-  DataColumn _buildTableCol(String label) => DataColumn(
-    label: Text(
-      label,
-      style: TextStyle(
-        color: Colors.blue.shade800,
-        fontWeight: FontWeight.bold,
-        fontSize: 12,
+  DataColumn _buildTableCol(String label, int colIndex) {
+    return DataColumn(
+      label: InkWell(
+        onTap: colIndex < 0 ? null : () {
+          setState(() {
+            if (_sortColumnIndex == colIndex) {
+              _sortAscending = !_sortAscending;
+            } else {
+              _sortColumnIndex = colIndex;
+              _sortAscending = true;
+            }
+            _currentPage = 1;
+          });
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: Colors.blue.shade800,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (colIndex >= 0) ...[
+              const SizedBox(width: 4),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    heightFactor: 0.4,
+                    child: Icon(
+                      Icons.arrow_drop_up,
+                      size: 18,
+                      color: _sortColumnIndex == colIndex && _sortAscending
+                          ? Colors.blue
+                          : Colors.grey.withOpacity(0.5),
+                    ),
+                  ),
+                  Align(
+                    heightFactor: 0.4,
+                    child: Icon(
+                      Icons.arrow_drop_down,
+                      size: 18,
+                      color: _sortColumnIndex == colIndex && !_sortAscending
+                          ? Colors.blue
+                          : Colors.grey.withOpacity(0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _buildTableFooter(int total) {
     final int perPage = int.tryParse(_entriesValue) ?? 10;

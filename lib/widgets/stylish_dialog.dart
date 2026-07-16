@@ -35,7 +35,7 @@ class StylishDialog extends StatelessWidget {
     final effectiveWidth = maxWidth ?? width ?? 500.0;
     return showGeneralDialog<T>(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false, // Strictly false: click outside will NOT dismiss
       barrierLabel: '',
       barrierColor: Colors.black.withOpacity(0.4),
       transitionDuration: const Duration(milliseconds: 400),
