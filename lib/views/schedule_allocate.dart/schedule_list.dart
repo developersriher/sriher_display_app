@@ -257,7 +257,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
 
     StylishDialog.show(
       context: context,
-      title: "SELECT ARCHIVE PERIOD",
+      title: "Select Archive Period",
       subtitle: "Choose a month and year to view inactive schedules.",
       maxWidth: 450,
       builder: (ctx, setPopupState) {

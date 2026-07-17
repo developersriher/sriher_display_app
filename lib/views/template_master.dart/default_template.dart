@@ -214,22 +214,30 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     debugPrint("Item keys: ${item.keys.toList()}");
     debugPrint("Item data: $item");
 
-    // The new_templateview only returns [id, temp_name, status, default_status, sync_status]
-    // It does NOT contain device_id or device_name. So deviceId will always be null here.
+    // Try to get device_id from the item (may not be present in new_templateview response)
     final String? itemDeviceId = item['device_id']?.toString();
+    // Also try to get device name for fallback matching
+    final String itemDeviceName = (item['device_name'] ?? item['Device_name'] ?? item['device_code'] ?? '').toString().trim();
 
-    debugPrint("Device ID from item: '$itemDeviceId'");
+    debugPrint("Device ID from item: '$itemDeviceId', Device Name: '$itemDeviceName'");
 
-    // Find matching device from dropdown list only if we have a device_id
+    // Find matching device: first by ID, then fallback by device_name
     String? deviceId;
-    if (itemDeviceId != null && itemDeviceId.isNotEmpty) {
-      for (var d in _deviceDropdownList) {
-        final dId = d['id']?.toString();
-        if (dId == itemDeviceId) {
-          deviceId = dId;
-          debugPrint("MATCHED device: dId='$dId'");
-          break;
-        }
+    for (var d in _deviceDropdownList) {
+      final dId = d['id']?.toString();
+      final dName = (d['device_name'] ?? d['device_code'] ?? '').toString().trim();
+
+      // Match by ID if available
+      if (itemDeviceId != null && itemDeviceId.isNotEmpty && dId == itemDeviceId) {
+        deviceId = dId;
+        debugPrint("MATCHED device by ID: dId='$dId', dName='$dName'");
+        break;
+      }
+      // Fallback: match by device name
+      if (deviceId == null && itemDeviceName.isNotEmpty &&
+          dName.toLowerCase() == itemDeviceName.toLowerCase()) {
+        deviceId = dId;
+        debugPrint("MATCHED device by name: dId='$dId', dName='$dName'");
       }
     }
 
@@ -287,6 +295,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   // ──────────────────────────────────────────────────────────────────────────
 
   void _showDefaultTemplateDialog() {
+    // Capture current selections into local dialog-scoped variables
     String? dialogDeviceId = _selectedDeviceId;
     String? dialogCategoryId = _selectedCategoryId;
 
@@ -298,124 +307,237 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       subtitle: "Assign a default template to a device type",
       subtitleStyle: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
       maxWidth: 480,
-      builder: (context, setDialogState) {
+      builder: (dialogContext, setDialogState) {
+        // Ensure validValue logic inside the dropdown builder uses
+        // current local dialog state, not stale widget state.
+        String? safeDeviceId = _deviceDropdownList.any(
+                (i) => i['id']?.toString() == dialogDeviceId)
+            ? dialogDeviceId
+            : null;
+        String? safeTemplateId = _templateDropdownList.any(
+                (i) => i['id']?.toString() == dialogCategoryId)
+            ? dialogCategoryId
+            : null;
+
         return Form(
           key: _formKey,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
+          autovalidateMode: AutovalidateMode.disabled,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            const Text(
-              "Device Type",
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF334155),
-              ),
-            ),
-            const SizedBox(height: 8),
-            _buildDropdown(
-              dialogDeviceId,
-              _deviceDropdownList,
-              "id",
-              "device_name",
-              "Select Device Type",
-              (val) {
-                setDialogState(() => dialogDeviceId = val);
-                setState(() => _selectedDeviceId = val);
-              },
-              validator: (v) => (v == null || v.isEmpty) ? 'Select the Device Type' : null,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              "Template Name",
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF334155),
-              ),
-            ),
-            const SizedBox(height: 8),
-            _buildDropdown(
-              dialogCategoryId,
-              _templateDropdownList,
-              "id",
-              "temp_name",
-              "Select Template Name",
-              (val) {
-                setDialogState(() => dialogCategoryId = val);
-                setState(() => _selectedCategoryId = val);
-              },
-              validator: (v) => (v == null || v.isEmpty) ? 'Select the Template Name' : null,
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () {
-                    _resetForm();
-                    Navigator.pop(context);
-                  },
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 20,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
+              const Text(
+                "Device Type",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF334155),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: _isSubmitting
-                      ? null
-                      : () async {
-                          if (_formKey.currentState!.validate()) {
-                            Navigator.pop(context);
-                            await _submitAction();
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 32,
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: safeDeviceId,
+                isExpanded: true,
+                menuMaxHeight: 250,
+                dropdownColor: Colors.white,
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Please select a Device Type' : null,
+                decoration: InputDecoration(
+                  hintText: "Select Device Type",
+                  hintStyle:
+                      const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade400),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: const BorderSide(color: Colors.red),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: const BorderSide(color: Colors.red),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                ),
+                style: const TextStyle(color: Colors.black87, fontSize: 13),
+                items: _deviceDropdownList.map((item) {
+                  final name = (item['device_name'] ??
+                          item['device_code'] ??
+                          item['Device_name'] ??
+                          '')
+                      .toString();
+                  return DropdownMenuItem<String>(
+                    value: item['id'].toString(),
+                    child: Text(name),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  setDialogState(() {
+                    dialogDeviceId = val;
+                    safeDeviceId = val;
+                  });
+                  setState(() => _selectedDeviceId = val);
+                },
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                "Template Name",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF334155),
+                ),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: safeTemplateId,
+                isExpanded: true,
+                menuMaxHeight: 250,
+                dropdownColor: Colors.white,
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Please select a Template Name' : null,
+                decoration: InputDecoration(
+                  hintText: "Select Template Name",
+                  hintStyle:
+                      const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade400),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: const BorderSide(color: Colors.red),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: const BorderSide(color: Colors.red),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                ),
+                style: const TextStyle(color: Colors.black87, fontSize: 13),
+                items: _templateDropdownList.map((item) {
+                  final name =
+                      (item['temp_name'] ?? item['template_name'] ?? '')
+                          .toString();
+                  return DropdownMenuItem<String>(
+                    value: item['id'].toString(),
+                    child: Text(name),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  setDialogState(() {
+                    dialogCategoryId = val;
+                    safeTemplateId = val;
+                  });
+                  setState(() => _selectedCategoryId = val);
+                },
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      _resetForm();
+                      Navigator.pop(dialogContext);
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 20,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () async {
+                            // Trigger validation before proceeding
+                            if (_formKey.currentState!.validate()) {
+                              // Double-check selections are not null/empty
+                              if (_selectedDeviceId == null ||
+                                  _selectedDeviceId!.isEmpty ||
+                                  _selectedCategoryId == null ||
+                                  _selectedCategoryId!.isEmpty) {
+                                ScaffoldMessenger.of(dialogContext)
+                                    .showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Please fill in all required fields'),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                                return;
+                              }
+                              Navigator.pop(dialogContext);
+                              await _submitAction();
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 32,
+                      ),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            _editingId == null ? 'Submit' : 'Update',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                            ),
                           ),
-                        )
-                      : Text(
-                          _editingId == null ? 'Submit' : 'Update',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13,
-                          ),
-                        ),
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
             ],
           ),
         );

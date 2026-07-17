@@ -656,7 +656,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     foregroundColor: Colors.white,
     padding: const EdgeInsets.symmetric(
       vertical: 12,
-      horizontal: 32,
+      horizontal: 20,
     ),
     elevation: 0,
     shape: RoundedRectangleBorder(
@@ -1537,7 +1537,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                    width: 36,
                    height: 36,
                    child: Material(
-                       color: Colors.blue.shade100,
+                       color: Colors.blue.shade300,
                      borderRadius: BorderRadius.circular(6),
                      child: InkWell(
                        borderRadius: BorderRadius.circular(6),

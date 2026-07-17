@@ -82,7 +82,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       _fromDateController.text =
           widget.editData!['from_date']?.toString() ?? '';
       _toDateController.text = widget.editData!['to_date']?.toString() ?? '';
-      
+
       String rawTime = widget.editData!['from_time']?.toString() ?? '';
       if (rawTime.length > 5) {
         _fromTimeController.text = rawTime.substring(0, 5);
@@ -317,6 +317,14 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text(
+                "Schedule Name",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF334155),
+                ),
+              ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _newScheduleController,
@@ -389,7 +397,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   ),
                   const SizedBox(width: 16),
                   Expanded(
-                    flex: 2,
+                    // 👇 CHANGED FROM 2 TO 1 TO TAKE HALF THE HORIZONTAL SPACE
+                    flex: 1,
                     child: ElevatedButton(
                       onPressed: () {
                         if (_popupFormKey.currentState!.validate()) {
@@ -401,15 +410,19 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0F172A),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          // 👇 REDUCED FROM 32 TO 20 TO MAKE THE WIDTH NARROWER
+                          horizontal: 20,
                         ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
                       ),
                       child: const Text(
                         "Create Schedule",
-                        style: TextStyle(fontWeight: FontWeight.w900),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -600,7 +613,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                       child: _buildDateField(
                         "From Date",
                         _fromDateController,
-                        enabled: selectedScheduleId != null && selectedTemplateId != null,
+                        enabled:
+                            selectedScheduleId != null &&
+                            selectedTemplateId != null,
                         onChanged: () {
                           setState(() {
                             _fromTimeController.clear();
@@ -619,7 +634,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                         "From Time",
                         "From Time",
                         _fromTimeController,
-                        enabled: selectedScheduleId != null &&
+                        enabled:
+                            selectedScheduleId != null &&
                             selectedTemplateId != null &&
                             _fromDateController.text.isNotEmpty,
                         onChanged: () {
@@ -638,7 +654,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                       child: _buildDateField(
                         "To Date",
                         _toDateController,
-                        enabled: selectedScheduleId != null &&
+                        enabled:
+                            selectedScheduleId != null &&
                             selectedTemplateId != null &&
                             _fromDateController.text.isNotEmpty &&
                             _fromTimeController.text.isNotEmpty,
@@ -658,7 +675,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                         "To Time",
                         "To Time",
                         _toTimeController,
-                        enabled: selectedScheduleId != null &&
+                        enabled:
+                            selectedScheduleId != null &&
                             selectedTemplateId != null &&
                             _fromDateController.text.isNotEmpty &&
                             _fromTimeController.text.isNotEmpty &&
@@ -706,9 +724,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                             String key = DateFormat(
                               'yyyy-MM-dd',
                             ).format(start.add(Duration(days: i)));
-                            selectedSlotsByDay[key] = List.from(
-                              slotPairs,
-                            );
+                            selectedSlotsByDay[key] = List.from(slotPairs);
                           }
                         } catch (e) {
                           debugPrint(e.toString());
@@ -726,7 +742,6 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                       color: Colors.black87,
                     ),
                   ),
-
                 ],
               ),
             ),
@@ -999,9 +1014,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     final List<SearchableDropdownItem<int>> dropdownItems = [];
 
     for (var item in items) {
-      final idStr = item['schedule_id']?.toString() ?? item['id']?.toString() ?? '';
+      final idStr =
+          item['schedule_id']?.toString() ?? item['id']?.toString() ?? '';
       final id = int.tryParse(idStr) ?? 0;
-      
+
       final itemLabel =
           item['schedule_name']?.toString() ??
           item['template_name']?.toString() ??
@@ -1015,10 +1031,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
 
       final normLabel = itemLabel.toLowerCase().trim();
       if (seenLabels.add(normLabel) && seenValues.add(id)) {
-        dropdownItems.add(SearchableDropdownItem<int>(
-          value: id,
-          label: itemLabel,
-        ));
+        dropdownItems.add(
+          SearchableDropdownItem<int>(value: id, label: itemLabel),
+        );
       }
     }
 
@@ -1030,7 +1045,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
-            color: Color(0xFF64748B),
+            color: Color(0xFF334155),
           ),
         ),
         const SizedBox(height: 8),
@@ -1046,14 +1061,24 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             ),
             if (showAdd) ...[
               const SizedBox(width: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: IconButton(
-                  icon: Icon(Icons.add, color: Colors.blue.shade700),
-                  onPressed: () => _showSchedulePopup(),
+              Padding(
+                padding: const EdgeInsets.only(top: 6.0),
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: Material(
+                    color: Colors.blue.shade300,
+                    borderRadius: BorderRadius.circular(6),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => _showSchedulePopup(),
+                      child: const Icon(
+                        Icons.add,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1084,7 +1109,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           style: const TextStyle(
             fontWeight: FontWeight.w900,
             fontSize: 12.0,
-            color: Color(0xFF64748B),
+            color: Color(0xFF334155),
             letterSpacing: 0.5,
           ),
         ),
@@ -1124,7 +1149,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           style: const TextStyle(
             fontWeight: FontWeight.w900,
             fontSize: 12.0,
-            color: Color(0xFF64748B),
+            color: Color(0xFF334155),
             letterSpacing: 0.5,
           ),
         ),
@@ -1133,10 +1158,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           controller: controller,
           readOnly: true,
           enabled: enabled,
-          style: const TextStyle(
-            fontSize: 13.0,
-            color: Colors.black87,
-          ),
+          style: const TextStyle(fontSize: 13.0, color: Colors.black87),
           decoration: InputDecoration(
             hintText: 'MM/DD/YYYY',
             hintStyle: const TextStyle(color: Colors.black38, fontSize: 13.0),

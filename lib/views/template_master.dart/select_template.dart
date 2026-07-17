@@ -1259,7 +1259,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                 width: 36,
                 height: 36,
                 child: Material(
-                   color: Colors.blue.shade100,
+                   color: Colors.blue.shade300,
                   borderRadius: BorderRadius.circular(6),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(6),
