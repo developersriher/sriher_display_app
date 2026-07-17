@@ -401,7 +401,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 32),
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(8),
             ),
           ),
           child: isSubmitting
@@ -791,34 +791,38 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
     );
   }
 
+  /// Builds a strict sliding window of at most 3 page-number buttons.
+  /// The window is centered around [currentPage] and slides automatically
+  /// when the user clicks the last visible button (i.e., 3rd item).
+  /// No ellipsis — the max visible count is always ≤ 3.
   List<Widget> _buildPageNumberButtons(int totalPages) {
-    List<Widget> widgets = [];
-    if (totalPages <= 1) {
-      return [_buildPageBtn("1", enabled: false, onTap: () {}, isActive: true)];
+    // ── Strict max-3 sliding window ─────────────────────────────────────────
+    // The window always shows exactly min(3, totalPages) consecutive buttons.
+    // It slides so that [currentPage] is always inside the window.
+    // No ellipsis, no extra numbers — just 1–3 clean page-number boxes.
+    final visibleCount = totalPages.clamp(1, 3); // never more than 3
+
+    // Ideal window: center currentPage. Start = currentPage - 1 (0-based offset).
+    int windowStart = currentPage - 1; // try to put currentPage in middle slot
+
+    // Clamp so the window doesn't go below page 1
+    if (windowStart < 1) windowStart = 1;
+    // Clamp so the window doesn't exceed totalPages on the right
+    if (windowStart + visibleCount - 1 > totalPages) {
+      windowStart = totalPages - visibleCount + 1;
     }
-    for (int i = 1; i <= totalPages; i++) {
-      if (i == 1 ||
-          i == totalPages ||
-          (i >= currentPage - 1 && i <= currentPage + 1)) {
-        widgets.add(
-          _buildPageBtn(
-            "$i",
-            enabled: true,
-            onTap: () => setState(() => currentPage = i),
-            isActive: currentPage == i,
-          ),
-        );
-      } else if (i == currentPage - 2 || i == currentPage + 2) {
-        widgets.add(
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              "...",
-              style: TextStyle(fontSize: 12, color: Colors.black54),
-            ),
-          ),
-        );
-      }
+
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final pageNum = i; // capture for closure
+      widgets.add(
+        _buildPageBtn(
+          "$pageNum",
+          enabled: true,
+          onTap: () => setState(() => currentPage = pageNum),
+          isActive: currentPage == pageNum,
+        ),
+      );
     }
     return widgets;
   }
@@ -829,36 +833,33 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
     required VoidCallback onTap,
     bool isActive = false,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.zero,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: label.length > 2 ? 12 : 8,
-            vertical: 8,
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
+        ),
+        constraints: const BoxConstraints(minWidth: 34),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.blue
+              : (enabled ? Colors.white : Colors.grey.shade50),
+          border: Border.all(
+            color: isActive ? Colors.blue : Colors.grey.shade300,
           ),
-          constraints: const BoxConstraints(minWidth: 34),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
             color: isActive
-                ? Colors.blue
-                : (enabled ? Colors.white : Colors.grey.shade50),
-            border: Border.all(
-              color: isActive ? Colors.blue : Colors.grey.shade300,
-            ),
-            borderRadius: BorderRadius.zero,
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isActive
-                  ? Colors.white
-                  : (enabled ? Colors.black87 : Colors.black26),
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
+                ? Colors.white
+                : (enabled ? Colors.black87 : Colors.black26),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),

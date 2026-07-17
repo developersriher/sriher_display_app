@@ -1209,85 +1209,80 @@ class _RoleViewState extends State<RoleView>
       mainAxisSize: MainAxisSize.min,
       children: [
         _pageBtn(
-          "Prev",
-          onTap: currentPage > 0 ? () => setState(() => currentPage--) : null,
-          position: "first",
+          "Previous",
+          enabled: currentPage > 0,
+          onTap: () => setState(() => currentPage--),
         ),
-        ...List.generate(totalPages, (index) {
-          if (totalPages > 5) {
-            if (index != 0 &&
-                index != totalPages - 1 &&
-                (index < currentPage - 1 || index > currentPage + 1)) {
-              if (index == currentPage - 2 || index == currentPage + 2) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Text("..."),
-                );
-              }
-              return const SizedBox.shrink();
-            }
-          }
-          return _pageBtn(
-            "${index + 1}",
-            active: currentPage == index,
-            onTap: () => setState(() => currentPage = index),
-            position: index == 0
-                ? "first"
-                : (index == totalPages - 1 ? "last" : "middle"),
-          );
-        }),
+        ..._buildPageNumberButtons(totalPages),
         _pageBtn(
           "Next",
-          onTap: currentPage < totalPages - 1
-              ? () => setState(() => currentPage++)
-              : null,
-          position: "last",
+          enabled: currentPage < totalPages - 1,
+          onTap: () => setState(() => currentPage++),
         ),
       ],
     );
   }
 
+  List<Widget> _buildPageNumberButtons(int totalPages) {
+    // Strict max-3 sliding window (0-indexed currentPage).
+    // Shows exactly min(3, totalPages) consecutive page buttons — no ellipsis.
+    // Window operates in 0-indexed space; labels display i+1.
+    final visibleCount = totalPages.clamp(1, 3);
+    int windowStart = currentPage - 1; // try to place currentPage in middle (0-indexed)
+    if (windowStart < 0) windowStart = 0;
+    if (windowStart + visibleCount - 1 >= totalPages) {
+      windowStart = totalPages - visibleCount;
+    }
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final idx = i; // capture for closure
+      widgets.add(
+        _pageBtn(
+          "${idx + 1}",
+          enabled: true,
+          onTap: () => setState(() => currentPage = idx),
+          isActive: currentPage == idx,
+        ),
+      );
+    }
+    return widgets;
+  }
+
   Widget _pageBtn(
     String label, {
-    bool active = false,
-    VoidCallback? onTap,
-    String position = "middle",
+    required bool enabled,
+    required VoidCallback onTap,
+    bool isActive = false,
   }) {
-    BorderRadius borderRadius;
-    if (position == "first") {
-      borderRadius = const BorderRadius.only(
-        topLeft: Radius.circular(6),
-        bottomLeft: Radius.circular(6),
-      );
-    } else if (position == "last") {
-      borderRadius = const BorderRadius.only(
-        topRight: Radius.circular(6),
-        bottomRight: Radius.circular(6),
-      );
-    } else {
-      borderRadius = BorderRadius.zero;
-    }
-
-    return OutlinedButton(
-      style: OutlinedButton.styleFrom(
-        backgroundColor: active ? Colors.blue : Colors.white,
-        foregroundColor: active
-            ? Colors.white
-            : (onTap == null ? Colors.grey : Colors.black87),
-        side: BorderSide(
-          color: active ? Colors.blue : Colors.grey.shade300,
-          width: 0.8,
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
         ),
-        padding: EdgeInsets.symmetric(horizontal: label.length > 1 ? 12 : 8),
-        minimumSize: const Size(36, 36),
-        shape: RoundedRectangleBorder(borderRadius: borderRadius),
-        elevation: 0,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      onPressed: onTap,
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+        constraints: const BoxConstraints(minWidth: 34),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.blue
+              : (enabled ? Colors.white : Colors.grey.shade50),
+          border: Border.all(
+            color: isActive ? Colors.blue : Colors.grey.shade300,
+          ),
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive
+                ? Colors.white
+                : (enabled ? Colors.black87 : Colors.black26),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }

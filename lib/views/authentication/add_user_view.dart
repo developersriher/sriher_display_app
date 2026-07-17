@@ -829,11 +829,6 @@ class _AddUserViewState extends State<AddUserView> {
     int maxPages = (total / limit).ceil();
     if (maxPages == 0) maxPages = 1;
 
-    // Calculate current block of 4 pages
-    int currentBlock = ((currentPage - 1) ~/ 4);
-    int startPage = currentBlock * 4 + 1;
-    int endPage = (startPage + 3) > maxPages ? maxPages : (startPage + 3);
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -850,26 +845,13 @@ class _AddUserViewState extends State<AddUserView> {
             _buildPageBtn(
               "Previous",
               enabled: currentPage > 1,
-              onTap: () {
-                if (currentPage > 1) {
-                  setState(() => currentPage--);
-                }
-              },
+              onTap: () => setState(() => currentPage--),
             ),
-            for (int i = startPage; i <= endPage; i++)
-              _buildPageBtn(
-                i.toString(),
-                active: i == currentPage,
-                onTap: () => setState(() => currentPage = i),
-              ),
+            ..._buildPageNumberButtons(maxPages),
             _buildPageBtn(
               "Next",
               enabled: currentPage < maxPages,
-              onTap: () {
-                if (currentPage < maxPages) {
-                  setState(() => currentPage++);
-                }
-              },
+              onTap: () => setState(() => currentPage++),
             ),
           ],
         ),
@@ -877,29 +859,64 @@ class _AddUserViewState extends State<AddUserView> {
     );
   }
 
-  Widget _buildPageBtn(
-    String t, {
-    bool active = false,
-    bool enabled = true,
-    VoidCallback? onTap,
-  }) {
-    return Container(
-      margin: EdgeInsets.zero,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: active ? Colors.blue : Colors.white,
-          foregroundColor: active ? Colors.white : Colors.black87,
-          elevation: 0,
-          side: BorderSide(
-            color: active ? Colors.blue : const Color(0xFFE2E8F0),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+  List<Widget> _buildPageNumberButtons(int totalPages) {
+    // Strict max-3 sliding window (1-indexed currentPage).
+    // Shows exactly min(3, totalPages) consecutive page buttons — no ellipsis.
+    final visibleCount = totalPages.clamp(1, 3);
+    int windowStart = currentPage - 1; // try to center on currentPage
+    if (windowStart < 1) windowStart = 1;
+    if (windowStart + visibleCount - 1 > totalPages) {
+      windowStart = totalPages - visibleCount + 1;
+    }
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final pageNum = i;
+      widgets.add(
+        _buildPageBtn(
+          "$pageNum",
+          enabled: true,
+          onTap: () => setState(() => currentPage = pageNum),
+          isActive: currentPage == pageNum,
         ),
-        onPressed: enabled ? onTap : null,
+      );
+    }
+    return widgets;
+  }
+
+  Widget _buildPageBtn(
+    String label, {
+    required bool enabled,
+    required VoidCallback onTap,
+    bool isActive = false,
+  }) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
+        ),
+        constraints: const BoxConstraints(minWidth: 34),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.blue
+              : (enabled ? Colors.white : Colors.grey.shade50),
+          border: Border.all(
+            color: isActive ? Colors.blue : Colors.grey.shade300,
+          ),
+          borderRadius: BorderRadius.zero,
+        ),
         child: Text(
-          t,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          label,
+          style: TextStyle(
+            color: isActive
+                ? Colors.white
+                : (enabled ? Colors.black87 : Colors.black26),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );

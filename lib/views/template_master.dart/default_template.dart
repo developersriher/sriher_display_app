@@ -873,104 +873,121 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     );
   }
 
- Widget _buildTableControls() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            const Text(
-              "Show ",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Colors.black87,
-              ),
-            ),
-            SizedBox(
-              width: 75,
-              height: 35,
-              child: DropdownButtonFormField<String>(
-                value: _entriesValue,
-                dropdownColor: Colors.white,
-                style: const TextStyle(color: Colors.black87, fontSize: 13),
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
+  Widget _buildTableControls() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+        final controlsContent = [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Show ",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.black87,
                 ),
-                items: ["10", "25", "50", "100"]
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  _entriesValue = v!;
-                  _currentPage = 1;
-                }),
               ),
-            ),
-            const Text(
-              " entries",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Colors.black87,
+              SizedBox(
+                width: 75,
+                height: 35,
+                child: DropdownButtonFormField<String>(
+                  value: _entriesValue,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                  ),
+                  items: ["10", "25", "50", "100"]
+                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                      .toList(),
+                  onChanged: (v) => setState(() {
+                    _entriesValue = v!;
+                    _currentPage = 1;
+                  }),
+                ),
               ),
-            ),
-          ],
-        ),
-        SizedBox(
-          width: 250,
-          height: 40,
-          child: TextField(
-            controller: _searchController,
-            onChanged: (v) => setState(() {
-              _searchQuery = v;
-              _currentPage = 1;
-            }),
-            style: const TextStyle(color: Colors.black87, fontSize: 12),
-            decoration: InputDecoration(
-              hintText: "Search devices...",
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF94A3B8),
+              const Text(
+                " entries",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.black87,
+                ),
               ),
-              prefixIcon: const Icon(Icons.search, size: 16),
-              isDense: true,
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+            ],
+          ),
+          SizedBox(
+            width: isNarrow ? constraints.maxWidth : 250,
+            height: 40,
+            child: TextField(
+              controller: _searchController,
+              onChanged: (v) => setState(() {
+                _searchQuery = v;
+                _currentPage = 1;
+              }),
+              style: const TextStyle(color: Colors.black87, fontSize: 12),
+              decoration: InputDecoration(
+                hintText: "Search devices...",
+                hintStyle: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF94A3B8),
+                ),
+                prefixIcon: const Icon(Icons.search, size: 16),
+                isDense: true,
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ];
+
+        return isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  controlsContent[0],
+                  const SizedBox(height: 12),
+                  controlsContent[1],
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: controlsContent,
+              );
+      },
     );
   }
 

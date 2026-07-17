@@ -2238,28 +2238,99 @@ class _FileUploadViewState extends State<FileUploadView> {
     );
   }
 
-  Widget _buildNavBtn(
-    String label, {
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    return ElevatedButton(
-      onPressed: enabled ? onTap : null,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: enabled ? Colors.blue.shade50 : Colors.grey.shade50,
-        foregroundColor: enabled ? Colors.blue.shade800 : Colors.black26,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-          side: BorderSide(
-            color: enabled ? Colors.blue.shade100 : Colors.grey.shade200,
+  Widget _buildTableFooter(List<dynamic> paged) {
+    int total = _filteredList.length;
+    int maxPages = (total / int.parse(entriesValue)).ceil();
+    if (maxPages == 0) maxPages = 1;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          "Showing ${paged.length} out of $total entries",
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: Colors.black54,
           ),
         ),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        Row(
+          children: [
+            _buildPageBtn(
+              "Previous",
+              enabled: currentPage > 1,
+              onTap: () => setState(() => currentPage--),
+            ),
+            ..._buildPageNumberButtons(maxPages),
+            _buildPageBtn(
+              "Next",
+              enabled: currentPage < maxPages,
+              onTap: () => setState(() => currentPage++),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Strict max-3 sliding window — no ellipsis, no gaps.
+  List<Widget> _buildPageNumberButtons(int totalPages) {
+    final visibleCount = totalPages.clamp(1, 3);
+    int windowStart = currentPage - 1;
+    if (windowStart < 1) windowStart = 1;
+    if (windowStart + visibleCount - 1 > totalPages) {
+      windowStart = totalPages - visibleCount + 1;
+    }
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final pageNum = i;
+      widgets.add(
+        _buildPageBtn(
+          '$pageNum',
+          enabled: true,
+          onTap: () => setState(() => currentPage = pageNum),
+          isActive: currentPage == pageNum,
+        ),
+      );
+    }
+    return widgets;
+  }
+
+  Widget _buildPageBtn(
+    String label, {
+    bool enabled = true,
+    VoidCallback? onTap,
+    bool isActive = false,
+  }) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
+        ),
+        constraints: const BoxConstraints(minWidth: 34),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.blue
+              : (enabled ? Colors.white : Colors.grey.shade50),
+          border: Border.all(
+            color: isActive ? Colors.blue : Colors.grey.shade300,
+          ),
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive
+                ? Colors.white
+                : (enabled ? Colors.black87 : Colors.black26),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }
@@ -2438,77 +2509,7 @@ class _FileUploadViewState extends State<FileUploadView> {
     );
   }
 
-  Widget _buildTableFooter(List<dynamic> paged) {
-    int total = _filteredList.length;
-    int maxPages = (total / int.parse(entriesValue)).ceil();
-    if (maxPages == 0) maxPages = 1;
 
-    // Calculate current block of 4 pages
-    int currentBlock = ((currentPage - 1) ~/ 4);
-    int startPage = currentBlock * 4 + 1;
-    int endPage = (startPage + 3) > maxPages ? maxPages : (startPage + 3);
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          "Showing ${paged.length} out of $total entries",
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-            color: Colors.black54,
-          ),
-        ),
-        Row(
-          children: [
-            _buildNavBtn(
-              "Previous",
-              enabled: currentPage > 1,
-              onTap: () => setState(() {
-                currentPage--;
-              }),
-            ),
-            for (int i = startPage; i <= endPage; i++)
-              _buildPageBtn(
-                i.toString(),
-                active: i == currentPage,
-                onTap: () => setState(() => currentPage = i),
-              ),
-            _buildNavBtn(
-              "Next",
-              enabled: currentPage < maxPages,
-              onTap: () => setState(() {
-                currentPage++;
-              }),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPageBtn(String t, {bool active = false, VoidCallback? onTap}) {
-    return Container(
-      margin: EdgeInsets.zero,
-      child: ElevatedButton(
-        onPressed: onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: active ? Colors.blue : Colors.white,
-          foregroundColor: active ? Colors.white : Colors.black87,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
-            side: BorderSide(color: Color(0xFFE2E8F0)),
-          ),
-        ),
-        child: Text(
-          t,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
 
   Widget _buildDateField(
     String label,

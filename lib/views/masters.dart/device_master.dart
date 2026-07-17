@@ -565,32 +565,66 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const AnimatedHeading(
-                    text: "Device List",
-                    style: TextStyle(
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 22,
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      _clearForm();
-                      _showDeviceDialog();
-                    },
-                    icon: const Icon(Icons.add_to_queue_rounded, size: 20),
-                    label: const Text(
-                      "CREATE DEVICE",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 600;
+                  return isNarrow
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const AnimatedHeading(
+                              text: "Device List",
+                              style: TextStyle(
+                                color: Colors.blue,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 22,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                _clearForm();
+                                _showDeviceDialog();
+                              },
+                              icon: const Icon(Icons.add_to_queue_rounded, size: 20),
+                              label: const Text(
+                                "CREATE DEVICE",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const AnimatedHeading(
+                              text: "Device List",
+                              style: TextStyle(
+                                color: Colors.blue,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 22,
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                _clearForm();
+                                _showDeviceDialog();
+                              },
+                              icon: const Icon(Icons.add_to_queue_rounded, size: 20),
+                              label: const Text(
+                                "CREATE DEVICE",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                },
               ),
               const SizedBox(height: 20),
 
@@ -991,112 +1025,125 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   }
 
   Widget _buildListHeaderControls() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            const Text(
-              "Show ",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(width: 6),
-            SizedBox(
-              width: 75,
-              height: 35,
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: entriesValue,
-                dropdownColor: Colors.white,
-                style: const TextStyle(color: Colors.black87, fontSize: 13),
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+        final controlsContent = [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Show ",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.black87,
                 ),
-                items: ["10", "25", "50", "100"]
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  entriesValue = v!;
-                  currentPage = 0; // reset to first page on entries change
-                }),
               ),
-            ),
-            const SizedBox(width: 6),
-            const Text(
-              " entries",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Colors.black87,
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 75,
+                height: 35,
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  value: entriesValue,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                  ),
+                  items: ["10", "25", "50", "100"]
+                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                      .toList(),
+                  onChanged: (v) => setState(() {
+                    entriesValue = v!;
+                    currentPage = 0; // reset to first page on entries change
+                  }),
+                ),
               ),
-            ),
-          ],
-        ),
-        Flexible(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 250),
-            child: SizedBox(
-              height: 40,
-              child: TextField(
-                controller: _searchController,
-                onChanged: (val) {
-                  setState(() {
-                    searchQuery = val;
-                    currentPage = 0; // reset to page 1 on new search
-                  });
-                },
-                style: const TextStyle(fontSize: 12, color: Colors.black87),
-                decoration: InputDecoration(
-                  hintText: "Search Devices...",
-                  hintStyle: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  prefixIcon: const Icon(Icons.search, size: 16),
-                  isDense: true,
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
+              const SizedBox(width: 6),
+              const Text(
+                " entries",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(
+            width: isNarrow ? constraints.maxWidth : 250,
+            height: 40,
+            child: TextField(
+              controller: _searchController,
+              onChanged: (val) {
+                setState(() {
+                  searchQuery = val;
+                  currentPage = 0; // reset to page 1 on new search
+                });
+              },
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
+              decoration: InputDecoration(
+                hintText: "Search Devices...",
+                hintStyle: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF94A3B8),
+                ),
+                prefixIcon: const Icon(Icons.search, size: 16),
+                isDense: true,
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ];
+
+        return isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  controlsContent[0],
+                  const SizedBox(height: 12),
+                  controlsContent[1],
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: controlsContent,
+              );
+      },
     );
   }
 
@@ -1107,40 +1154,75 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     final start = total == 0 ? 0 : currentPage * limit + 1;
     final end = (currentPage * limit + limit).clamp(0, total);
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+        final paginationText = Text(
           "Showing $start to $end of $total entries",
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 11,
             color: Colors.black54,
           ),
-        ),
-        Row(
+        );
+        final paginationControls = Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             _buildPageBtn(
               "Previous",
               enabled: currentPage > 0,
               onTap: () => setState(() => currentPage--),
             ),
-            ...List.generate(totalPages, (i) {
-              return _buildPageBtn(
-                "${i + 1}",
-                active: i == currentPage,
-                onTap: () => setState(() => currentPage = i),
-              );
-            }),
+            ..._buildPageNumberButtons(totalPages),
             _buildPageBtn(
               "Next",
               enabled: currentPage < totalPages - 1,
               onTap: () => setState(() => currentPage++),
             ),
           ],
-        ),
-      ],
+        );
+
+        return isNarrow
+            ? Column(
+                children: [
+                  paginationText,
+                  const SizedBox(height: 12),
+                  paginationControls,
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  paginationText,
+                  paginationControls,
+                ],
+              );
+      },
     );
+  }
+
+  List<Widget> _buildPageNumberButtons(int totalPages) {
+    // Strict max-3 sliding window (0-indexed currentPage).
+    // Shows exactly min(3, totalPages) consecutive page buttons — no ellipsis.
+    // Window operates in 0-indexed space; labels display i+1.
+    final visibleCount = totalPages.clamp(1, 3);
+    int windowStart = currentPage - 1; // try to place currentPage in middle
+    if (windowStart < 0) windowStart = 0;
+    if (windowStart + visibleCount - 1 >= totalPages) {
+      windowStart = totalPages - visibleCount;
+    }
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final idx = i; // capture for closure
+      widgets.add(
+        _buildPageBtn(
+          "${idx + 1}",
+          active: currentPage == idx,
+          onTap: () => setState(() => currentPage = idx),
+        ),
+      );
+    }
+    return widgets;
   }
 
   Widget _buildPageBtn(

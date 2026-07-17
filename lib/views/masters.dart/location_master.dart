@@ -274,37 +274,36 @@ void _showLocationDialog() {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-  onPressed: () async {
-    if (_formKey.currentState!.validate()) {
-      Navigator.pop(context); // ← close first before submit
-      if (editingId == null) {
-        await submitNewLocation();
-      } else {
-        await updateLocation();
-      }
-    }
-  },
-  style: ElevatedButton.styleFrom(
-    backgroundColor: const Color(0xFF0F172A),
-    foregroundColor: Colors.white,
-    padding: const EdgeInsets.symmetric(
-      vertical: 12,
-      horizontal: 32,
-    ),
-    elevation: 0,
-    shape: RoundedRectangleBorder(
-      // 👇 CHANGED FROM 4 TO 30 FOR FULLY CURVED/ROUNDED SIDES
-      borderRadius: BorderRadius.circular(30), 
-    ),
-  ),
-  child: Text(
-    editingId == null ? "Submit" : "Update",
-    style: const TextStyle(
-      fontWeight: FontWeight.w900,
-      fontSize: 13,
-    ),
-  ),
-)
+          onPressed: () async {
+            if (_formKey.currentState!.validate()) {
+              Navigator.pop(context); // ← close first before submit
+              if (editingId == null) {
+                await submitNewLocation();
+              } else {
+                await updateLocation();
+              }
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0F172A),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(
+              vertical: 12,
+              horizontal: 32,
+            ),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8), 
+            ),
+          ),
+          child: Text(
+            editingId == null ? "Submit" : "Update",
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 13,
+            ),
+          ),
+        )
       ],
     );
   }
@@ -850,60 +849,81 @@ Widget _buildSmallTextField(String hint, TextEditingController controller, {Stri
     final totalPages = (total / perPage).ceil();
     if (totalPages <= 1) return const SizedBox.shrink();
 
-    List<Widget> buttons = [];
-    
-    // Prev button
-    buttons.add(
-      _pageBtn(
-        "Prev",
-        onPressed: currentPage > 1 ? () => setState(() => currentPage--) : null,
-      ),
+    return Row(
+      children: [
+        _pageBtn(
+          "Previous",
+          enabled: currentPage > 1,
+          onTap: () => setState(() => currentPage--),
+        ),
+        ..._buildPageNumberButtons(totalPages),
+        _pageBtn(
+          "Next",
+          enabled: currentPage < totalPages,
+          onTap: () => setState(() => currentPage++),
+        ),
+      ],
     );
-
-    // Page numbers
-    for (int i = 1; i <= totalPages; i++) {
-      if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
-        buttons.add(
-          _pageBtn(
-            i.toString(),
-            active: i == currentPage,
-            onPressed: () => setState(() => currentPage = i),
-          ),
-        );
-      } else if (i == currentPage - 2 || i == currentPage + 2) {
-        buttons.add(const Text(" ... "));
-      }
-    }
-
-    // Next button
-    buttons.add(
-      _pageBtn(
-        "Next",
-        onPressed: currentPage < totalPages ? () => setState(() => currentPage++) : null,
-      ),
-    );
-
-    return Row(children: buttons);
   }
 
-  Widget _pageBtn(String label, {bool active = false, VoidCallback? onPressed}) {
-    return Container(
-      margin: EdgeInsets.zero,
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          backgroundColor: active ? Colors.blue : Colors.grey.shade100,
-          foregroundColor: active ? Colors.white : Colors.black87,
-          side: active
-              ? const BorderSide(color: Colors.blue)
-              : BorderSide(color: Colors.grey.shade300),
-          padding: EdgeInsets.symmetric(horizontal: label.length > 1 ? 15 : 12),
-          minimumSize: const Size(40, 36),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+  List<Widget> _buildPageNumberButtons(int totalPages) {
+    // Strict max-3 sliding window (1-indexed currentPage).
+    // Shows exactly min(3, totalPages) consecutive page buttons — no ellipsis.
+    final visibleCount = totalPages.clamp(1, 3);
+    int windowStart = currentPage - 1; // try to center on currentPage
+    if (windowStart < 1) windowStart = 1;
+    if (windowStart + visibleCount - 1 > totalPages) {
+      windowStart = totalPages - visibleCount + 1;
+    }
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final pageNum = i;
+      widgets.add(
+        _pageBtn(
+          "$pageNum",
+          enabled: true,
+          onTap: () => setState(() => currentPage = pageNum),
+          isActive: currentPage == pageNum,
         ),
-        onPressed: onPressed ?? () {},
+      );
+    }
+    return widgets;
+  }
+
+  Widget _pageBtn(
+    String label, {
+    required bool enabled,
+    required VoidCallback onTap,
+    bool isActive = false,
+  }) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
+        ),
+        constraints: const BoxConstraints(minWidth: 34),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.blue
+              : (enabled ? Colors.white : Colors.grey.shade50),
+          border: Border.all(
+            color: isActive ? Colors.blue : Colors.grey.shade300,
+          ),
+          borderRadius: BorderRadius.zero,
+        ),
         child: Text(
           label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: isActive
+                ? Colors.white
+                : (enabled ? Colors.black87 : Colors.black26),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );

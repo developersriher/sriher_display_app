@@ -1260,13 +1260,11 @@ class _MappingViewState extends State<MappingView> {
               Row(
                 children: [
                   _pageBtn(
-                    'Prev',
+                    'Previous',
                     enabled: _page > 1,
                     onTap: () => setState(() => _page--),
                   ),
-
-                  _pageNum('$_page / $_totalPages'),
-
+                  ..._buildPageNumberButtons(_totalPages),
                   _pageBtn(
                     'Next',
                     enabled: _page < _totalPages,
@@ -1510,42 +1508,63 @@ class _MappingViewState extends State<MappingView> {
     ),
   );
 
-  Widget _pageBtn(String label, {bool enabled = true, VoidCallback? onTap}) {
-    return ElevatedButton(
-      onPressed: enabled ? onTap : null,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: enabled ? Colors.blue.shade50 : Colors.grey.shade50,
-        foregroundColor: enabled ? Colors.blue.shade800 : Colors.black26,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-          side: BorderSide(
-            color: enabled ? Colors.blue.shade100 : Colors.grey.shade200,
-          ),
+  /// Strict max-3 sliding window — no ellipsis, no gaps.
+  List<Widget> _buildPageNumberButtons(int totalPages) {
+    final visibleCount = totalPages.clamp(1, 3);
+    int windowStart = _page - 1;
+    if (windowStart < 1) windowStart = 1;
+    if (windowStart + visibleCount - 1 > totalPages) {
+      windowStart = totalPages - visibleCount + 1;
+    }
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final pageNum = i;
+      widgets.add(
+        _pageBtn(
+          '$pageNum',
+          enabled: true,
+          onTap: () => setState(() => _page = pageNum),
+          isActive: _page == pageNum,
         ),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-      ),
-    );
+      );
+    }
+    return widgets;
   }
 
-  Widget _pageNum(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
+  Widget _pageBtn(
+    String label, {
+    bool enabled = true,
+    VoidCallback? onTap,
+    bool isActive = false,
+  }) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
+        ),
+        constraints: const BoxConstraints(minWidth: 34),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.blue
+              : (enabled ? Colors.white : Colors.grey.shade50),
+          border: Border.all(
+            color: isActive ? Colors.blue : Colors.grey.shade300,
+          ),
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive
+                ? Colors.white
+                : (enabled ? Colors.black87 : Colors.black26),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
