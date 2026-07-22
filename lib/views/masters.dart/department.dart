@@ -383,15 +383,29 @@ class _DepartmentViewState extends State<DepartmentView> {
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
                   ],
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Please enter the Department Name'
-                      : null,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Please enter the Department Name';
+                    final clean = v.trim().toLowerCase();
+                    final exists = categoryList.any((c) {
+                      final name = (c['category_name'] ?? c['categoryName'] ?? c['name'] ?? '').toString().trim().toLowerCase();
+                      final id = c['id'] ?? c['ID'];
+                      if (editingId != null && id?.toString() == editingId?.toString()) return false;
+                      return name == clean;
+                    });
+                    if (exists) return 'This department already exists.';
+                    return null;
+                  },
                   autovalidateMode: AutovalidateMode.onUserInteraction,
                   style: const TextStyle(
                     fontSize: 13,
                     color: Color(0xFF1E293B),
                   ),
                   decoration: InputDecoration(
+                    errorStyle: const TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
                     hintText: 'Enter Department Name',
                     hintStyle: const TextStyle(
                       fontSize: 12,
@@ -850,10 +864,12 @@ class _DepartmentViewState extends State<DepartmentView> {
   );
 
   Widget _buildListHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+
+        final showEntries = Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
               "Show ",
@@ -909,27 +925,44 @@ class _DepartmentViewState extends State<DepartmentView> {
               ),
             ),
           ],
-        ),
-        Flexible(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 250),
-            child: SizedBox(
-              height: 40,
-              child: TextField(
-                controller: _searchController,
-                onChanged: _onSearchChanged,
-                style: const TextStyle(color: Colors.black87, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: "Search Departments...",
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                ),
-              ),
+        );
+
+        final searchBox = SizedBox(
+          width: isNarrow ? 200 : 250,
+          height: 40,
+          child: TextField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            style: const TextStyle(color: Colors.black87, fontSize: 13),
+            decoration: const InputDecoration(
+              hintText: "Search Departments...",
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+              contentPadding: EdgeInsets.symmetric(horizontal: 10),
             ),
           ),
-        ),
-      ],
+        );
+
+        return isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  showEntries,
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: searchBox,
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  showEntries,
+                  searchBox,
+                ],
+              );
+      },
     );
   }
 
@@ -938,22 +971,22 @@ class _DepartmentViewState extends State<DepartmentView> {
     int totalPages = (filteredList.length / rowsPerPage).ceil();
     if (totalPages == 0) totalPages = 1;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+
+        final totalText = Text(
           "Total: ${filteredList.length} Departments",
           style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.bold,
             color: Colors.grey,
           ),
-        ),
-        // Use a single Row for all buttons to keep them tight together
-        Row(
+        );
+
+        final paginationRow = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // --- PREV BUTTON ---
             GestureDetector(
               onTap: currentPage > 0
                   ? () => setState(() => currentPage--)
@@ -965,7 +998,6 @@ class _DepartmentViewState extends State<DepartmentView> {
                 ),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  // Removed right radius to connect to the next button
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(6),
                     bottomLeft: Radius.circular(6),
@@ -986,9 +1018,6 @@ class _DepartmentViewState extends State<DepartmentView> {
                 ),
               ),
             ),
-
-            // --- NUMBER BUTTONS ---
-            // Using a Wrap or simple Row without margins
             ...List.generate(totalPages, (index) {
               if (totalPages > 7) {
                 if (index != 0 &&
@@ -1009,7 +1038,6 @@ class _DepartmentViewState extends State<DepartmentView> {
               return InkWell(
                 onTap: () => setState(() => currentPage = index),
                 child: Container(
-                  // REMOVED MARGIN HERE to eliminate gaps
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 6,
@@ -1018,7 +1046,6 @@ class _DepartmentViewState extends State<DepartmentView> {
                     color: currentPage == index
                         ? Colors.blue.shade600
                         : Colors.white,
-                    // Removed borderRadius to keep buttons flush against each other
                     border: Border.all(
                       color: currentPage == index
                           ? Colors.blue.shade600
@@ -1029,17 +1056,15 @@ class _DepartmentViewState extends State<DepartmentView> {
                     "${index + 1}",
                     style: TextStyle(
                       fontSize: 12,
+                      fontWeight: FontWeight.bold,
                       color: currentPage == index
                           ? Colors.white
                           : Colors.black87,
-                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               );
             }),
-
-            // --- NEXT BUTTON ---
             GestureDetector(
               onTap: currentPage < totalPages - 1
                   ? () => setState(() => currentPage++)
@@ -1051,7 +1076,6 @@ class _DepartmentViewState extends State<DepartmentView> {
                 ),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  // Removed left radius to connect to the previous button
                   borderRadius: const BorderRadius.only(
                     topRight: Radius.circular(6),
                     bottomRight: Radius.circular(6),
@@ -1062,7 +1086,6 @@ class _DepartmentViewState extends State<DepartmentView> {
                         : Colors.grey.shade300,
                   ),
                 ),
-
                 child: Text(
                   "Next",
                   style: TextStyle(
@@ -1076,8 +1099,25 @@ class _DepartmentViewState extends State<DepartmentView> {
               ),
             ),
           ],
-        ),
-      ],
+        );
+
+        return isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  totalText,
+                  const SizedBox(height: 10),
+                  paginationRow,
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  totalText,
+                  paginationRow,
+                ],
+              );
+      },
     );
   }
 

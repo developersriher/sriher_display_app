@@ -334,9 +334,18 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     child: _buildTextField(
                       "Enter Device Name",
                       _deviceNameController,
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Please enter the Device Name'
-                          : null,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Please enter the Device Name';
+                        final clean = v.trim().toLowerCase();
+                        final exists = deviceList.any((d) {
+                          final name = (d['device_name'] ?? d['deviceName'] ?? '').toString().trim().toLowerCase();
+                          final id = d['id'] ?? d['ID'];
+                          if (editingId != null && id?.toString() == editingId?.toString()) return false;
+                          return name == clean;
+                        });
+                        if (exists) return 'This device name already exists.';
+                        return null;
+                      },
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -346,9 +355,18 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                       _deviceCodeController,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Please enter the Device ID/Code'
-                          : null,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Please enter the Device ID/Code';
+                        final clean = v.trim().toLowerCase();
+                        final exists = deviceList.any((d) {
+                          final code = (d['device_code'] ?? d['deviceCode'] ?? d['code'] ?? '').toString().trim().toLowerCase();
+                          final id = d['id'] ?? d['ID'];
+                          if (editingId != null && id?.toString() == editingId?.toString()) return false;
+                          return code == clean;
+                        });
+                        if (exists) return 'This device id already exists.';
+                        return null;
+                      },
                     ),
                   ),
                 ],
@@ -426,9 +444,18 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                       _serialNoController,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Please enter the Serial Number'
-                          : null,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Please enter the Serial Number';
+                        final clean = v.trim().toLowerCase();
+                        final exists = deviceList.any((d) {
+                          final sno = (d['device_s_no'] ?? d['deviceSNo'] ?? d['serial_number'] ?? d['serial'] ?? '').toString().trim().toLowerCase();
+                          final id = d['id'] ?? d['ID'];
+                          if (editingId != null && id?.toString() == editingId?.toString()) return false;
+                          return sno == clean;
+                        });
+                        if (exists) return 'This serial number already exists.';
+                        return null;
+                      },
                     ),
                   ),
                 ],
@@ -675,7 +702,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     clipBehavior: Clip.antiAlias,
                     child: Column(
                       children: [
-                        if (isLoading)
+                        if (isLoading) 
                           const LinearProgressIndicator(
                             minHeight: 3,
                             backgroundColor: Colors.transparent,
@@ -943,6 +970,11 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           autovalidateMode: AutovalidateMode.onUserInteraction,
           style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
           decoration: InputDecoration(
+            errorStyle: const TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
             hintText: hint,
             hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
             filled: true,
@@ -1028,120 +1060,126 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 600;
-        final controlsContent = [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Show ",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Colors.black87,
-                ),
+
+        final showEntries = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Show ",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: Colors.black87,
               ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 75,
-                height: 35,
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  value: entriesValue,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Colors.black87, fontSize: 13),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 75,
+              height: 35,
+              child: DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: entriesValue,
+                dropdownColor: Colors.white,
+                style: const TextStyle(color: Colors.black87, fontSize: 13),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
                   ),
-                  items: ["10", "25", "50", "100"]
-                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    entriesValue = v!;
-                    currentPage = 0; // reset to first page on entries change
-                  }),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                 ),
+                items: ["10", "25", "50", "100"]
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                    .toList(),
+                onChanged: (v) => setState(() {
+                  entriesValue = v!;
+                  currentPage = 0;
+                }),
               ),
-              const SizedBox(width: 6),
-              const Text(
-                " entries",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Colors.black87,
-                ),
+            ),
+            const SizedBox(width: 6),
+            const Text(
+              " entries",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: Colors.black87,
               ),
-            ],
-          ),
-          SizedBox(
-            width: isNarrow ? constraints.maxWidth : 250,
-            height: 40,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (val) {
-                setState(() {
-                  searchQuery = val;
-                  currentPage = 0; // reset to page 1 on new search
-                });
-              },
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
-              decoration: InputDecoration(
-                hintText: "Search Devices...",
-                hintStyle: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF94A3B8),
-                ),
-                prefixIcon: const Icon(Icons.search, size: 16),
-                isDense: true,
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
+            ),
+          ],
+        );
+
+        final searchBox = SizedBox(
+          width: isNarrow ? 200 : 250,
+          height: 40,
+          child: TextField(
+            controller: _searchController,
+            onChanged: (val) {
+              setState(() {
+                searchQuery = val;
+                currentPage = 0;
+              });
+            },
+            style: const TextStyle(fontSize: 12, color: Colors.black87),
+            decoration: InputDecoration(
+              hintText: "Search Devices...",
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF94A3B8),
+              ),
+              prefixIcon: const Icon(Icons.search, size: 16),
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
               ),
             ),
           ),
-        ];
+        );
 
         return isNarrow
             ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  controlsContent[0],
-                  const SizedBox(height: 12),
-                  controlsContent[1],
+                  showEntries,
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: searchBox,
+                  ),
                 ],
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: controlsContent,
+                children: [
+                  showEntries,
+                  searchBox,
+                ],
               );
       },
     );
@@ -1184,9 +1222,10 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
 
         return isNarrow
             ? Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   paginationText,
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   paginationControls,
                 ],
               )

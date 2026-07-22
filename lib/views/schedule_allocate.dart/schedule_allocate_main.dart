@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
+import '../../widgets/web_compat_image.dart';
+import '../../widgets/video_thumbnail.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -1065,6 +1067,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                                       vertical: 8.0,
                                     ),
                                     child: Container(
+                                      width: 50,
+                                      height: 65,
                                       clipBehavior: Clip.antiAlias,
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(4),
@@ -1072,33 +1076,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                                           color: Colors.grey.shade300,
                                         ),
                                       ),
-                                      child:
-                                          (file['file_name'] != null &&
-                                              file['file_name']
-                                                  .toString()
-                                                  .trim()
-                                                  .isNotEmpty)
-                                          ? Image.network(
-                                              "$_baseUrl/uploads/${file['file_name']}",
-                                              height: 65,
-                                              width: 50,
-                                              fit: BoxFit.cover,
-                                              errorBuilder:
-                                                  (
-                                                    context,
-                                                    error,
-                                                    stackTrace,
-                                                  ) => const Icon(
-                                                    Icons.broken_image,
-                                                    size: 30,
-                                                    color: Colors.grey,
-                                                  ),
-                                            )
-                                          : const Icon(
-                                              Icons.image,
-                                              size: 20,
-                                              color: Colors.grey,
-                                            ),
+                                      child: _buildFilePreview(file),
                                     ),
                                   ),
                                 ),
@@ -1391,116 +1369,128 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 600;
-        final controls = [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Show",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13.0,
-                  color: Colors.black54,
-                ),
+        final showEntries = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Show",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13.0,
+                color: Color(0xFF1E293B),
               ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 75,
-                height: 35,
-                child: DropdownButtonFormField<String>(
-                  value: entriesValue,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Colors.black87, fontSize: 13),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 75,
+              height: 35,
+              child: DropdownButtonFormField<String>(
+                value: entriesValue,
+                dropdownColor: Colors.white,
+                style: const TextStyle(
+                  color: Color(0xFF1E293B),
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                   ),
-                  items: ["10", "25", "50", "100"]
-                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    entriesValue = v!;
-                    currentFilePage = 1;
-                  }),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                 ),
+                items: ["10", "25", "50", "100"]
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                    .toList(),
+                onChanged: (v) => setState(() {
+                  entriesValue = v!;
+                  currentFilePage = 1;
+                }),
               ),
-              const SizedBox(width: 8),
-              const Text(
-                "entries",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13.0,
-                  color: Colors.black54,
-                ),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              "entries",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13.0,
+                color: Color(0xFF1E293B),
               ),
-            ],
-          ),
-          SizedBox(
-            width: isNarrow ? constraints.maxWidth : 180,
-            height: 38,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (_) => setState(() {
-                currentFilePage = 1;
-              }),
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search, size: 16),
-                hintText: "Search...",
-                hintStyle: const TextStyle(
-                  fontSize: 12.0,
-                  color: Color(0xFF94A3B8),
-                ),
-                isDense: true,
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
+            ),
+          ],
+        );
+
+        final searchBox = SizedBox(
+          width: isNarrow ? constraints.maxWidth : constraints.maxWidth * 0.45,
+          height: 38,
+          child: TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {
+              currentFilePage = 1;
+            }),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF64748B)),
+              hintText: "Search files...",
+              hintStyle: const TextStyle(
+                fontSize: 12.0,
+                color: Color(0xFF94A3B8),
+              ),
+              isDense: true,
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
               ),
             ),
           ),
-        ];
+        );
 
         return isNarrow
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  controls[0],
+                  showEntries,
                   const SizedBox(height: 12),
-                  controls[1],
+                  searchBox,
                 ],
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: controls,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  showEntries,
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: searchBox,
+                    ),
+                  ),
+                ],
               );
       },
     );
@@ -1537,7 +1527,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     final end = (currentFilePage * limit).clamp(0, total);
 
     return Padding(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 600;
@@ -1546,7 +1536,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
-              color: Colors.black54,
+              color: Color(0xFF334155),
             ),
           );
           final paginationControls = Row(
@@ -1568,6 +1558,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
 
           return isNarrow
               ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     paginationText,
                     const SizedBox(height: 12),
@@ -1576,6 +1567,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                 )
               : Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     paginationText,
                     paginationControls,
@@ -1780,5 +1772,42 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         ),
       ],
     );
+  }
+
+  bool _isFileVideo(dynamic file) {
+    String fn = (file['file_name'] ?? file['fileName'] ?? file['user_filename'] ?? '').toString().toLowerCase();
+    String fType = (file['file_type'] ?? file['type'] ?? '').toString().toLowerCase();
+    String fFormat = (file['format'] ?? file['file_format'] ?? '').toString().toLowerCase();
+    return fn.endsWith('.mp4') ||
+        fn.endsWith('.webm') ||
+        fn.endsWith('.avi') ||
+        fn.endsWith('.mov') ||
+        fn.endsWith('.mkv') ||
+        fType.contains('video') ||
+        fType.contains('live') ||
+        fFormat.contains('video');
+  }
+
+  Widget _buildFilePreview(dynamic file) {
+    String fileName = (file['file_name'] ?? file['fileName'] ?? '').toString().trim();
+    String userFileName = (file['user_filename'] ?? file['userFileName'] ?? '').toString().trim();
+    if (fileName.isEmpty) {
+      return const Icon(Icons.image_not_supported_rounded, size: 24, color: Colors.grey);
+    }
+    bool isVideo = _isFileVideo(file);
+    final encodedName = Uri.encodeFull(fileName);
+    final fileUrl = '$_baseUrl/uploads/$encodedName';
+
+    if (isVideo) {
+      return VideoThumbnail(
+        url: fileUrl,
+        title: userFileName.isNotEmpty ? userFileName : fileName,
+      );
+    } else {
+      return WebCompatImage(
+        url: fileUrl,
+        fit: BoxFit.cover,
+      );
+    }
   }
 }

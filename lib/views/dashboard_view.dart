@@ -403,16 +403,21 @@ class _DashboardViewState extends State<DashboardView>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    "$greeting, ${_userName ?? 'User'}",
-                    style: const TextStyle(
-                      fontFamily: _kFont,
-                      fontSize: 28,
-                      fontWeight: FontWeight.normal,
-                      color: Color(0xFF0F172A),
-                      letterSpacing: -0.5,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  Builder(
+                    builder: (context) {
+                      final isMobile = MediaQuery.of(context).size.width < 600;
+                      return Text(
+                        "$greeting, ${_userName ?? 'User'}",
+                        style: TextStyle(
+                          fontFamily: _kFont,
+                          fontSize: isMobile ? 18 : 28,
+                          fontWeight: FontWeight.normal,
+                          color: const Color(0xFF0F172A),
+                          letterSpacing: -0.5,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      );
+                    },
                   ),
                   const SizedBox(height: 4),
                   Row(
@@ -1641,165 +1646,147 @@ class _DashboardViewState extends State<DashboardView>
   }
 
   Widget _buildRegistryHeaderTitle() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-      // OverflowBar wraps to a second line when horizontal space is tight,
-      // preventing the yellow/black overflow stripe at small window widths.
-      child: OverflowBar(
-        alignment: MainAxisAlignment.spaceBetween,
-        overflowAlignment: OverflowBarAlignment.start,
-        overflowSpacing: 8,
-        children: [
-          // Left side: Title and subtitle Column
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _selectedCategory.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF0F172A),
-                  letterSpacing: 1.5,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Managing system ${_selectedCategory.toLowerCase()} registry',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF64748B),
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 700;
 
-          // Right side: Search Bar and Show [dropdown] rows control
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Search Bar
-              SizedBox(
-                width: 200,
-                height: 36,
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (value) {
+        final showEntriesWidget = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Show ',
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFF1E293B),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(
+              width: 75,
+              height: 36,
+              child: DropdownButtonFormField<int>(
+                value: _entriesPerPage,
+                dropdownColor: Colors.white,
+                icon: const Icon(
+                  Icons.arrow_drop_down_rounded,
+                  color: Color(0xFF64748B),
+                  size: 20,
+                ),
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                  ),
+                ),
+                items: [10, 25, 50, 100]
+                    .map(
+                      (v) => DropdownMenuItem(
+                        value: v,
+                        child: Text(v.toString()),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) {
                     setState(() {
-                      _searchQuery = value;
-                      _currentPage = 1; // Reset to first page
+                      _entriesPerPage = val;
+                      _currentPage = 1;
                     });
-                  },
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
-                  decoration: InputDecoration(
-                    hintText: 'Search records...',
-                    hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF94A3B8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF3B82F6)),
-                    ),
-                  ),
-                ),
+                  }
+                },
               ),
-              const SizedBox(width: 16),
-              const Text(
-                'Show ',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF64748B),
-                  fontWeight: FontWeight.w500,
-                ),
+            ),
+            const SizedBox(width: 6),
+            const Text(
+              'entries',
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFF1E293B),
+                fontWeight: FontWeight.bold,
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                child: SizedBox(
-                  width: 80,
-                  height: 36,
-                  child: DropdownButtonFormField<int>(
-                    value: _entriesPerPage,
-                    dropdownColor: Colors.white,
-                    icon: const Icon(
-                      Icons.arrow_drop_down_rounded,
-                      color: Color(0xFF64748B),
-                      size: 20,
-                    ),
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF1E3A8A),
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    items: [10, 25, 50, 100]
-                        .map(
-                          (v) => DropdownMenuItem(
-                            value: v,
-                            child: Text(v.toString()),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() {
-                          _entriesPerPage = val;
-                          _currentPage = 1;
-                        });
-                      }
-                    },
-                  ),
-                ),
+            ),
+          ],
+        );
+
+        final searchWidget = SizedBox(
+          width: isNarrow ? 180 : 200,
+          height: 36,
+          child: TextField(
+            controller: _searchController,
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value;
+                _currentPage = 1;
+              });
+            },
+            style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
+            decoration: InputDecoration(
+              hintText: 'Search records...',
+              hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+              prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF94A3B8)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
               ),
-              const Text(
-                'entries',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF64748B),
-                  fontWeight: FontWeight.w500,
-                ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
               ),
-            ],
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+              ),
+            ),
           ),
-        ],
-      ),
+        );
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+          child: isNarrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    showEntriesWidget,
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: searchWidget,
+                    ),
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    showEntriesWidget,
+                    searchWidget,
+                  ],
+                ),
+        );
+      },
     );
   }
 
@@ -2023,12 +2010,12 @@ class _DashboardViewState extends State<DashboardView>
   Widget _buildRegistryFooter(_DashboardData d) {
     final rows = _getFilteredRows(d);
     final total = rows.length;
-    final totalPages = (total / _entriesPerPage).ceil();
+    final totalPages = (total / _entriesPerPage).ceil().clamp(1, 999999);
     final start = (total == 0) ? 0 : (_currentPage - 1) * _entriesPerPage + 1;
     final end = (_currentPage * _entriesPerPage).clamp(0, total);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
@@ -2041,33 +2028,24 @@ class _DashboardViewState extends State<DashboardView>
           Text(
             'Showing $start to $end of $total entries',
             style: const TextStyle(
-              color: Color(0xFF64748B),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+              color: Colors.black54,
             ),
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildPageNavBtn(
-                Icons.chevron_left_rounded,
-                _currentPage > 1 ? () => setState(() => _currentPage--) : null,
+              _buildPageBtn(
+                "Previous",
+                enabled: _currentPage > 1,
+                onTap: () => setState(() => _currentPage--),
               ),
-              const SizedBox(width: 12),
-              Text(
-                'Page $_currentPage of $totalPages',
-                style: const TextStyle(
-                  color: Color(0xFF0F172A),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(width: 12),
-              _buildPageNavBtn(
-                Icons.chevron_right_rounded,
-                _currentPage < totalPages
-                    ? () => setState(() => _currentPage++)
-                    : null,
+              ..._buildPageNumberButtons(totalPages),
+              _buildPageBtn(
+                "Next",
+                enabled: _currentPage < totalPages,
+                onTap: () => setState(() => _currentPage++),
               ),
             ],
           ),
@@ -2076,25 +2054,63 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 
-  Widget _buildPageNavBtn(IconData icon, VoidCallback? onTap) {
-    final enabled = onTap != null;
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: enabled ? const Color(0xFFF1F5F9) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: enabled ? const Color(0xFFE2E8F0) : Colors.transparent,
-            ),
-          ),
-          child: Icon(
-            icon,
-            size: 20,
-            color: enabled ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1),
+  List<Widget> _buildPageNumberButtons(int totalPages) {
+    final visibleCount = totalPages.clamp(1, 3);
+    int windowStart = _currentPage - 1;
+    if (windowStart < 1) windowStart = 1;
+    if (windowStart + visibleCount - 1 > totalPages) {
+      windowStart = totalPages - visibleCount + 1;
+      if (windowStart < 1) windowStart = 1;
+    }
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final pageNum = i;
+      widgets.add(
+        _buildPageBtn(
+          "$pageNum",
+          active: _currentPage == pageNum,
+          onTap: () => setState(() => _currentPage = pageNum),
+        ),
+      );
+    }
+    return widgets;
+  }
+
+  Widget _buildPageBtn(
+    String label, {
+    bool active = false,
+    bool enabled = true,
+    VoidCallback? onTap,
+  }) {
+    return Container(
+      margin: EdgeInsets.zero,
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          backgroundColor: active
+              ? Colors.blue
+              : enabled
+                  ? Colors.grey.shade100
+                  : Colors.grey.shade50,
+          foregroundColor: active
+              ? Colors.white
+              : enabled
+                  ? Colors.black87
+                  : Colors.grey.shade400,
+          side: active
+              ? const BorderSide(color: Colors.blue)
+              : BorderSide(color: Colors.grey.shade300),
+          padding: EdgeInsets.symmetric(
+              horizontal: label.length > 1 ? 15 : 12),
+          minimumSize: const Size(40, 36),
+          shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.zero),
+        ),
+        onPressed: enabled ? onTap : null,
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),

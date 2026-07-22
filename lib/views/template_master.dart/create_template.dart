@@ -322,11 +322,24 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
             if (!RegExp(r'^[a-zA-Z0-9\s\-_]+$').hasMatch(v.trim())) {
               return 'Only letters, numbers, and basic special chars allowed';
             }
+            final clean = v.trim().toLowerCase();
+            final exists = templateList.any((t) {
+              final name = (t['temp_name'] ?? t['template_name'] ?? '').toString().trim().toLowerCase();
+              final id = t['id'] ?? t['ID'];
+              if (editingId != null && id?.toString() == editingId?.toString()) return false;
+              return name == clean;
+            });
+            if (exists) return 'This template name already exists.';
             return null;
           },
           autovalidateMode: AutovalidateMode.onUserInteraction,
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
+            errorStyle: const TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
             hintText: 'Enter the template name',
             filled: true,
             fillColor: Colors.white,

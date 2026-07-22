@@ -690,15 +690,34 @@ class _RoleViewState extends State<RoleView>
   }
 
   Widget _buildFooter(int pagedCount, int totalCount, int limit) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+
+        final showingText = Text(
           "Showing ${totalCount == 0 ? 0 : currentPage * limit + 1} to ${currentPage * limit + pagedCount} of $totalCount entries",
           style: const TextStyle(color: Color.fromARGB(255, 11, 9, 9), fontSize: 13),
-        ),
-        _buildPagination(totalCount, limit),
-      ],
+        );
+
+        final pagination = _buildPagination(totalCount, limit);
+
+        return isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  showingText,
+                  const SizedBox(height: 10),
+                  pagination,
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  showingText,
+                  pagination,
+                ],
+              );
+      },
     );
   }
 
@@ -800,10 +819,25 @@ class _RoleViewState extends State<RoleView>
                   if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
                     return "Numeric values and special characters are not allowed";
                   }
+                  final cleanName = v.trim().toLowerCase();
+                  final exists = allRoles.any((r) {
+                    final name = (r['role_name']?.toString() ?? '').trim().toLowerCase();
+                    final id = int.tryParse(r['id']?.toString() ?? '');
+                    if (editingId != null && id == editingId) return false;
+                    return name == cleanName;
+                  });
+                  if (exists) {
+                    return "This role name already exists.";
+                  }
                   return null;
                 },
                 style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
                 decoration: InputDecoration(
+                  errorStyle: const TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
                   hintText: 'Enter Role Name',
                   hintStyle: const TextStyle(
                     fontSize: 12,
@@ -1087,10 +1121,12 @@ class _RoleViewState extends State<RoleView>
   }
 
   Widget _buildListHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+
+        final showEntries = Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
               "Show ",
@@ -1152,52 +1188,71 @@ class _RoleViewState extends State<RoleView>
               ),
             ),
           ],
-        ),
-        Flexible(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 250),
-            child: SizedBox(
-              height: 38,
-              child: TextField(
-                controller: _searchController,
-                onChanged: (val) => setState(() {
-                  searchQuery = val;
-                  currentPage = 0;
-                }),
-                style: const TextStyle(fontSize: 12, color: Colors.black87),
-                decoration: InputDecoration(
-                  hintText: 'Search roles...',
-                  hintStyle: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                    fontSize: 12,
-                  ),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    size: 16,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  isDense: true,
-                  filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
+        );
+
+        final searchBox = ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 250),
+          child: SizedBox(
+            height: 38,
+            child: TextField(
+              controller: _searchController,
+              onChanged: (val) => setState(() {
+                searchQuery = val;
+                currentPage = 0;
+              }),
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
+              decoration: InputDecoration(
+                hintText: 'Search roles...',
+                hintStyle: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 12,
+                ),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 16,
+                  color: Color(0xFF94A3B8),
+                ),
+                isDense: true,
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        );
+
+        return isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  showEntries,
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: searchBox,
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  showEntries,
+                  searchBox,
+                ],
+              );
+      },
     );
   }
 

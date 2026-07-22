@@ -7,6 +7,7 @@ import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
 import '../../widgets/web_compat_image.dart';
+import '../../widgets/video_thumbnail.dart';
 
 class SpecificRangesView extends StatefulWidget {
   const SpecificRangesView({super.key});
@@ -24,6 +25,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
   int? selectedScheduleId;
   int? selectedTemplateId;
   String entriesValue = "10";
+  int currentFilePage = 1;
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   List<dynamic> scheduleList = [];
@@ -74,6 +76,20 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           .toLowerCase();
       return fileName.contains(query);
     }).toList();
+  }
+
+  List<dynamic> get _pagedTemplateFiles {
+    final filtered = _filteredTemplateFiles;
+    final limit = int.tryParse(entriesValue) ?? 10;
+    int totalPages = (filtered.length / limit).ceil();
+    if (totalPages == 0) totalPages = 1;
+    if (currentFilePage > totalPages) currentFilePage = totalPages;
+    if (currentFilePage < 1) currentFilePage = 1;
+
+    final start = (currentFilePage - 1) * limit;
+    if (start >= filtered.length) return [];
+    final end = (start + limit).clamp(0, filtered.length);
+    return filtered.sublist(start, end);
   }
 
   List<String> _generateTimeSlots() {
@@ -1126,9 +1142,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _filteredTemplateFiles.length,
+                  itemCount: _pagedTemplateFiles.length,
                   itemBuilder: (context, index) {
-                    final file = _filteredTemplateFiles[index];
+                    final file = _pagedTemplateFiles[index];
                     return Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -1164,21 +1180,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(4),
-                                  child:
-                                      (file['file_name'] != null &&
-                                          file['file_name']
-                                              .toString()
-                                              .trim()
-                                              .isNotEmpty)
-                                      ? WebCompatImage(
-                                          url: "$_baseUrl/uploads/${file['file_name']}",
-                                          fit: BoxFit.cover,
-                                        )
-                                      : const Icon(
-                                          Icons.image,
-                                          size: 24,
-                                          color: Colors.grey,
-                                        ),
+                                  child: _buildFilePreview(file),
                                 ),
                               ),
                             ),
@@ -1304,181 +1306,267 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
   }
 
   Widget _buildListHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              const Text(
-                "Show",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13.0,
-                  color: Colors.black87,
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+        final showEntries = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Show",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13.0,
+                color: Color(0xFF1E293B),
               ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 75,
-                height: 35,
-                child: DropdownButtonFormField<String>(
-                  value: entriesValue,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Colors.black87, fontSize: 13),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 75,
+              height: 35,
+              child: DropdownButtonFormField<String>(
+                value: entriesValue,
+                dropdownColor: Colors.white,
+                style: const TextStyle(
+                  color: Color(0xFF1E293B),
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                   ),
-                  items: ["10", "25", "50", "100"]
-                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    entriesValue = v!;
-                  }),
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Text(
-                "entries",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13.0,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              const Text(
-                "Search:",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13.0,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 200,
-                height: 38,
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (_) => setState(() {}),
-                  style: const TextStyle(fontSize: 12, color: Colors.black87),
-                  decoration: InputDecoration(
-                    hintText: "Search files...",
-                    hintStyle: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF94A3B8),
-                    ),
-                    prefixIcon: const Icon(Icons.search, size: 16),
-                    isDense: true,
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
                   ),
                 ),
+                items: ["10", "25", "50", "100"]
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                    .toList(),
+                onChanged: (v) => setState(() {
+                  entriesValue = v!;
+                  currentFilePage = 1;
+                }),
               ),
-            ],
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              "entries",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13.0,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+          ],
+        );
+
+        final searchBox = SizedBox(
+          width: isNarrow ? constraints.maxWidth : constraints.maxWidth * 0.45,
+          height: 38,
+          child: TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {
+              currentFilePage = 1;
+            }),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF64748B)),
+              hintText: "Search files...",
+              hintStyle: const TextStyle(
+                fontSize: 12.0,
+                color: Color(0xFF94A3B8),
+              ),
+              isDense: true,
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+              ),
+            ),
           ),
-        ],
-      ),
+        );
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+          child: isNarrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    showEntries,
+                    const SizedBox(height: 12),
+                    searchBox,
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    showEntries,
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: searchBox,
+                      ),
+                    ),
+                  ],
+                ),
+        );
+      },
     );
   }
 
   Widget _buildTableFooter() {
-    int rowsPerPage = int.tryParse(entriesValue) ?? 10;
-    int totalPages = (templateFiles.length / rowsPerPage).ceil();
+    int total = _filteredTemplateFiles.length;
+    int limit = int.tryParse(entriesValue) ?? 10;
+    int totalPages = (total / limit).ceil();
     if (totalPages == 0) totalPages = 1;
 
+    if (currentFilePage > totalPages) {
+      currentFilePage = totalPages;
+    }
+    if (currentFilePage < 1) {
+      currentFilePage = 1;
+    }
+
+    final start = total == 0 ? 0 : (currentFilePage - 1) * limit + 1;
+    final end = (currentFilePage * limit).clamp(0, total);
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            "Total Files: ${_filteredTemplateFiles.length}",
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 600;
+          final paginationText = Text(
+            "Showing $start to $end of $total entries",
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: FontWeight.bold,
-              color: Colors.black54,
+              color: Color(0xFF334155),
             ),
-          ),
-          Row(
+          );
+          final paginationControls = Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildMiniBtn("Prev", isFirst: true),
-              ...List.generate(totalPages, (index) {
-                return _buildMiniBtn("${index + 1}", active: (index + 1) == 1);
-              }),
-              _buildMiniBtn("Next", isLast: true),
+              _buildPageBtn(
+                "Previous",
+                enabled: currentFilePage > 1,
+                onTap: () => setState(() => currentFilePage--),
+              ),
+              ..._buildPageNumberButtons(totalPages),
+              _buildPageBtn(
+                "Next",
+                enabled: currentFilePage < totalPages,
+                onTap: () => setState(() => currentFilePage++),
+              ),
             ],
-          ),
-        ],
+          );
+
+          return isNarrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    paginationText,
+                    const SizedBox(height: 12),
+                    paginationControls,
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    paginationText,
+                    paginationControls,
+                  ],
+                );
+        },
       ),
     );
   }
 
-  Widget _buildMiniBtn(
-    String label, {
-    bool active = false,
-    bool isFirst = false,
-    bool isLast = false,
-  }) {
-    return Container(
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          backgroundColor: active ? Colors.blue.shade700 : Colors.white,
-          foregroundColor: active ? Colors.white : Colors.black87,
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          side: BorderSide(
-            color: active ? Colors.blue.shade700 : Colors.grey.shade300,
-            width: 1.0,
-          ),
-          minimumSize: const Size(0, 34),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  List<Widget> _buildPageNumberButtons(int totalPages) {
+    final visibleCount = totalPages.clamp(1, 3);
+    int windowStart = currentFilePage - 1;
+    if (windowStart < 1) windowStart = 1;
+    if (windowStart + visibleCount - 1 > totalPages) {
+      windowStart = totalPages - visibleCount + 1;
+    }
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final pageNum = i;
+      widgets.add(
+        _buildPageBtn(
+          "$pageNum",
+          enabled: true,
+          onTap: () => setState(() => currentFilePage = pageNum),
+          isActive: currentFilePage == pageNum,
         ),
-        onPressed: () {},
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+      );
+    }
+    return widgets;
+  }
+
+  Widget _buildPageBtn(
+    String label, {
+    required bool enabled,
+    required VoidCallback onTap,
+    bool isActive = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.zero,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: label.length > 2 ? 12 : 8,
+            vertical: 8,
+          ),
+          decoration: BoxDecoration(
+            color: isActive
+                ? const Color(0xFF0F172A)
+                : (enabled ? Colors.white : Colors.grey.shade100),
+            border: Border.all(
+              color: isActive ? const Color(0xFF0F172A) : Colors.grey.shade300,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              color: isActive
+                  ? Colors.white
+                  : (enabled ? Colors.black87 : Colors.grey.shade400),
+            ),
+          ),
         ),
       ),
     );
@@ -1622,5 +1710,42 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
         ),
       ],
     );
+  }
+
+  bool _isFileVideo(dynamic file) {
+    String fn = (file['file_name'] ?? file['fileName'] ?? file['user_filename'] ?? '').toString().toLowerCase();
+    String fType = (file['file_type'] ?? file['type'] ?? '').toString().toLowerCase();
+    String fFormat = (file['format'] ?? file['file_format'] ?? '').toString().toLowerCase();
+    return fn.endsWith('.mp4') ||
+        fn.endsWith('.webm') ||
+        fn.endsWith('.avi') ||
+        fn.endsWith('.mov') ||
+        fn.endsWith('.mkv') ||
+        fType.contains('video') ||
+        fType.contains('live') ||
+        fFormat.contains('video');
+  }
+
+  Widget _buildFilePreview(dynamic file) {
+    String fileName = (file['file_name'] ?? file['fileName'] ?? '').toString().trim();
+    String userFileName = (file['user_filename'] ?? file['userFileName'] ?? '').toString().trim();
+    if (fileName.isEmpty) {
+      return const Icon(Icons.image_not_supported_rounded, size: 24, color: Colors.grey);
+    }
+    bool isVideo = _isFileVideo(file);
+    final encodedName = Uri.encodeFull(fileName);
+    final fileUrl = '$_baseUrl/uploads/$encodedName';
+
+    if (isVideo) {
+      return VideoThumbnail(
+        url: fileUrl,
+        title: userFileName.isNotEmpty ? userFileName : fileName,
+      );
+    } else {
+      return WebCompatImage(
+        url: fileUrl,
+        fit: BoxFit.cover,
+      );
+    }
   }
 }

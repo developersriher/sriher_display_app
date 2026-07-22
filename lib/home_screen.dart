@@ -119,16 +119,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      // ClipRect at the Scaffold body level prevents ANY yellow/black overflow
-      // stripes from leaking into view, no matter how small the window is.
-      body: ClipRect(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // Below 700 px wide the sidebar is hidden to avoid overflow.
-            final showSidebar = constraints.maxWidth >= 700;
-            return Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Below 700 px wide the sidebar is hidden to avoid overflow.
+        final showSidebar = constraints.maxWidth >= 700;
+        return Scaffold(
+          drawer: !showSidebar
+              ? Drawer(
+                  backgroundColor: const Color(0xFF0F172A),
+                  child: SafeArea(child: _buildSidebar(theme, isDrawer: true)),
+                )
+              : null,
+          backgroundColor: const Color(0xFFF8FAFC),
+          // ClipRect at the Scaffold body level prevents ANY yellow/black overflow
+          // stripes from leaking into view, no matter how small the window is.
+          body: ClipRect(
+            child: Row(
               children: [
                 // Sidebar (conditionally shown)
                 if (showSidebar)
@@ -172,33 +178,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
               ],
-            );
-          },
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildSidebar(ThemeData theme) {
+  Widget _buildSidebar(ThemeData theme, {bool isDrawer = false}) {
     return Container(
-      width: 260,
-      margin: const EdgeInsets.all(24),
+      width: isDrawer ? double.infinity : 260,
+      margin: EdgeInsets.all(isDrawer ? 0 : 24),
       decoration: BoxDecoration(
         color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.15),
-            blurRadius: 30,
-            offset: const Offset(4, 10),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(isDrawer ? 0 : 24),
+        boxShadow: isDrawer
+            ? null
+            : [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withOpacity(0.15),
+                  blurRadius: 30,
+                  offset: const Offset(4, 10),
+                ),
+              ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(isDrawer ? 0 : 24),
         child: Column(
           children: [
-            // Sidebar Logo
             Padding(
               padding: const EdgeInsets.all(32.0),
               child: Row(
@@ -230,6 +237,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       letterSpacing: 1.2,
                     ),
                   ),
+                  if (isDrawer) ...[
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -238,78 +252,97 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
-                  _buildSidebarItem(Icons.dashboard_rounded, 'Dashboard', 0),
+                  _buildSidebarItem(Icons.dashboard_rounded, 'Dashboard', 0, isDrawer: isDrawer),
                   const SizedBox(height: 16),
                   _buildSectionHeader('SYSTEM MASTERS'),
                   _buildSidebarItem(
                     Icons.admin_panel_settings_rounded,
                     'Roles',
                     11,
+                    isDrawer: isDrawer,
                   ),
-                  _buildSidebarItem(Icons.settings_cell_rounded, 'Devices', 12),
-                  _buildSidebarItem(Icons.business_rounded, 'Departments', 13),
-                  _buildSidebarItem(Icons.location_on_rounded, 'Locations', 14),
-                  _buildSidebarItem(Icons.map_rounded, 'Mapping', 15),
+                  _buildSidebarItem(Icons.settings_cell_rounded, 'Devices', 12, isDrawer: isDrawer),
+                  _buildSidebarItem(Icons.business_rounded, 'Departments', 13, isDrawer: isDrawer),
+                  _buildSidebarItem(Icons.location_on_rounded, 'Locations', 14, isDrawer: isDrawer),
+                  _buildSidebarItem(Icons.map_rounded, 'Mapping', 15, isDrawer: isDrawer),
                   const SizedBox(height: 16),
                   _buildSectionHeader('MANAGEMENT'),
-                  _buildSidebarItem(Icons.person_add_rounded, 'Add User', 1),
+                  _buildSidebarItem(Icons.person_add_rounded, 'Add User', 1, isDrawer: isDrawer),
                   _buildSidebarItem(
                     Icons.folder_shared_rounded,
                     'File Upload',
                     2,
+                    isDrawer: isDrawer,
                   ),
-                  const SizedBox(height: 16),
-                  _buildSectionHeader('TEMPLATES'),
-                  _buildSidebarItem(Icons.add_box_rounded, 'Create Template', 3),
                   _buildSidebarItem(
-                    Icons.auto_awesome_mosaic_rounded,
-                    'Default Template',
+                    Icons.dashboard_customize_rounded,
+                    'Create Template',
+                    3,
+                    isDrawer: isDrawer,
+                  ),
+                  _buildSidebarItem(
+                    Icons.view_quilt_rounded,
+                    'Default Templates',
                     4,
+                    isDrawer: isDrawer,
                   ),
                   _buildSidebarItem(
-                    Icons.library_add_check_rounded,
+                    Icons.dashboard_customize_outlined,
                     'Select Template',
                     5,
+                    isDrawer: isDrawer,
                   ),
-                  const SizedBox(height: 16),
-                  _buildSectionHeader('SCHEDULING'),
-                  _buildSidebarItem(Icons.calendar_month_rounded, 'Allocate', 6),
-                  _buildSidebarItem(Icons.devices_rounded, 'Assign Device', 7),
-                  _buildSidebarItem(Icons.list_alt_rounded, 'Schedule List', 8),
+                  _buildSidebarItem(
+                    Icons.calendar_month_rounded,
+                    'Schedule Allocate',
+                    6,
+                    isDrawer: isDrawer,
+                  ),
+                  _buildSidebarItem(
+                    Icons.precision_manufacturing_rounded,
+                    'Assign Device',
+                    7,
+                    isDrawer: isDrawer,
+                  ),
+                  _buildSidebarItem(
+                    Icons.view_headline_rounded,
+                    'Schedule List',
+                    8,
+                    isDrawer: isDrawer,
+                  ),
                   _buildSidebarItem(
                     Icons.date_range_rounded,
                     'Specific Ranges',
                     9,
+                    isDrawer: isDrawer,
                   ),
                   _buildSidebarItem(
-                    Icons.cleaning_services_rounded,
-                    'Copy and wipe off',
+                    Icons.copy_all_rounded,
+                    'Copy & Wipe Off',
                     10,
+                    isDrawer: isDrawer,
                   ),
-                  const SizedBox(height: 16),
-                  const SizedBox(height: 32),
                 ],
               ),
             ),
 
-            // User Info / Logout
             Container(
               padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.03),
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(24),
-                ),
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withOpacity(0.05)),
               ),
               child: Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: const Color(0xFF3B82F6),
                     radius: 18,
+                    backgroundColor: const Color(0xFF3B82F6),
                     child: Text(
-                      _userName?.isNotEmpty == true
+                      _userName != null && _userName!.isNotEmpty
                           ? _userName![0].toUpperCase()
-                          : 'U',
+                          : 'A',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -324,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          _userName ?? "User",
+                          _userName ?? "Admin",
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 13,
@@ -350,7 +383,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       size: 20,
                     ),
                     onPressed: () => _handleLogout(),
-                    hoverColor: Colors.red.withOpacity(0.2),
                   ),
                 ],
               ),
@@ -376,10 +408,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSidebarItem(IconData icon, String title, int index) {
+  Widget _buildSidebarItem(IconData icon, String title, int index, {bool isDrawer = false}) {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
-      onTap: () => _selectIndex(index),
+      onTap: () {
+        _selectIndex(index);
+        if (isDrawer && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         margin: const EdgeInsets.only(bottom: 6),
@@ -460,6 +497,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       child: Row(
         children: [
+          if (!showSidebar) ...[
+            Builder(
+              builder: (ctx) => InkWell(
+                onTap: () => Scaffold.of(ctx).openDrawer(),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0F172A).withOpacity(0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.menu_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             child: Text(
               _getPageTitle(),

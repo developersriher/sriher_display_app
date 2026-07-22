@@ -1120,162 +1120,195 @@ class _MappingViewState extends State<MappingView> {
   // ─── TABLE CARD ───────────────────────────────────────────────────────────
 
   Widget _buildTableCard() {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          // Entries + search
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Text(
-                    'Show ',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 75,
-                    height: 35,
-                    child: DropdownButtonFormField<String>(
-                      value: _entries,
-                      dropdownColor: Colors.white,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontSize: 13,
-                      ),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 8,
-                        ),
-                      ),
-                      items: ["10", "25", "50", "100"]
-                          .map(
-                            (v) => DropdownMenuItem(value: v, child: Text(v)),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) {
-                          setState(() {
-                            _entries = v;
-                            _page = 1;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                  const Text(
-                    ' entries',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.black87,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+
+        final showEntries = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Show ',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
               ),
-              Flexible(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 250),
-                  child: SizedBox(
-                    height: 40,
-                    child: TextField(
-                      controller: _searchCtrl,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black87,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Search mappings...',
-                        hintStyle: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF94A3B8),
-                        ),
-                        prefixIcon: const Icon(Icons.search, size: 16),
-                        isDense: true,
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          Expanded(
-            child: _tableLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _buildTable(),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Footer pagination
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Showing ${_paged.length} of ${_filtered.length} records',
+            ),
+            SizedBox(
+              width: 75,
+              height: 35,
+              child: DropdownButtonFormField<String>(
+                value: _entries,
+                dropdownColor: Colors.white,
                 style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black54,
+                  color: Colors.black87,
+                  fontSize: 13,
                 ),
-              ),
-              Row(
-                children: [
-                  _pageBtn(
-                    'Previous',
-                    enabled: _page > 1,
-                    onTap: () => setState(() => _page--),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
                   ),
-                  ..._buildPageNumberButtons(_totalPages),
-                  _pageBtn(
-                    'Next',
-                    enabled: _page < _totalPages,
-                    onTap: () => setState(() => _page++),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
                   ),
-                ],
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                ),
+                items: ["10", "25", "50", "100"]
+                    .map(
+                      (v) => DropdownMenuItem(value: v, child: Text(v)),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      _entries = v;
+                      _page = 1;
+                    });
+                  }
+                },
               ),
+            ),
+            const Text(
+              ' entries',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black87,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        );
+
+        final searchBox = SizedBox(
+          width: isNarrow ? 200 : 250,
+          height: 40,
+          child: TextField(
+            controller: _searchCtrl,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black87,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Search mappings...',
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF94A3B8),
+              ),
+              prefixIcon: const Icon(Icons.search, size: 16),
+              isDense: true,
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+            ),
+          ),
+        );
+
+        final showingText = Text(
+          'Showing ${_paged.length} of ${_filtered.length} records',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Colors.black54,
+          ),
+        );
+
+        final paginationRow = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pageBtn(
+              'Previous',
+              enabled: _page > 1,
+              onTap: () => setState(() => _page--),
+            ),
+            ..._buildPageNumberButtons(_totalPages),
+            _pageBtn(
+              'Next',
+              enabled: _page < _totalPages,
+              onTap: () => setState(() => _page++),
+            ),
+          ],
+        );
+
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              // Header Controls
+              isNarrow
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        showEntries,
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: searchBox,
+                        ),
+                      ],
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        showEntries,
+                        searchBox,
+                      ],
+                    ),
+              const SizedBox(height: 16),
+
+              Expanded(
+                child: _tableLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _buildTable(),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Footer Pagination
+              isNarrow
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        showingText,
+                        const SizedBox(height: 10),
+                        paginationRow,
+                      ],
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        showingText,
+                        paginationRow,
+                      ],
+                    ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

@@ -241,9 +241,18 @@ void _showLocationDialog() {
             _buildSmallTextField(
               'Enter Sub Location Name',
               _subLocationController, 
-              validator: (v) => (v == null || v.isEmpty)
-                  ? 'Please enter the Sub Location Name'
-                  : null,
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return 'Please enter the Sub Location Name';
+                final clean = v.trim().toLowerCase();
+                final exists = locationList.any((loc) {
+                  final sub = (loc['sublocation'] ?? loc['sub_location'] ?? '').toString().trim().toLowerCase();
+                  final id = loc['id'] ?? loc['ID'];
+                  if (editingId != null && id?.toString() == editingId?.toString()) return false;
+                  return sub == clean;
+                });
+                if (exists) return 'This sub location already exists.';
+                return null;
+              },
             ),
           ],
         ),
@@ -590,6 +599,11 @@ Widget _buildSmallTextField(String hint, TextEditingController controller, {Stri
           autovalidateMode: AutovalidateMode.onUserInteraction,
           style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
           decoration: InputDecoration(
+            errorStyle: const TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
             hintText: hint,
             hintStyle: const TextStyle(
               fontSize: 12,
@@ -641,11 +655,14 @@ Widget _buildSmallTextField(String hint, TextEditingController controller, {Stri
       ],
     );
   }
- Widget _buildListHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
+
+  Widget _buildListHeader() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+
+        final showEntries = Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
               "Show",
@@ -710,45 +727,103 @@ Widget _buildSmallTextField(String hint, TextEditingController controller, {Stri
               ),
             ),
           ],
-        ),
-        Flexible(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 250),
-            child: SizedBox(
-              height: 40,
-              child: TextField(
-                controller: _searchController,
-                onChanged: (val) => setState(() => searchQuery = val),
-                style: const TextStyle(fontSize: 12, color: Colors.black87),
-                decoration: InputDecoration(
-                  hintText: "Search Locations...",
-                  hintStyle: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  prefixIcon: const Icon(Icons.search, size: 16),
-                  isDense: true,
-                  filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                ),
+        );
+
+        final searchBox = SizedBox(
+          width: isNarrow ? 200 : 250,
+          height: 40,
+          child: TextField(
+            controller: _searchController,
+            onChanged: (val) => setState(() => searchQuery = val),
+            style: const TextStyle(fontSize: 12, color: Colors.black87),
+            decoration: InputDecoration(
+              hintText: "Search Locations...",
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF94A3B8),
+              ),
+              prefixIcon: const Icon(Icons.search, size: 16),
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
               ),
             ),
           ),
-        ),
-      ],
+        );
+
+        return isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  showEntries,
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: searchBox,
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  showEntries,
+                  searchBox,
+                ],
+              );
+      },
+    );
+  }
+
+  Widget _buildTableFooter(List<dynamic> filtered) {
+    final total = filtered.length;
+    final perPage = int.tryParse(entriesValue) ?? 10;
+    final start = (currentPage - 1) * perPage + 1;
+    final end = (start + perPage - 1 < total) ? start + perPage - 1 : total;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+
+        final showingText = Text(
+          "Showing ${total == 0 ? 0 : start} to $end of $total entries",
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Colors.black54,
+          ),
+        );
+
+        final pagination = _buildPagination(total, perPage);
+
+        return isNarrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  showingText,
+                  const SizedBox(height: 10),
+                  pagination,
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  showingText,
+                  pagination,
+                ],
+              );
+      },
     );
   }
 
@@ -820,28 +895,6 @@ Widget _buildSmallTextField(String hint, TextEditingController controller, {Stri
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildTableFooter(List<dynamic> filtered) {
-    final total = filtered.length;
-    final perPage = int.tryParse(entriesValue) ?? 10;
-    final start = (currentPage - 1) * perPage + 1;
-    final end = (start + perPage - 1 < total) ? start + perPage - 1 : total;
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          "Showing ${total == 0 ? 0 : start} to $end of $total entries",
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: Colors.black54,
-          ),
-        ),
-        _buildPagination(total, perPage),
-      ],
     );
   }
 

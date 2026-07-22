@@ -361,6 +361,7 @@ class _AddUserViewState extends State<AddUserView> {
         initPassword: initPassword,
         initRoleId: initRoleId,
         allRoles: allRoles,
+        allUsers: allUsers,
         onSubmit: _handleSubmit,
       ),
     );
@@ -933,6 +934,7 @@ class _UserFormDialog extends StatefulWidget {
   final String initPassword;
   final String? initRoleId;
   final List<dynamic> allRoles;
+  final List<dynamic> allUsers;
   final Future<void> Function({
     required int? editId,
     required String userId,
@@ -949,6 +951,7 @@ class _UserFormDialog extends StatefulWidget {
     this.initPassword = '',
     this.initRoleId,
     required this.allRoles,
+    required this.allUsers,
     required this.onSubmit,
   });
 
@@ -1129,9 +1132,18 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                             color: Color(0xFF475569),
                           ),
                           decoration: _deco('Enter User ID'),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Please enter the User ID'
-                              : null,
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Please enter the User ID';
+                            final clean = v.trim().toLowerCase();
+                            final exists = widget.allUsers.any((u) {
+                              final uid = (u['user_id'] ?? u['userId'] ?? '').toString().trim().toLowerCase();
+                              final id = u['id'] ?? u['ID'];
+                              if (widget.editId != null && id?.toString() == widget.editId?.toString()) return false;
+                              return uid == clean;
+                            });
+                            if (exists) return 'This user id already exists.';
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 16),
 
@@ -1300,6 +1312,11 @@ class _UserFormDialogState extends State<_UserFormDialog> {
   );
 
   InputDecoration _deco(String hint) => InputDecoration(
+    errorStyle: const TextStyle(
+      color: Colors.red,
+      fontWeight: FontWeight.bold,
+      fontSize: 12,
+    ),
     hintText: hint,
     counterText: '',
     hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
