@@ -477,13 +477,15 @@ class _RoleViewState extends State<RoleView>
   }
 
   void _showRoleDialog() {
+    final screenWidth = MediaQuery.of(context).size.width;
     StylishDialog.show(
       context: context,
       title: editingId == null ? "Create Roles" : "Edit Role Details",
+      titleStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
       subtitle: "Configure system permissions and access levels",
       subtitleStyle: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
       icon: editingId == null ? Icons.add_moderator : Icons.edit_note_rounded,
-      width: MediaQuery.of(context).size.width * 0.6,
+      width: screenWidth < 900 ? screenWidth * 0.9 : 800,
       builder: (context, setDialogState) {
         _dialogSetState = setDialogState;
         // Use the main set directly for perfect sync
@@ -531,101 +533,87 @@ class _RoleViewState extends State<RoleView>
         ? []
         : filtered.sublist(start, end);
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SelectionArea(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    final bodyContent = Padding(
+      padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: Colors.grey.shade200),
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                  
-                ),
-              ],
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const AnimatedHeading(
-                        text: "Roles List",
-                        style: TextStyle(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 22,
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          _resetForm();
-                          _showRoleDialog();
-                        },
-                        icon: const Icon(Icons.add_moderator, size: 20),
-                        label: const Text(
-                          "CREATE ROLES",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  _buildListHeader(),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : (allRoles.isNotEmpty && paged.isEmpty)
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.search_off_rounded,
-                                  size: 48,
-                                  color: Colors.blue.shade200,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  "No matching roles found",
-                                  style: TextStyle(
-                                    color: Colors.blue.shade900,
-                                    fontSize: 16.0,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  "Try a different search term",
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 13.0,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : _buildTableContainer(paged, filtered.length, limit),
-                  ),
-                  const SizedBox(height: 20),
-                  _buildFooter(paged.length, filtered.length, limit),
-                ],
+          padding: EdgeInsets.all(isMobile ? 10.0 : 20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 600;
+                  final heading = const AnimatedHeading(
+                    text: "Roles List",
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                    ),
+                  );
+
+                  return isNarrow
+                      ? SizedBox(
+                          width: double.infinity,
+                          child: Center(child: heading),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            heading,
+                            _buildCreateRoleButton(isNarrow),
+                          ],
+                        );
+                },
               ),
-            ),
+              const SizedBox(height: 20),
+              _buildListHeader(),
+              const SizedBox(height: 16),
+              isMobile
+                  ? SizedBox(
+                      height: 340,
+                      child: isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : _buildTableContainer(paged, filtered.length, limit),
+                    )
+                  : Expanded(
+                      child: isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : _buildTableContainer(paged, filtered.length, limit),
+                    ),
+              const SizedBox(height: 20),
+              _buildFooter(paged.length, filtered.length, limit),
+            ],
           ),
         ),
+      ),
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
+      body: SelectionArea(
+        child: isMobile
+            ? SingleChildScrollView(
+                child: bodyContent,
+              )
+            : bodyContent,
       ),
     );
   }
@@ -637,6 +625,228 @@ class _RoleViewState extends State<RoleView>
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 1200;
+
+        if (isNarrow) {
+          final Map<int, TableColumnWidth> colWidths = const {
+            0: FixedColumnWidth(50),
+            1: FlexColumnWidth(),
+            2: FixedColumnWidth(60),
+            3: FixedColumnWidth(65),
+          };
+
+          final double tableWidth = constraints.maxWidth > 300 ? constraints.maxWidth : 300;
+
+          return SizedBox(
+            width: double.infinity,
+            height: constraints.maxHeight,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: tableWidth,
+                    height: constraints.maxHeight,
+                    child: Column(
+                      children: [
+                        // Fixed Header Row — never scrolls vertically
+                        Container(
+                          height: 45,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            border: Border(
+                              bottom: BorderSide(color: Colors.grey.shade300, width: 1.0),
+                            ),
+                          ),
+                          child: Table(
+                            columnWidths: colWidths,
+                            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                            children: [
+                              TableRow(
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                    child: Text(
+                                      "#",
+                                      style: TextStyle(
+                                        color: Colors.blue,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                    child: Row(
+                                      children: [
+                                        const Text(
+                                          "Role",
+                                          style: TextStyle(
+                                            color: Colors.blue,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  _sortColumnIndex = 1;
+                                                  _sortAscending = true;
+                                                });
+                                              },
+                                              child: Align(
+                                                heightFactor: 0.5,
+                                                child: Icon(
+                                                  Icons.arrow_drop_up,
+                                                  size: 14,
+                                                  color: _sortColumnIndex == 1 && _sortAscending
+                                                      ? Colors.blue
+                                                      : const Color(0xFF94A3B8),
+                                                ),
+                                              ),
+                                            ),
+                                            GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  _sortColumnIndex = 1;
+                                                  _sortAscending = false;
+                                                });
+                                              },
+                                              child: Align(
+                                                heightFactor: 0.5,
+                                                child: Icon(
+                                                  Icons.arrow_drop_down,
+                                                  size: 14,
+                                                  color: _sortColumnIndex == 1 && !_sortAscending
+                                                      ? Colors.blue
+                                                      : const Color(0xFF94A3B8),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Center(
+                                    child: Text(
+                                      "Edit",
+                                      style: TextStyle(
+                                        color: Colors.blue,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  const Center(
+                                    child: Text(
+                                      "Action",
+                                      style: TextStyle(
+                                        color: Colors.blue,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Vertically scrollable body rows only
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: Table(
+                              columnWidths: colWidths,
+                              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                              children: paged.isEmpty
+                                  ? [
+                                      TableRow(
+                                        children: [
+                                          const SizedBox.shrink(),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 36.0),
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
+                                                const SizedBox(height: 8),
+                                                Text("No matching roles found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
+                                                const SizedBox(height: 4),
+                                                const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox.shrink(),
+                                          const SizedBox.shrink(),
+                                        ],
+                                      )
+                                    ]
+                                  : paged.asMap().entries.map((e) {
+                                final idx = currentPage * limit + e.key + 1;
+                                final role = e.value;
+                                return TableRow(
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(color: Colors.grey.shade100),
+                                    ),
+                                  ),
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+                                      child: Text("$idx", style: const TextStyle(fontSize: 13)),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+                                      child: Text(
+                                        role['role_name']?.toString() ?? "-",
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                    Center(
+                                      child: IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                                        tooltip: "Edit",
+                                        onPressed: () => loadForEdit(role),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                    ),
+                                    Center(
+                                      child: IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                        tooltip: "Delete",
+                                        onPressed: () => deleteRole(role),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
         return Container(
           width: double.infinity,
           decoration: BoxDecoration(
@@ -672,14 +882,39 @@ class _RoleViewState extends State<RoleView>
                     _buildCol('Edit'),
                     _buildCol('Action'),
                   ],
-                  rows: paged
-                      .asMap()
-                      .entries
-                      .map(
-                        (e) =>
-                            _buildRow(currentPage * limit + e.key + 1, e.value),
-                      )
-                      .toList(),
+                  rows: paged.isEmpty
+                      ? [
+                          DataRow(
+                            cells: [
+                              const DataCell(SizedBox.shrink()),
+                              DataCell(
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 20.0),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
+                                      const SizedBox(height: 6),
+                                      Text("No matching roles found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
+                                      const SizedBox(height: 4),
+                                      const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const DataCell(SizedBox.shrink()),
+                              const DataCell(SizedBox.shrink()),
+                            ],
+                          ),
+                        ]
+                      : paged
+                          .asMap()
+                          .entries
+                          .map(
+                            (e) =>
+                                _buildRow(currentPage * limit + e.key + 1, e.value),
+                          )
+                          .toList(),
                 ),
               ),
             ),
@@ -702,13 +937,16 @@ class _RoleViewState extends State<RoleView>
         final pagination = _buildPagination(totalCount, limit);
 
         return isNarrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  showingText,
-                  const SizedBox(height: 10),
-                  pagination,
-                ],
+            ? SizedBox(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    showingText,
+                    const SizedBox(height: 10),
+                    pagination,
+                  ],
+                ),
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -747,6 +985,10 @@ class _RoleViewState extends State<RoleView>
       });
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobileView = screenWidth < 900;
+    final tableHeight = isMobileView ? 320.0 : 400.0;
+
     TableRow buildPrivRow(String section, List<_Priv> privs) {
       return TableRow(
         children: [
@@ -759,28 +1001,56 @@ class _RoleViewState extends State<RoleView>
           ),
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Wrap(
-              spacing: 0,
-              runSpacing: 0,
-              children: privs
-                  .map(
-                    (p) => Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Checkbox(
-                          value: localPrivs.contains(p.id),
-                          onChanged: (v) => _toggle(p.id, v),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          activeColor: const Color(0xFF0F172A),
-                        ),
-                        Text(p.name, style: const TextStyle(fontSize: 12)),
-                        const SizedBox(width: 8),
-                      ],
-                    ),
+            child: isMobileView
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: privs
+                        .map(
+                          (p) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2.0),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Checkbox(
+                                  value: localPrivs.contains(p.id),
+                                  onChanged: (v) => _toggle(p.id, v),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  activeColor: const Color(0xFF0F172A),
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(p.name, style: const TextStyle(fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                        .toList(),
                   )
-                  .toList(),
-            ),
+                : Wrap(
+                    spacing: 0,
+                    runSpacing: 0,
+                    children: privs
+                        .map(
+                          (p) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Checkbox(
+                                value: localPrivs.contains(p.id),
+                                onChanged: (v) => _toggle(p.id, v),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                activeColor: const Color(0xFF0F172A),
+                              ),
+                              Text(p.name, style: const TextStyle(fontSize: 12)),
+                              const SizedBox(width: 8),
+                            ],
+                          ),
+                        )
+                        .toList(),
+                  ),
           ),
         ],
       );
@@ -789,9 +1059,10 @@ class _RoleViewState extends State<RoleView>
     return Form(
       key: _formKey,
       autovalidateMode: AutovalidateMode.onUserInteraction,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -911,7 +1182,7 @@ class _RoleViewState extends State<RoleView>
           const Divider(),
 
           SizedBox(
-            height: 400,
+            height: tableHeight,
             child: isFetchingDetails
                 ? const Center(
                     child: Column(
@@ -930,20 +1201,29 @@ class _RoleViewState extends State<RoleView>
                     ),
                   )
                 : SingleChildScrollView(
-                    child: Table(
-                      border: TableBorder.all(color: Colors.grey.shade200),
-                      columnWidths: const {
-                        0: FlexColumnWidth(1.2),
-                        1: FlexColumnWidth(2.5),
-                      },
-                      children: [
-                        buildPrivRow("Dashboard", [_allPrivileges[0]]),
-                        buildPrivRow("Users", [_allPrivileges[1]]),
-                        buildPrivRow("System", _allPrivileges.sublist(2, 7)),
-                        buildPrivRow("Files", [_allPrivileges[7]]),
-                        buildPrivRow("Templates", _allPrivileges.sublist(8, 11)),
-                        buildPrivRow("Scheduling", _allPrivileges.sublist(11, 16)),
-                      ],
+                    scrollDirection: Axis.vertical,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Table(
+                        border: TableBorder.all(color: Colors.grey.shade200),
+                        columnWidths: isMobileView
+                            ? const {
+                                0: FlexColumnWidth(1.6),
+                                1: FlexColumnWidth(2.4),
+                              }
+                            : const {
+                                0: FixedColumnWidth(150),
+                                1: FixedColumnWidth(350),
+                              },
+                        children: [
+                          buildPrivRow("Dashboard", [_allPrivileges[0]]),
+                          buildPrivRow("Users", [_allPrivileges[1]]),
+                          buildPrivRow("System", _allPrivileges.sublist(2, 7)),
+                          buildPrivRow("Files", [_allPrivileges[7]]),
+                          buildPrivRow("Templates", _allPrivileges.sublist(8, 11)),
+                          buildPrivRow("Scheduling", _allPrivileges.sublist(11, 16)),
+                        ],
+                      ),
                     ),
                   ),
           ),
@@ -1017,6 +1297,7 @@ class _RoleViewState extends State<RoleView>
           ),
         ],
       ),
+     ),
     );
   }
 
@@ -1120,6 +1401,29 @@ class _RoleViewState extends State<RoleView>
     );
   }
 
+  Widget _buildCreateRoleButton(bool isNarrow) {
+    return ElevatedButton.icon(
+      onPressed: () {
+        _resetForm();
+        _showRoleDialog();
+      },
+      icon: Icon(Icons.add_moderator, size: isNarrow ? 14 : 20),
+      style: isNarrow
+          ? ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: const Size(80, 32),
+            )
+          : null,
+      label: Text(
+        "CREATE ROLES",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: isNarrow ? 10 : 12,
+        ),
+      ),
+    );
+  }
+
   Widget _buildListHeader() {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1178,20 +1482,22 @@ class _RoleViewState extends State<RoleView>
                 },
               ),
             ),
-            const SizedBox(width: 6),
-            const Text(
-              " entries",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Color(0xFF334155),
+            if (!isNarrow) ...[
+              const SizedBox(width: 6),
+              const Text(
+                " entries",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Color(0xFF334155),
+                ),
               ),
-            ),
+            ],
           ],
         );
 
         final searchBox = ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 250),
+          constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
           child: SizedBox(
             height: 38,
             child: TextField(
@@ -1234,16 +1540,18 @@ class _RoleViewState extends State<RoleView>
         );
 
         return isNarrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  showEntries,
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: searchBox,
-                  ),
-                ],
+            ? SizedBox(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _buildCreateRoleButton(isNarrow),
+                    const SizedBox(height: 10),
+                    showEntries,
+                    const SizedBox(height: 10),
+                    searchBox,
+                  ],
+                ),
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

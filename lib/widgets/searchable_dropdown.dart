@@ -11,6 +11,7 @@ class SearchableDropdown<T> extends StatefulWidget {
   final double? width;
   final AutovalidateMode? autovalidateMode;
   final String? helperText;
+  final BorderRadius? borderRadius;
 
   const SearchableDropdown({
     super.key,
@@ -23,6 +24,7 @@ class SearchableDropdown<T> extends StatefulWidget {
     this.width,
     this.autovalidateMode,
     this.helperText,
+    this.borderRadius,
   });
 
   @override
@@ -165,12 +167,13 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
         autovalidateMode: widget.autovalidateMode,
         initialValue: widget.value,
         builder: (FormFieldState<T> state) {
-          return Column(
+           final r = widget.borderRadius ?? BorderRadius.circular(10);
+           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               InkWell(
                 onTap: widget.onChanged == null ? null : () => _toggleOverlay(state),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: r,
                 child: InputDecorator(
                   decoration: InputDecoration(
                     hintText: widget.hint,
@@ -178,12 +181,20 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
                     filled: true,
                     fillColor: const Color(0xFFF8FAFC),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: r,
                       borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: r,
                       borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: r,
+                      borderSide: const BorderSide(color: Colors.red, width: 1.2),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: r,
+                      borderSide: const BorderSide(color: Colors.red, width: 1.6),
                     ),
                     errorText: state.errorText,
                     helperText: widget.helperText,

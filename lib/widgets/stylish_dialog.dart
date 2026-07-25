@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 class StylishDialog extends StatelessWidget {
   final String title;
+  final TextStyle? titleStyle;
   final String subtitle;
   final TextStyle? subtitleStyle;
   final IconData icon;
@@ -12,6 +13,7 @@ class StylishDialog extends StatelessWidget {
   const StylishDialog({
     super.key,
     required this.title,
+    this.titleStyle,
     this.subtitle = '',
     this.subtitleStyle,
     required this.icon,
@@ -23,6 +25,7 @@ class StylishDialog extends StatelessWidget {
   static Future<T?> show<T>({
     required BuildContext context,
     required String title,
+    TextStyle? titleStyle,
     String subtitle = '',
     TextStyle? subtitleStyle,
     IconData icon = Icons.info_outline_rounded,
@@ -49,6 +52,7 @@ class StylishDialog extends StatelessWidget {
               builder: (context, setState) {
                 return StylishDialog(
                   title: title,
+                  titleStyle: titleStyle,
                   subtitle: subtitle,
                   subtitleStyle: subtitleStyle,
                   icon: icon,
@@ -92,7 +96,7 @@ class StylishDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            // Header with Stack to align Close Button exactly to the top-right
             Container(
               padding: EdgeInsets.symmetric(horizontal: padding, vertical: padding * 0.6),
               decoration: const BoxDecoration(
@@ -102,49 +106,60 @@ class StylishDialog extends StatelessWidget {
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: Row(
+              child: Stack(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(
-                      icon,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
-                          ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        if (subtitle.isNotEmpty)
-                          Text(
-                            subtitle,
-                            style: subtitleStyle ??
-                                const TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 12,
-                                ),
-                          ),
-                      ],
-                    ),
+                        child: Icon(
+                          icon,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: titleStyle ?? const TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            if (subtitle.isNotEmpty)
+                              Text(
+                                subtitle,
+                                style: subtitleStyle ??
+                                    const TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 12,
+                                    ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 32), // Padding for close icon
+                    ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                    onPressed: () => Navigator.pop(context),
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                   ),
                 ],
               ),

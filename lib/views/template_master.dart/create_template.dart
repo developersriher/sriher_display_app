@@ -288,6 +288,11 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
    StylishDialog.show(
   context: context,
   title: editingId == null ? "Create New Template" : "Edit Template",
+  titleStyle: const TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  ),
   subtitle: "Define the template layout",
   subtitleStyle: const TextStyle(
     fontSize: 12,
@@ -441,110 +446,169 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SelectionArea(child: Padding(
-        padding: const EdgeInsets.all(16.0),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    final heading = const AnimatedHeading(
+      text: "Templates List",
+      style: TextStyle(
+        color: Colors.blue,
+        fontWeight: FontWeight.bold,
+        fontSize: 22,
+      ),
+    );
+
+    final createBtn = ElevatedButton.icon(
+      onPressed: () {
+        setState(() {
+          editingId = null;
+          _templateNameController.clear();
+        });
+        _showTemplateDialog();
+      },
+      icon: Icon(Icons.dashboard_customize_rounded, size: isMobile ? 14 : 20),
+      style: isMobile
+          ? ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: const Size(80, 32),
+            )
+          : null,
+      label: Text(
+        "CREATE TEMPLATE",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: isMobile ? 10 : 12,
+        ),
+      ),
+    );
+
+    final bodyContent = Padding(
+      padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        padding: EdgeInsets.all(isMobile ? 10.0 : 16.0),
         child: Column(
+          mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const AnimatedHeading(
-                  text: "Templates List",
-                  style: TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      editingId = null;
-                      _templateNameController.clear();
-                    });
-                    _showTemplateDialog();
-                  },
-                  icon: const Icon(Icons.dashboard_customize_rounded, size: 20),
-                  label: const Text(
-                    "CREATE TEMPLATE",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
-              ],
+            // ── Responsive heading row ──
+            Align(
+              alignment: isMobile ? Alignment.center : Alignment.centerLeft,
+              child: heading,
             ),
             const SizedBox(height: 20),
-
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    _buildListHeader(),
-                    const SizedBox(height: 15),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade100),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: isLoading
-                            ? const Center(child: CircularProgressIndicator())
-                            : (templateList.isNotEmpty && _filteredList.isEmpty)
-                                ? Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.search_off_rounded,
-                                          size: 48,
-                                          color: Colors.blue.shade200,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Text(
-                                          "No matching templates found",
-                                          style: TextStyle(
-                                            color: Colors.blue.shade900,
-                                            fontSize: 16.0,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        const Text(
-                                          "Try a different search term",
-                                          style: TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 13.0,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : _buildDataTable(),
+            _buildListHeader(isMobile: isMobile, createBtn: createBtn),
+            const SizedBox(height: 15),
+            isMobile
+                ? SizedBox(
+                    height: 300,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade100),
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      child: isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : (templateList.isNotEmpty && _filteredList.isEmpty)
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.search_off_rounded,
+                                        size: 48,
+                                        color: Colors.blue.shade200,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        "No matching templates found",
+                                        style: TextStyle(
+                                          color: Colors.blue.shade900,
+                                          fontSize: 16.0,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        "Try a different search term",
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 13.0,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : _buildDataTable(),
                     ),
-                    const SizedBox(height: 15),
-                    _buildPaginationControls(),
-                  ],
-                ),
-              ),
-            ),
+                  )
+                : Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade100),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : (templateList.isNotEmpty && _filteredList.isEmpty)
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.search_off_rounded,
+                                        size: 48,
+                                        color: Colors.blue.shade200,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        "No matching templates found",
+                                        style: TextStyle(
+                                          color: Colors.blue.shade900,
+                                          fontSize: 16.0,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        "Try a different search term",
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 13.0,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : _buildDataTable(),
+                    ),
+                  ),
+            const SizedBox(height: 15),
+            _buildPaginationControls(isMobile: isMobile),
           ],
         ),
       ),
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
+      body: SelectionArea(
+        child: isMobile
+            ? SingleChildScrollView(
+                child: bodyContent,
+              )
+            : bodyContent,
       ),
     );
   }
@@ -672,84 +736,30 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
     );
   }
 
- Widget _buildListHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+ Widget _buildListHeader({bool isMobile = false, Widget? createBtn}) {
+    final showEntries = Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            const Text(
-              "Show ",
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(
-              width: 75,
-              height: 35,
-              child: DropdownButtonFormField<String>(
-                value: entriesValue,
-                dropdownColor: Colors.white,
-                style: const TextStyle(color: Colors.black87, fontSize: 13),
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                ),
-                items: ["10", "25", "50", "100"]
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  entriesValue = v!;
-                  currentPage = 1;
-                }),
-              ),
-            ),
-            const Text(
-              " entries",
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+        const Text(
+          "Show ",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: Color(0xFF334155),
+          ),
         ),
+        const SizedBox(width: 6),
         SizedBox(
-          width: 250,
-          height: 40,
-          child: TextField(
-            controller: _searchController,
-            style: const TextStyle(color: Colors.black87, fontSize: 12),
+          width: 75,
+          height: 35,
+          child: DropdownButtonFormField<String>(
+            value: entriesValue,
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Colors.black87, fontSize: 13),
             decoration: InputDecoration(
-              hintText: "Search templates...",
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF94A3B8),
-              ),
-              prefixIcon: const Icon(Icons.search, size: 16),
               isDense: true,
               filled: true,
               fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(4),
                 borderSide: BorderSide(color: Colors.grey.shade300),
@@ -762,46 +772,151 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
                 borderRadius: BorderRadius.circular(4),
                 borderSide: BorderSide(color: Colors.grey.shade300),
               ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 8,
+              ),
+            ),
+            items: ["10", "25", "50", "100"]
+                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                .toList(),
+            onChanged: (v) => setState(() {
+              entriesValue = v!;
+              currentPage = 1;
+            }),
+          ),
+        ),
+        if (!isMobile) ...[
+          const SizedBox(width: 6),
+          const Text(
+            " entries",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: Color(0xFF334155),
+            ),
+          ),
+        ],
+      ],
+    );
+
+    final searchBox = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: isMobile ? 180 : 250),
+      child: SizedBox(
+        height: 40,
+        child: TextField(
+          controller: _searchController,
+          style: const TextStyle(color: Colors.black87, fontSize: 12),
+          decoration: InputDecoration(
+            hintText: "Search templates...",
+            hintStyle: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF94A3B8),
+            ),
+            prefixIcon: const Icon(Icons.search, size: 16),
+            isDense: true,
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade300),
             ),
           ),
         ),
-      ],
+      ),
     );
+
+    return isMobile
+        ? SizedBox(
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (createBtn != null) createBtn,
+                const SizedBox(height: 10),
+                showEntries,
+                const SizedBox(height: 10),
+                searchBox,
+              ],
+            ),
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              showEntries,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  searchBox,
+                  if (createBtn != null) ...[
+                    const SizedBox(width: 12),
+                    createBtn,
+                  ],
+                ],
+              ),
+            ],
+          );
   }
 
-  Widget _buildPaginationControls() {
+  Widget _buildPaginationControls({bool isMobile = false}) {
     int total = _filteredList.length;
     int totalPages = (total / int.parse(entriesValue)).ceil();
     if (totalPages == 0) totalPages = 1;
+    final int limit = int.parse(entriesValue);
+    final int start = (currentPage - 1) * limit + 1;
+    final int end = (start + _pagedList.length - 1).clamp(0, total);
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final showingText = Text(
+      "Showing ${total == 0 ? 0 : start} to $end of $total entries",
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.bold,
+        color: Colors.black54,
+      ),
+    );
+
+    final pagination = Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          "Showing ${_pagedList.length} of $total records",
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: Colors.black54,
-          ),
+        _buildPageBtn(
+          "Previous",
+          enabled: currentPage > 1,
+          onTap: () => setState(() => currentPage--),
         ),
-        Row(
-          children: [
-            _buildPageBtn(
-              "Previous",
-              enabled: currentPage > 1,
-              onTap: () => setState(() => currentPage--),
-            ),
-            ..._buildPageNumberButtons(totalPages),
-            _buildPageBtn(
-              "Next",
-              enabled: currentPage < totalPages,
-              onTap: () => setState(() => currentPage++),
-            ),
-          ],
+        ..._buildPageNumberButtons(totalPages),
+        _buildPageBtn(
+          "Next",
+          enabled: currentPage < totalPages,
+          onTap: () => setState(() => currentPage++),
         ),
       ],
     );
+
+    return isMobile
+        ? SizedBox(
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                showingText,
+                const SizedBox(height: 10),
+                pagination,
+              ],
+            ),
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [showingText, pagination],
+          );
   }
 
   /// Builds a strict sliding window of at most 3 page-number buttons.

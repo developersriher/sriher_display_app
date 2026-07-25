@@ -274,6 +274,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     2,
                     isDrawer: isDrawer,
                   ),
+                  const SizedBox(height: 12),
+                  _buildSectionHeader('TEMPLATE'),
                   _buildSidebarItem(
                     Icons.dashboard_customize_rounded,
                     'Create Template',
@@ -292,6 +294,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     5,
                     isDrawer: isDrawer,
                   ),
+                  const SizedBox(height: 12),
+                  _buildSectionHeader('SCHEDULES'),
                   _buildSidebarItem(
                     Icons.calendar_month_rounded,
                     'Schedule Allocate',
@@ -395,12 +399,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
       child: Text(
         title,
         style: TextStyle(
-          color: Colors.white.withOpacity(0.3),
-          fontSize: 10,
+          color: Colors.white.withOpacity(0.65),
+          fontSize: 11,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.5,
         ),

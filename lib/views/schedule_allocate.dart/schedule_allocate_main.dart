@@ -474,23 +474,23 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   ? SingleChildScrollView(
                       child: Column(
                         children: [
-                          _buildLeftColumn(),
+                          _buildLeftColumn(isMobile: true),
                           const SizedBox(height: 20),
                           const Divider(),
                           const SizedBox(height: 20),
-                          if (isSelectionComplete) _buildRightColumn(),
+                          if (isSelectionComplete) _buildRightColumn(isMobile: true),
                         ],
                       ),
                     )
                   : Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(flex: 7, child: _buildLeftColumn()),
+                        Expanded(flex: 7, child: _buildLeftColumn(isMobile: false)),
                         const SizedBox(width: 32),
                         Expanded(
                           flex: 5,
                           child: isSelectionComplete
-                              ? _buildRightColumn()
+                              ? _buildRightColumn(isMobile: false)
                               : Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -521,7 +521,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     );
   }
 
-  Widget _buildLeftColumn() {
+  Widget _buildLeftColumn({bool isMobile = false}) {
     DateTime? selectedFromDate;
     if (_fromDateController.text.isNotEmpty) {
       try {
@@ -530,9 +530,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     }
     DateTime toDateLimitFirstDate = selectedFromDate ?? DateTime(2000);
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: Column(
+    final columnContent = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (widget.editData != null) ...[
@@ -565,8 +563,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             ),
             const SizedBox(height: 16),
           ],
-          _buildSectionTitle(widget.isExtend ? "Extend Schedule" : "Schedule"),
-          const SizedBox(height: 20),
+
           Container(
             padding: const EdgeInsets.all(24.0),
             decoration: BoxDecoration(
@@ -587,6 +584,19 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Align(
+                      alignment: Alignment.center,
+                      child: Text(
+                        (widget.isExtend ? "EXTEND SCHEDULE" : "SCHEDULE"),
+                        style: const TextStyle(
+                          fontSize: 14.0,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.blue,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                     isNarrowBox
                         ? Column(
                             children: [
@@ -941,192 +951,209 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             ),
           ],
         ],
-      ),
+      );
+    if (isMobile) return columnContent;
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: columnContent,
     );
   }
 
-  Widget _buildRightColumn() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildSectionTitle("Template Duration"),
-        const SizedBox(height: 20),
-        Expanded(
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _buildListHeader(),
-                const Divider(height: 1),
-                const SizedBox(height: 16),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (isLoadingFiles) {
-                      return const SizedBox(
-                        height: 300,
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-
-                    if (templateFiles.isEmpty) {
-                      return const SizedBox(
-                        height: 200,
-                        child: Center(
-                          child: Text(
-                            "No files found for this template",
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 16.0,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-
-                    if (_filteredTemplateFiles.isEmpty) {
-                      return const SizedBox(
-                        height: 200,
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.search_off_rounded,
-                                size: 40,
-                                color: Colors.grey,
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                "No matching files found",
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 16.0,
-                                  fontWeight: FontWeight.bold,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    return SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minWidth: constraints.maxWidth,
-                        ),
-                        child: DataTable(
-                          columnSpacing: 25,
-                          horizontalMargin: 20,
-                          dataRowMinHeight: 70,
-                          dataRowMaxHeight: 85,
-                          headingRowHeight: 45,
-                          headingRowColor: WidgetStateProperty.all(
-                            Colors.blue.shade50,
-                          ),
-                          columns: [
-                            _buildSortableColumn('Play order'),
-                            _buildSortableColumn('File'),
-                            _buildSortableColumn('File Name'),
-                            _buildSortableColumn('Duration'),
-                          ],
-                          rows: _pagedTemplateFiles.map((file) {
-                            final index =
-                                _filteredTemplateFiles.indexOf(file) + 1;
-                            return DataRow(
-                              cells: [
-                                DataCell(
-                                  Text(
-                                    index.toString(),
-                                    style: const TextStyle(
-                                      fontSize: 12.0,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 8.0,
-                                    ),
-                                    child: Container(
-                                      width: 50,
-                                      height: 65,
-                                      clipBehavior: Clip.antiAlias,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color: Colors.grey.shade300,
-                                        ),
-                                      ),
-                                      child: _buildFilePreview(file),
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    file['user_filename'] ??
-                                        file['file_name'] ??
-                                        '-',
-                                    style: const TextStyle(
-                                      fontSize: 12.0,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      "${file['duration'] ?? '30'}s",
-                                      style: TextStyle(
-                                        fontSize: 12.0,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.blue.shade900,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                _buildPagination(),
-              ],
+  Widget _buildRightColumn({bool isMobile = false}) {
+    final container = Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        physics: isMobile ? const NeverScrollableScrollPhysics() : null,
+        padding: EdgeInsets.zero,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            alignment: Alignment.center,
+            child: const Text(
+              "TEMPLATE DURATION",
+              style: TextStyle(
+                fontSize: 14.0,
+                fontWeight: FontWeight.w900,
+                color: Colors.blue,
+                letterSpacing: 1.5,
+              ),
             ),
           ),
-        ),
-      ],
+           
+          _buildListHeader(),
+         
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (isLoadingFiles) {
+                return const SizedBox(
+                  height: 300,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              if (templateFiles.isEmpty) {
+                return const SizedBox(
+                  height: 200,
+                  child: Center(
+                    child: Text(
+                      "No files found for this template",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 16.0,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              if (_filteredTemplateFiles.isEmpty) {
+                return const SizedBox(
+                  height: 200,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: 40,
+                          color: Colors.grey,
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          "No matching files found",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.bold,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: constraints.maxWidth,
+                  ),
+                  child: DataTable(
+                    columnSpacing: 25,
+                    horizontalMargin: 20,
+                    dataRowMinHeight: 70,
+                    dataRowMaxHeight: 85,
+                    headingRowHeight: 45,
+                    headingRowColor: WidgetStateProperty.all(
+                      Colors.blue.shade50,
+                    ),
+                    columns: [
+                      _buildSortableColumn('Play order'),
+                      _buildSortableColumn('File'),
+                      _buildSortableColumn('File Name'),
+                      _buildSortableColumn('Duration'),
+                    ],
+                    rows: _pagedTemplateFiles.map((file) {
+                      final index =
+                          _filteredTemplateFiles.indexOf(file) + 1;
+                      return DataRow(
+                        cells: [
+                          DataCell(
+                            Text(
+                              index.toString(),
+                              style: const TextStyle(
+                                fontSize: 12.0,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 8.0,
+                              ),
+                              child: Container(
+                                width: 50,
+                                height: 65,
+                                clipBehavior: Clip.antiAlias,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                ),
+                                child: _buildFilePreview(file),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              file['user_filename'] ??
+                                  file['file_name'] ??
+                                  '-',
+                              style: const TextStyle(
+                                fontSize: 12.0,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                "${file['duration'] ?? '30'}s",
+                                style: TextStyle(
+                                  fontSize: 12.0,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade900,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          _buildPagination(),
+        ],
+      ),
     );
+
+    if (isMobile) {
+      return container;
+    }
+
+    return Expanded(child: container);
   }
 
   // UI Helpers
@@ -1369,6 +1396,49 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 600;
+
+        final dropdownButton = SizedBox(
+          width: 75,
+          height: 35,
+          child: DropdownButtonFormField<String>(
+            value: entriesValue,
+            dropdownColor: Colors.white,
+            style: const TextStyle(
+              color: Color(0xFF1E293B),
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 8,
+              ),
+            ),
+            items: ["10", "25", "50", "100"]
+                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                .toList(),
+            onChanged: (v) => setState(() {
+              entriesValue = v!;
+              currentFilePage = 1;
+            }),
+          ),
+        );
+
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1381,61 +1451,23 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               ),
             ),
             const SizedBox(width: 8),
-            SizedBox(
-              width: 75,
-              height: 35,
-              child: DropdownButtonFormField<String>(
-                value: entriesValue,
-                dropdownColor: Colors.white,
-                style: const TextStyle(
-                  color: Color(0xFF1E293B),
-                  fontSize: 13,
+            dropdownButton,
+            if (!isNarrow) ...[
+              const SizedBox(width: 8),
+              const Text(
+                "entries",
+                style: TextStyle(
                   fontWeight: FontWeight.bold,
+                  fontSize: 13.0,
+                  color: Color(0xFF1E293B),
                 ),
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                ),
-                items: ["10", "25", "50", "100"]
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  entriesValue = v!;
-                  currentFilePage = 1;
-                }),
               ),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              "entries",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13.0,
-                color: Color(0xFF1E293B),
-              ),
-            ),
+            ],
           ],
         );
 
         final searchBox = SizedBox(
-          width: isNarrow ? constraints.maxWidth : constraints.maxWidth * 0.45,
+          width: isNarrow ? constraints.maxWidth * 0.5 : constraints.maxWidth * 0.45,
           height: 38,
           child: TextField(
             controller: _searchController,
@@ -1470,28 +1502,35 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           ),
         );
 
-        return isNarrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  showEntries,
-                  const SizedBox(height: 12),
-                  searchBox,
-                ],
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  showEntries,
-                  Expanded(
-                    child: Align(
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: isNarrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: showEntries,
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
                       alignment: Alignment.centerRight,
                       child: searchBox,
                     ),
-                  ),
-                ],
-              );
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    showEntries,
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: searchBox,
+                    ),
+                  ],
+                ),
+        );
       },
     );
   }
@@ -1608,36 +1647,33 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     required VoidCallback onTap,
     bool isActive = false,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.zero,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: label.length > 2 ? 12 : 8,
-            vertical: 8,
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
+        ),
+        constraints: const BoxConstraints(minWidth: 34),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.blue
+              : (enabled ? Colors.white : Colors.grey.shade50),
+          border: Border.all(
+            color: isActive ? Colors.blue : Colors.grey.shade300,
           ),
-          constraints: const BoxConstraints(minWidth: 34),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
             color: isActive
-                ? Colors.blue
-                : (enabled ? Colors.white : Colors.grey.shade50),
-            border: Border.all(
-              color: isActive ? Colors.blue : Colors.grey.shade300,
-            ),
-            borderRadius: BorderRadius.zero,
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isActive
-                  ? Colors.white
-                  : (enabled ? Colors.black87 : Colors.black26),
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
+                ? Colors.white
+                : (enabled ? Colors.black87 : Colors.black26),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
@@ -1660,35 +1696,49 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       days.add(start.add(Duration(days: i)));
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildSectionTitle("Slot Selection"),
-        const SizedBox(height: 15),
-        Container(
-          height: 400,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+    return Container(
+      height: 450,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: ListView.separated(
-              itemCount: days.length,
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) => _buildDaySection(days[index]),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            alignment: Alignment.center,
+            child: const Text(
+              "SLOT SELECTION",
+              style: TextStyle(
+                fontSize: 14.0,
+                fontWeight: FontWeight.w900,
+                color: Colors.blue,
+                letterSpacing: 1.5,
+              ),
             ),
           ),
-        ),
-      ],
+          const Divider(height: 1),
+          Expanded(
+            child: ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(12)),
+              child: ListView.separated(
+                itemCount: days.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) => _buildDaySection(days[index]),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1717,55 +1767,70 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             ],
           ),
         ),
+        
         Padding(
           padding: const EdgeInsets.all(16),
-          child: GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 2.5,
-            ),
-            itemCount: slotPairs.length,
-            itemBuilder: (context, index) {
-              String slot = slotPairs[index];
-              List<String> daySlots = selectedSlotsByDay[key] ?? [];
-              bool isSelected = daySlots.contains(slot);
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 600;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: isNarrow ? 2.0 : 2.2,
+                ),
+                itemCount: slotPairs.length,
+                itemBuilder: (context, index) {
+                  String slot = slotPairs[index];
+                  List<String> daySlots = selectedSlotsByDay[key] ?? [];
+                  bool isSelected = daySlots.contains(slot);
 
-              return InkWell(
-                onTap: () {
-                  setState(() {
-                    selectedSlotsByDay.putIfAbsent(key, () => []);
-                    if (isSelected) {
-                      selectedSlotsByDay[key]!.remove(slot);
-                    } else {
-                      selectedSlotsByDay[key]!.add(slot);
-                    }
-                  });
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isSelected ? Colors.blue : Colors.white,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: isSelected ? Colors.blue : Colors.grey.shade300,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      slot,
-                      style: TextStyle(
-                        fontSize: 10.0,
-                        fontWeight: isSelected
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                        color: isSelected ? Colors.white : Colors.black87,
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        selectedSlotsByDay.putIfAbsent(key, () => []);
+                        if (isSelected) {
+                          selectedSlotsByDay[key]!.remove(slot);
+                        } else {
+                          selectedSlotsByDay[key]!.add(slot);
+                        }
+                      });
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.blue : Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isSelected ? Colors.blue : Colors.grey.shade300,
+                        ),
+                      ),
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              slot,
+                              style: TextStyle(
+                                fontSize: isNarrow ? 12.0 : 11.0,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: isSelected ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               );
             },
           ),

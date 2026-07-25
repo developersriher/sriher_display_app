@@ -372,17 +372,21 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isTablet = screenWidth < 900 && screenWidth >= 600;
+    final isNarrow = isMobile || isTablet;
+
     return SelectionArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(isNarrow ? 16.0 : 24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── COPY SECTION ──────────────────────────────────────────────────
-            const AnimatedHeading(text: "Copy Schedule - Devices"),
-            const SizedBox(height: 24),
+            if (!isNarrow) const AnimatedHeading(text: "Copy Schedule - Devices"),
+            if (!isNarrow) const SizedBox(height: 24),
             Container(
-              padding: const EdgeInsets.all(32),
+              padding: EdgeInsets.all(isNarrow ? 16 : 32),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -398,6 +402,19 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Card title for mobile/tablet
+                  if (isNarrow) ...[
+                    Text(
+                      "Copy Schedule Devices",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Colors.blue.shade900,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   // ── Row: Source | Target | Copy button ──────────────────────
                   isLoadingDevices
                       ? const Center(
@@ -406,86 +423,173 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                             child: CircularProgressIndicator(),
                           ),
                         )
-                      : Row(
-                          // 1. Align all items to the center vertically
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            // Source device dropdown
-                            Expanded(
-                              child: _buildDropdown(
-                                hintText: "Choose source device…",
-                                value: selectedSourceDeviceId,
-                                items: deviceList,
-                                onChanged: (val) {
-                                  if (val == null) return;
-                                  setState(() {
-                                    selectedSourceDeviceId = val;
-                                    hasConflict = null;
-                                    conflictMessage = null;
-                                  });
-                                  _fetchDeviceSchedules(val);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 24),
-                            // Target device dropdown
-                            Expanded(
-                              child: _buildDropdown(
-                                hintText: selectedSourceDeviceId == null
-                                    ? "Select source device first…"
-                                    : "Choose assign device…",
-                                value: selectedTargetDeviceId,
-                                items: assignDeviceList,
-                                onChanged: selectedSourceDeviceId == null
-                                    ? null
-                                    : (val) {
-                                        setState(() {
-                                          selectedTargetDeviceId = val;
-                                          hasConflict = null;
-                                          conflictMessage = null;
-                                        });
-                                        if (val != null) _checkConflicts();
-                                      },
-                              ),
-                            ),
-                            const SizedBox(width: 24),
-                            // 2. Removed the Padding(top: 30) wrapper
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0F172A),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 40,
-                                  vertical:
-                                      20, // Match the height to your dropdown
+                      : isNarrow
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  "Choose Device",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Colors.grey.shade700,
+                                  ),
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                const SizedBox(height: 8),
+                                _buildDropdown(
+                                  hintText: "Choose source device…",
+                                  value: selectedSourceDeviceId,
+                                  items: deviceList,
+                                  onChanged: (val) {
+                                    if (val == null) return;
+                                    setState(() {
+                                      selectedSourceDeviceId = val;
+                                      hasConflict = null;
+                                      conflictMessage = null;
+                                    });
+                                    _fetchDeviceSchedules(val);
+                                  },
                                 ),
-                                elevation: 0,
-                              ),
-                              onPressed:
-                                  (isSubmittingCopy || isCheckingConflicts)
-                                  ? null
-                                  : _copySchedule,
-                              child: isSubmittingCopy
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
+                                const SizedBox(height: 16),
+                                Text(
+                                  "Selected Device",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildDropdown(
+                                  hintText: selectedSourceDeviceId == null
+                                      ? "Select source device first…"
+                                      : "Choose assign device…",
+                                  value: selectedTargetDeviceId,
+                                  items: assignDeviceList,
+                                  onChanged: selectedSourceDeviceId == null
+                                      ? null
+                                      : (val) {
+                                          setState(() {
+                                            selectedTargetDeviceId = val;
+                                            hasConflict = null;
+                                            conflictMessage = null;
+                                          });
+                                          if (val != null) _checkConflicts();
+                                        },
+                                ),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF0F172A),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 10,
                                       ),
-                                    )
-                                  : const Text(
-                                      "COPY SCHEDULE",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
+                                      elevation: 0,
                                     ),
+                                    onPressed: (isSubmittingCopy || isCheckingConflicts)
+                                        ? null
+                                        : _copySchedule,
+                                    child: isSubmittingCopy
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Text(
+                                            "COPY SCHEDULE",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: _buildDropdown(
+                                    hintText: "Choose source device…",
+                                    value: selectedSourceDeviceId,
+                                    items: deviceList,
+                                    onChanged: (val) {
+                                      if (val == null) return;
+                                      setState(() {
+                                        selectedSourceDeviceId = val;
+                                        hasConflict = null;
+                                        conflictMessage = null;
+                                      });
+                                      _fetchDeviceSchedules(val);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 24),
+                                Expanded(
+                                  child: _buildDropdown(
+                                    hintText: selectedSourceDeviceId == null
+                                        ? "Select source device first…"
+                                        : "Choose assign device…",
+                                    value: selectedTargetDeviceId,
+                                    items: assignDeviceList,
+                                    onChanged: selectedSourceDeviceId == null
+                                        ? null
+                                        : (val) {
+                                            setState(() {
+                                              selectedTargetDeviceId = val;
+                                              hasConflict = null;
+                                              conflictMessage = null;
+                                            });
+                                            if (val != null) _checkConflicts();
+                                          },
+                                  ),
+                                ),
+                                const SizedBox(width: 24),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0F172A),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 40,
+                                      vertical: 20,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  onPressed: (isSubmittingCopy || isCheckingConflicts)
+                                      ? null
+                                      : _copySchedule,
+                                  child: isSubmittingCopy
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Text(
+                                          "COPY SCHEDULE",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
 
                   // ── Conflict banner ──────────────────────────────────────────
                   if (isCheckingConflicts)
@@ -634,14 +738,7 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                             color: Colors.orange.shade700,
                             size: 18,
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            "No schedules found on the selected source device.",
-                            style: TextStyle(
-                              color: Colors.orange.shade900,
-                              fontSize: 13,
-                            ),
-                          ),
+                          
                         ],
                       ),
                     ),
@@ -650,13 +747,13 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
               ),
             ),
 
-            const SizedBox(height: 48),
+            SizedBox(height: isNarrow ? 24 : 48),
 
             // ── WIPE OFF SECTION ──────────────────────────────────────────────
-            const AnimatedHeading(text: "Wipe Off Devices"),
-            const SizedBox(height: 24),
+            if (!isNarrow) const AnimatedHeading(text: "Wipe Off Devices"),
+            if (!isNarrow) const SizedBox(height: 24),
             Container(
-              padding: const EdgeInsets.all(32),
+              padding: EdgeInsets.all(isNarrow ? 16 : 32),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -671,52 +768,108 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
               ),
               child: isLoadingDevices
                   ? const Center(child: CircularProgressIndicator())
-                  : Row(
-                      // 1. CHANGE THIS TO CENTER
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: _buildDropdown(
-                            hintText: "Choose device to wipe…",
-                            value: selectedWipeDeviceId,
-                            items: deviceList,
-                            onChanged: (val) =>
-                                setState(() => selectedWipeDeviceId = val),
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        // 2. REMOVED THE PADDING(TOP: 30) WRAPPER
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red.shade600,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 40,
-                              vertical: 20,
+                  : isNarrow
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              "Choose Copy Wipe",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: Colors.red.shade900,
+                                letterSpacing: 0.5,
+                              ),
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                            const SizedBox(height: 16),
+                            _buildDropdown(
+                              hintText: "Choose device to wipe…",
+                              value: selectedWipeDeviceId,
+                              items: deviceList,
+                              onChanged: (val) =>
+                                  setState(() => selectedWipeDeviceId = val),
                             ),
-                            elevation: 0,
-                          ),
-                          onPressed: isSubmittingWipe ? null : _wipeOff,
-                          child: isSubmittingWipe
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red.shade600,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 10,
                                   ),
-                                )
-                              : const Text(
-                                  "WIPE OFF DEVICE",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  elevation: 0,
                                 ),
+                                onPressed: isSubmittingWipe ? null : _wipeOff,
+                                child: isSubmittingWipe
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text(
+                                        "WIPE OFF DEVICE",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: _buildDropdown(
+                                hintText: "Choose device to wipe…",
+                                value: selectedWipeDeviceId,
+                                items: deviceList,
+                                onChanged: (val) =>
+                                    setState(() => selectedWipeDeviceId = val),
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 40,
+                                  vertical: 20,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 0,
+                              ),
+                              onPressed: isSubmittingWipe ? null : _wipeOff,
+                              child: isSubmittingWipe
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text(
+                                      "WIPE OFF DEVICE",
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                            ),
+                            const Spacer(),
+                          ],
                         ),
-                        const Spacer(),
-                      ],
-                    ),
             ),
           ],
         ),

@@ -181,137 +181,167 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
 
   @override
   Widget build(BuildContext context) {
-    return SelectionArea(child: Padding(
-      padding: const EdgeInsets.only(
-        left: 24.0,
-        right: 24.0,
-        bottom: 24.0,
-        top: 20.0,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const AnimatedHeading(text: "Assign Schedule for Device"),
-          const SizedBox(height: 20),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: _buildDropdown(
-                            label: "Device Name",
-                            hint: "Select Device",
-                            value: selectedDeviceId,
-                            items: deviceList,
-                            onChanged: (val) {
-                              setState(() {
-                                selectedDeviceId = val;
-                                selectedScheduleId = null;
-                                scheduleList = [];
-                                assignedList = [];
-                              });
-                              if (val != null) {
-                                _fetchSchedules(val);
-                                _fetchAssignedSchedules(val);
-                                _controller.forward(from: 0.0);
-                              } else {
-                                _fetchSchedules(null);
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          child: _buildDropdown(
-                            label: "Schedule Name",
-                            hint: "Select Schedule",
-                            value: selectedScheduleId,
-                            items: scheduleList,
-                            onChanged: (val) {
-                              setState(() => selectedScheduleId = val);
-                              if (val != null) {
-                                _controller.forward(from: 0.0);
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6.0),
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue.shade600,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 40,
-                                vertical: 18,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              elevation: 3,
-                              disabledBackgroundColor: Colors.grey.shade200,
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 950;
+
+    return SelectionArea(
+      child: Padding(
+        padding: const EdgeInsets.only(
+          left: 24.0,
+          right: 24.0,
+          bottom: 24.0,
+          top: 20.0,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: Container(
+                  padding: EdgeInsets.all(isMobile ? 16 : 32),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const AnimatedHeading(text: "Assign Schedule for Device"),
+                      const SizedBox(height: 32),
+                      _buildDropdown(
+                        label: "Device Name",
+                        hint: "Select Device",
+                        value: selectedDeviceId,
+                        items: deviceList,
+                        onChanged: (val) {
+                          setState(() {
+                            selectedDeviceId = val;
+                            selectedScheduleId = null;
+                            scheduleList = [];
+                            assignedList = [];
+                          });
+                          if (val != null) {
+                            _fetchSchedules(val);
+                            _fetchAssignedSchedules(val);
+                            _controller.forward(from: 0.0);
+                          } else {
+                            _fetchSchedules(null);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      _buildDropdown(
+                        label: "Schedule Name",
+                        hint: "Select Schedule",
+                        value: selectedScheduleId,
+                        items: scheduleList,
+                        onChanged: (val) {
+                          setState(() => selectedScheduleId = val);
+                          if (val != null) {
+                            _controller.forward(from: 0.0);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      Center(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 40,
+                              vertical: 18,
                             ),
-                            onPressed:
-                                (selectedDeviceId != null &&
-                                    selectedScheduleId != null)
-                                ? _handleAssignmentSubmit
-                                : null,
-                            child: const Text(
-                              "SUBMIT",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
-                              ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
+                            elevation: 3,
+                            disabledBackgroundColor: Colors.grey.shade200,
                           ),
-                        ),
-                      ],
-                    ),
-                    if (selectedDeviceId != null)
-                      FadeTransition(
-                        opacity: _opacityAnimation,
-                        child: SlideTransition(
-                          position: _slideAnimation,
-                          child: Column(
-                            key: ValueKey('calendar_col_$selectedDeviceId'),
-                            children: [
-                              const SizedBox(height: 24),
-                              const Divider(height: 1),
-                              const SizedBox(height: 24),
-                              _buildCagedCalendar(),
-                            ],
+                          onPressed:
+                              (selectedDeviceId != null &&
+                                  selectedScheduleId != null)
+                              ? _handleAssignmentSubmit
+                              : null,
+                          
+                          label: const Text(
+                            "SUBMIT",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
                           ),
                         ),
                       ),
-                  ],
+                      if (selectedDeviceId != null)
+                        FadeTransition(
+                          opacity: _opacityAnimation,
+                          child: SlideTransition(
+                            position: _slideAnimation,
+                            child: Column(
+                              key: ValueKey('calendar_col_$selectedDeviceId'),
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const SizedBox(height: 24),
+                                const Divider(height: 1),
+                                const SizedBox(height: 24),
+                                _buildCagedCalendar(isMobile: isMobile),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ));
+    );
   }
 
-  Widget _buildCagedCalendar() {
+  Widget _buildCagedCalendar({bool isMobile = false}) {
+    if (isMobile) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.01),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: _buildSmallCalendar(),
+            ),
+            Container(height: 1, color: Colors.grey.shade100),
+            Container(
+              padding: const EdgeInsets.all(16.0),
+              color: Colors.blue.withOpacity(0.01),
+              child: _buildScheduleSideBox(),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,

@@ -304,6 +304,11 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       title: _editingId == null
           ? "Create Default Template"
           : "Edit Default Template",
+      titleStyle: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
       subtitle: "Assign a default template to a device type",
       subtitleStyle: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
       maxWidth: 480,
@@ -551,61 +556,91 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SelectionArea(child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const AnimatedHeading(
-                  text: "Default Templates",
-                  style: TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _showDefaultTemplateDialog,
-                  icon: const Icon(Icons.settings_applications, size: 20),
-                  label: const Text(
-                    "CREATE DEFAULT TEMPLATE",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
 
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                padding: const EdgeInsets.all(16.0),
-                child: _buildRightListContent(),
-              ),
+    final heading = const AnimatedHeading(
+      text: "Default Templates",
+      style: TextStyle(
+        color: Colors.blue,
+        fontWeight: FontWeight.bold,
+        fontSize: 22,
+      ),
+    );
+
+    final createBtn = ElevatedButton.icon(
+      onPressed: _showDefaultTemplateDialog,
+      icon: Icon(Icons.settings_applications, size: isMobile ? 14 : 20),
+      style: isMobile
+          ? ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: const Size(80, 32),
+            )
+          : null,
+      label: Text(
+        "CREATE DEFAULT TEMPLATE",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: isMobile ? 10 : 12,
+        ),
+      ),
+    );
+
+    final bodyContent = Padding(
+      padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
+          ],
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        padding: EdgeInsets.all(isMobile ? 10.0 : 16.0),
+        child: Column(
+          mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
+          children: [
+            // ── Responsive heading row ──
+            Align(
+              alignment: isMobile ? Alignment.center : Alignment.centerLeft,
+              child: heading,
+            ),
+            const SizedBox(height: 16),
+            isMobile
+                ? _buildRightListContent(
+                    isMobile: isMobile,
+                    createBtn: createBtn,
+                  )
+                : Expanded(
+                    child: _buildRightListContent(
+                      isMobile: isMobile,
+                      createBtn: createBtn,
+                    ),
+                  ),
           ],
         ),
       ),
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
+      body: SelectionArea(
+        child: isMobile
+            ? SingleChildScrollView(
+                child: bodyContent,
+              )
+            : bodyContent,
       ),
     );
   }
 
-  Widget _buildRightListContent() {
+  Widget _buildRightListContent({bool isMobile = false, Widget? createBtn}) {
     if (_isLoading && _templateList.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.blue),
@@ -620,186 +655,220 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     filtered.sort((a, b) {
       String aVal = "";
       String bVal = "";
-      
+
       switch (_sortColumnIndex) {
         case 0:
           final devIdA = a['device_id']?.toString() ?? a['id']?.toString();
           String? nameA;
           if (devIdA != null) {
-             final dev = _deviceDropdownList.firstWhere(
-                 (d) => d['id'].toString() == devIdA || d['device_id']?.toString() == devIdA,
-                 orElse: () => null,
-             );
-             if (dev != null) nameA = dev['device_name'] ?? dev['device_code'];
+            final dev = _deviceDropdownList.firstWhere(
+              (d) =>
+                  d['id'].toString() == devIdA ||
+                  d['device_id']?.toString() == devIdA,
+              orElse: () => null,
+            );
+            if (dev != null) nameA = dev['device_name'] ?? dev['device_code'];
           }
-          nameA ??= a['device_name'] ?? a['Device_name'] ?? a['device_code'] ?? "";
-          aVal = nameA.toString();
-          
+          aVal = (nameA ??
+                  a['device_name'] ??
+                  a['Device_name'] ??
+                  a['device_code'] ??
+                  "")
+              .toString()
+              .toLowerCase();
+
           final devIdB = b['device_id']?.toString() ?? b['id']?.toString();
           String? nameB;
           if (devIdB != null) {
-             final dev = _deviceDropdownList.firstWhere(
-                 (d) => d['id'].toString() == devIdB || d['device_id']?.toString() == devIdB,
-                 orElse: () => null,
-             );
-             if (dev != null) nameB = dev['device_name'] ?? dev['device_code'];
+            final dev = _deviceDropdownList.firstWhere(
+              (d) =>
+                  d['id'].toString() == devIdB ||
+                  d['device_id']?.toString() == devIdB,
+              orElse: () => null,
+            );
+            if (dev != null) nameB = dev['device_name'] ?? dev['device_code'];
           }
-          nameB ??= b['device_name'] ?? b['Device_name'] ?? b['device_code'] ?? "";
-          bVal = nameB.toString();
+          bVal = (nameB ??
+                  b['device_name'] ??
+                  b['Device_name'] ??
+                  b['device_code'] ??
+                  "")
+              .toString()
+              .toLowerCase();
           break;
+
         case 1:
-          aVal = a['temp_name']?.toString() ?? "";
-          bVal = b['temp_name']?.toString() ?? "";
-          break;
-        default:
-          aVal = a['id']?.toString() ?? "";
-          bVal = b['id']?.toString() ?? "";
+          aVal = (a['temp_name'] ?? "").toString().toLowerCase();
+          bVal = (b['temp_name'] ?? "").toString().toLowerCase();
           break;
       }
-      
-      if (_sortColumnIndex == -1) {
-        int idA = int.tryParse(aVal) ?? 0;
-        int idB = int.tryParse(bVal) ?? 0;
-        return _sortAscending ? idA.compareTo(idB) : idB.compareTo(idA);
-      }
-      
-      return _sortAscending
-          ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
-          : bVal.toLowerCase().compareTo(aVal.toLowerCase());
+
+      return _sortAscending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
     });
 
     final int perPage = int.tryParse(_entriesValue) ?? 10;
     final int startIdx = (_currentPage - 1) * perPage;
     final paginated = filtered.skip(startIdx).take(perPage).toList();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildTableControls(),
-        const SizedBox(height: 15),
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade200),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: (_templateList.isNotEmpty && filtered.isEmpty)
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off_rounded,
-                          size: 48,
-                          color: Colors.blue.shade200,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          "No matching devices found",
-                          style: TextStyle(
-                            color: Colors.blue.shade900,
-                            fontSize: 16.0,
-                            fontWeight: FontWeight.bold,
+    final dataTableWidget = LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.vertical,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: constraints.maxWidth,
+              ),
+              child: DataTable(
+                headingRowHeight: 45,
+                headingRowColor: WidgetStateProperty.all(
+                  Colors.blue.shade50,
+                ),
+                border: TableBorder.all(
+                  color: Colors.grey.shade100,
+                ),
+                columns: [
+                  _buildTableCol('Device Name', 0),
+                  _buildTableCol('Template Name', 1),
+                  _buildTableCol('Edit', -1),
+                ],
+                rows: paginated.map((item) {
+                  final devId =
+                      item['device_id']?.toString() ?? item['id']?.toString();
+                  String? resolvedName;
+
+                  if (devId != null) {
+                    final dev = _deviceDropdownList.firstWhere(
+                      (d) =>
+                          d['id'].toString() == devId ||
+                          d['device_id']?.toString() == devId,
+                      orElse: () => null,
+                    );
+                    if (dev != null) {
+                      resolvedName = dev['device_name'] ?? dev['device_code'];
+                    }
+                  }
+
+                  resolvedName ??= item['device_name'] ??
+                      item['Device_name'] ??
+                      item['device_code'] ??
+                      "-";
+
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(resolvedName ?? "-")),
+                      DataCell(Text(item['temp_name'] ?? "-")),
+                      DataCell(
+                        IconButton(
+                          icon: const Icon(
+                            Icons.edit,
+                            color: Colors.blue,
+                            size: 20,
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          "Try a different search term",
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 13.0,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_isLoading)
-                        const LinearProgressIndicator(color: Colors.blue),
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            return SingleChildScrollView(
-                              scrollDirection: Axis.vertical,
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    minWidth: constraints.maxWidth,
-                                  ),
-                                  child: DataTable(
-                                    headingRowHeight: 45,
-                                    headingRowColor: WidgetStateProperty.all(
-                                      Colors.blue.shade50,
-                                    ),
-                                    border: TableBorder.all(
-                                      color: Colors.grey.shade100,
-                                    ),
-                                    columns: [
-                                      _buildTableCol('Device Name', 0),
-                                      _buildTableCol('Template Name', 1),
-                                      _buildTableCol('Edit', -1),
-                                    ],
-                                    rows: paginated.map((item) {
-                                      final devId =
-                                          item['device_id']?.toString() ??
-                                          item['id']?.toString();
-                                      String? resolvedName;
-
-                                      // 1. Try Lookup from master list first if ID is available
-                                      if (devId != null) {
-                                        final dev = _deviceDropdownList.firstWhere(
-                                          (d) =>
-                                              d['id'].toString() == devId ||
-                                              d['device_id']?.toString() == devId,
-                                          orElse: () => null,
-                                        );
-                                        if (dev != null) {
-                                          resolvedName =
-                                              dev['device_name'] ??
-                                              dev['device_code'];
-                                        }
-                                      }
-
-                                      // 2. Fallback to item's own fields if lookup failed or no ID
-                                      resolvedName ??=
-                                          item['device_name'] ??
-                                          item['Device_name'] ??
-                                          item['device_code'] ??
-                                          "-";
-
-                                      return DataRow(
-                                        cells: [
-                                          DataCell(Text(resolvedName ?? "-")),
-                                          DataCell(Text(item['temp_name'] ?? "-")),
-                                          DataCell(
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.edit,
-                                                color: Colors.blue,
-                                                size: 20,
-                                              ),
-                                              onPressed: () => _editItem(item),
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
+                          onPressed: () => _editItem(item),
                         ),
                       ),
                     ],
-                  ),
+                  );
+                }).toList(),
+              ),
+            ),
           ),
-        ),
-        _buildTableFooter(filtered.length),
+        );
+      },
+    );
+
+    return Column(
+      mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildTableControls(isMobile: isMobile, createBtn: createBtn),
+        const SizedBox(height: 15),
+        isMobile
+            ? SizedBox(
+                height: 300,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: (_templateList.isNotEmpty && filtered.isEmpty)
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.search_off_rounded,
+                                size: 48,
+                                color: Colors.blue.shade200,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                "No matching devices found",
+                                style: TextStyle(
+                                  color: Colors.blue.shade900,
+                                  fontSize: 16.0,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                "Try a different search term",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 13.0,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : dataTableWidget,
+                ),
+              )
+            : Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: (_templateList.isNotEmpty && filtered.isEmpty)
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.search_off_rounded,
+                                size: 48,
+                                color: Colors.blue.shade200,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                "No matching devices found",
+                                style: TextStyle(
+                                  color: Colors.blue.shade900,
+                                  fontSize: 16.0,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                "Try a different search term",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 13.0,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : dataTableWidget,
+                ),
+              ),
+        const SizedBox(height: 15),
+        _buildTableFooter(filtered.length, isMobile: isMobile),
       ],
     );
   }
@@ -873,122 +942,139 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     );
   }
 
-  Widget _buildTableControls() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
-        final controlsContent = [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Show ",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Colors.black87,
-                ),
-              ),
-              SizedBox(
-                width: 75,
-                height: 35,
-                child: DropdownButtonFormField<String>(
-                  value: _entriesValue,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Colors.black87, fontSize: 13),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                  ),
-                  items: ["10", "25", "50", "100"]
-                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    _entriesValue = v!;
-                    _currentPage = 1;
-                  }),
-                ),
-              ),
-              const Text(
-                " entries",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
+  Widget _buildTableControls({bool isMobile = false, Widget? createBtn}) {
+    final showEntries = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          "Show ",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: Color(0xFF334155),
           ),
-          SizedBox(
-            width: isNarrow ? constraints.maxWidth : 250,
-            height: 40,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (v) => setState(() {
-                _searchQuery = v;
-                _currentPage = 1;
-              }),
-              style: const TextStyle(color: Colors.black87, fontSize: 12),
-              decoration: InputDecoration(
-                hintText: "Search devices...",
-                hintStyle: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF94A3B8),
-                ),
-                prefixIcon: const Icon(Icons.search, size: 16),
-                isDense: true,
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
+        ),
+        const SizedBox(width: 6),
+        SizedBox(
+          width: 75,
+          height: 35,
+          child: DropdownButtonFormField<String>(
+            value: _entriesValue,
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Colors.black87, fontSize: 13),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 8,
               ),
             ),
+            items: ["10", "25", "50", "100"]
+                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                .toList(),
+            onChanged: (v) => setState(() {
+              _entriesValue = v!;
+              _currentPage = 1;
+            }),
           ),
-        ];
-
-        return isNarrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  controlsContent[0],
-                  const SizedBox(height: 12),
-                  controlsContent[1],
-                ],
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: controlsContent,
-              );
-      },
+        ),
+        if (!isMobile) ...[
+          const SizedBox(width: 6),
+          const Text(
+            " entries",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: Color(0xFF334155),
+            ),
+          ),
+        ],
+      ],
     );
+
+    final searchBox = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: isMobile ? 180 : 250),
+      child: SizedBox(
+        height: 40,
+        child: TextField(
+          controller: _searchController,
+          onChanged: (v) => setState(() {
+            _searchQuery = v;
+            _currentPage = 1;
+          }),
+          style: const TextStyle(color: Colors.black87, fontSize: 12),
+          decoration: InputDecoration(
+            hintText: "Search devices...",
+            hintStyle: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF94A3B8),
+            ),
+            prefixIcon: const Icon(Icons.search, size: 16),
+            isDense: true,
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return isMobile
+        ? SizedBox(
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (createBtn != null) createBtn,
+                const SizedBox(height: 10),
+                showEntries,
+                const SizedBox(height: 10),
+                searchBox,
+              ],
+            ),
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              showEntries,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  searchBox,
+                  if (createBtn != null) ...[
+                    const SizedBox(width: 12),
+                    createBtn,
+                  ],
+                ],
+              ),
+            ],
+          );
   }
 
   DataColumn _buildTableCol(String label, int colIndex) {
@@ -1054,70 +1140,81 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     );
   }
 
-  Widget _buildTableFooter(int total) {
+  Widget _buildTableFooter(int total, {bool isMobile = false}) {
     final int perPage = int.tryParse(_entriesValue) ?? 10;
     final int start = (_currentPage - 1) * perPage + 1;
     final int end = (start + perPage - 1 < total) ? start + perPage - 1 : total;
 
+    final showingText = Text(
+      "Showing ${total == 0 ? 0 : start} to $end of $total entries",
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.bold,
+        color: Colors.black54,
+      ),
+    );
+
+    final pagination = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildSquareBtn(
+          "Previous",
+          _currentPage > 1,
+          () => setState(() => _currentPage--),
+        ),
+        ..._buildPageNumbers(total, perPage),
+        _buildSquareBtn(
+          "Next",
+          end < total,
+          () => setState(() => _currentPage++),
+        ),
+      ],
+    );
+
     return Padding(
       padding: const EdgeInsets.only(top: 15),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            "Showing ${total == 0 ? 0 : start} to $end of $total entries",
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Colors.black54,
+      child: isMobile
+          ? SizedBox(
+              width: double.infinity,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  showingText,
+                  const SizedBox(height: 10),
+                  pagination,
+                ],
+              ),
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [showingText, pagination],
             ),
-          ),
-          Row(
-            children: [
-              _buildSquareBtn(
-                "Previous",
-                _currentPage > 1,
-                () => setState(() => _currentPage--),
-              ),
-              ..._buildPageNumbers(total, perPage),
-              _buildSquareBtn(
-                "Next",
-                end < total,
-                () => setState(() => _currentPage++),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 
   List<Widget> _buildPageNumbers(int total, int perPage) {
-    List<Widget> widgets = [];
     int totalPages = (total / perPage).ceil();
-    if (totalPages <= 1)
-      return [_buildSquareBtn("1", false, null, isActive: true)];
+    if (totalPages <= 1) return [];
 
-    for (int i = 1; i <= totalPages; i++) {
-      if (i == 1 ||
-          i == totalPages ||
-          (i >= _currentPage - 1 && i <= _currentPage + 1)) {
-        widgets.add(
-          _buildSquareBtn(
-            "$i",
-            true,
-            () => setState(() => _currentPage = i),
-            isActive: _currentPage == i,
-          ),
-        );
-      } else if (i == _currentPage - 2 || i == _currentPage + 2) {
-        widgets.add(
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4),
-            child: Text("...", style: TextStyle(fontSize: 11)),
-          ),
-        );
-      }
+    final visibleCount = totalPages.clamp(1, 3);
+    int windowStart = _currentPage - 1; // Try to center around current page
+    if (windowStart < 1) windowStart = 1;
+    if (windowStart + visibleCount - 1 > totalPages) {
+      windowStart = totalPages - visibleCount + 1;
+      if (windowStart < 1) windowStart = 1;
+    }
+    
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final idx = i;
+      widgets.add(
+        _buildSquareBtn(
+          "$idx",
+          true,
+          () => setState(() => _currentPage = idx),
+          isActive: _currentPage == idx,
+        ),
+      );
     }
     return widgets;
   }
@@ -1130,14 +1227,13 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   }) {
     return InkWell(
       onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 2),
         padding: EdgeInsets.symmetric(
-          horizontal: label.length > 2 ? 8 : 4,
-          vertical: 4,
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
         ),
-        constraints: const BoxConstraints(minWidth: 30),
-        height: 30,
+        constraints: const BoxConstraints(minWidth: 34),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: isActive
@@ -1146,7 +1242,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           border: Border.all(
             color: isActive ? Colors.blue : Colors.grey.shade300,
           ),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
         ),
         child: Text(
           label,
@@ -1154,7 +1250,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
             color: isActive
                 ? Colors.white
                 : (enabled ? Colors.black87 : Colors.black26),
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.bold,
           ),
         ),

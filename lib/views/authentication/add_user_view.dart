@@ -467,70 +467,161 @@ class _AddUserViewState extends State<AddUserView> {
 
     final List<dynamic> pagedUsers = filtered.sublist(start, end);
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SelectionArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const AnimatedHeading(
-                    text: "User List",
-                    style: TextStyle(
-                      color: Color.fromARGB(255, 64, 164, 246),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 22,
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => _openFormDialog(),
-                    icon: const Icon(Icons.person_add_alt_1, size: 20),
-                    label: const Text(
-                      "ADD USER",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 25),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
 
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color.fromARGB(
-                        255,
-                        37,
-                        37,
-                        37,
-                      ).withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+    final heading = const AnimatedHeading(
+      text: "User List",
+      style: TextStyle(
+        color: Color.fromARGB(255, 64, 164, 246),
+        fontWeight: FontWeight.bold,
+        fontSize: 22,
+      ),
+    );
+
+    final addUserBtn = ElevatedButton.icon(
+      onPressed: () => _openFormDialog(),
+      icon: Icon(Icons.person_add_alt_1, size: isMobile ? 14 : 20),
+      style: isMobile
+          ? ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: const Size(80, 32),
+            )
+          : null,
+      label: Text(
+        "ADD USER",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: isMobile ? 10 : 12,
+        ),
+      ),
+    );
+
+    final int currentItemCount = pagedUsers.isEmpty ? 1 : pagedUsers.length;
+    final double tableHeight = 150.0 + (currentItemCount * 65.0);
+
+    final bodyContent = Padding(
+      padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 10.0 : 20.0),
+          child: Column(
+            children: [
+              // ── Responsive heading row ──
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 600;
+                  return isNarrow
+                      ? SizedBox(
+                          width: double.infinity,
+                          child: Center(child: heading),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [heading, addUserBtn],
+                        );
+                },
+              ),
+              const SizedBox(height: 20),
+              _buildListHeader(isMobile: isMobile, addUserBtn: addUserBtn),
+              const SizedBox(height: 20),
+              isMobile
+                  ? SizedBox(
+                      height: tableHeight,
+                      child: isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : (allUsers.isNotEmpty && pagedUsers.isEmpty)
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.search_off_rounded,
+                                          size: 48,
+                                          color: Colors.blue.shade200),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        "No matching users found",
+                                        style: TextStyle(
+                                          color: Colors.blue.shade900,
+                                          fontSize: 16.0,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        "Try a different search term",
+                                        style: TextStyle(
+                                            color: Colors.grey, fontSize: 13.0),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : _buildTableContainer(pagedUsers),
+                    )
+                  : Expanded(
+                      child: isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : (allUsers.isNotEmpty && pagedUsers.isEmpty)
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.search_off_rounded,
+                                          size: 48,
+                                          color: Colors.blue.shade200),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        "No matching users found",
+                                        style: TextStyle(
+                                          color: Colors.blue.shade900,
+                                          fontSize: 16.0,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        "Try a different search term",
+                                        style: TextStyle(
+                                            color: Colors.grey, fontSize: 13.0),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : _buildTableContainer(pagedUsers),
                     ),
-                  ],
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildListHeader(),
-                    const SizedBox(height: 20),
-                    _buildTableContainer(pagedUsers),
-                    const SizedBox(height: 20),
-                    _buildPagination(pagedUsers.length, filtered.length),
-                  ],
-                ),
+              const SizedBox(height: 20),
+              _buildPagination(
+                pagedUsers.length,
+                filtered.length,
+                isMobile: isMobile,
               ),
             ],
           ),
         ),
+      ),
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
+      body: SelectionArea(
+        child: isMobile
+            ? SingleChildScrollView(
+                child: bodyContent,
+              )
+            : bodyContent,
       ),
     );
   }
@@ -735,129 +826,189 @@ class _AddUserViewState extends State<AddUserView> {
     );
   }
 
-  Widget _buildListHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildListHeader({bool isMobile = false, Widget? addUserBtn}) {
+    final showEntries = Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            const Text(
-              "Show ",
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            // STYLED ENTRIES BOX
-            SizedBox(
-              width: 75,
-              height: 35,
-              child: DropdownButtonFormField<String>(
-                value: entriesValue,
-                dropdownColor: Colors.white,
-                style: const TextStyle(color: Colors.black87, fontSize: 13),
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                ),
-                items: ["10", "25", "50", "100"]
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) {
-                    setState(() {
-                      entriesValue = v;
-                      currentPage = 1;
-                    });
-                  }
-                },
-              ),
-            ),
-            const Text(
-              " entries",
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+        const Text(
+          "Show ",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: Color(0xFF334155),
+          ),
         ),
+        const SizedBox(width: 6),
         SizedBox(
-          width: 250,
-          child: TextField(
-            controller: _searchController,
-            onChanged: (v) => setState(() => searchQuery = v),
-            style: const TextStyle(fontSize: 12),
+          width: 75,
+          height: 35,
+          child: DropdownButtonFormField<String>(
+            value: entriesValue,
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Colors.black87, fontSize: 13),
             decoration: InputDecoration(
-              hintText: "Search ID or Name...",
-              hintStyle: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF94A3B8),
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
               ),
-              prefixIcon: const Icon(Icons.search, size: 16),
-              contentPadding: const EdgeInsets.symmetric(vertical: 0),
-              border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 8,
+              ),
+            ),
+            items: ["10", "25", "50", "100"]
+                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) {
+                setState(() {
+                  entriesValue = v;
+                  currentPage = 1;
+                });
+              }
+            },
+          ),
+        ),
+        if (!isMobile) ...[
+          const SizedBox(width: 6),
+          const Text(
+            " entries",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: Color(0xFF334155),
+            ),
+          ),
+        ],
+      ],
+    );
+
+    final searchBox = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: isMobile ? 180 : 250),
+      child: SizedBox(
+        height: 38,
+        child: TextField(
+          controller: _searchController,
+          onChanged: (v) => setState(() {
+            searchQuery = v;
+            currentPage = 1;
+          }),
+          style: const TextStyle(fontSize: 12, color: Colors.black87),
+          decoration: InputDecoration(
+            hintText: 'Search ID or Name...',
+            hintStyle: const TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 12,
+            ),
+            prefixIcon: const Icon(
+              Icons.search,
+              size: 16,
+              color: Color(0xFF94A3B8),
+            ),
+            isDense: true,
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade200),
             ),
           ),
         ),
-      ],
+      ),
     );
+
+    return isMobile
+        ? SizedBox(
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (addUserBtn != null) addUserBtn,
+                const SizedBox(height: 10),
+                showEntries,
+                const SizedBox(height: 10),
+                searchBox,
+              ],
+            ),
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [showEntries, searchBox],
+          );
   }
 
-  Widget _buildPagination(int showing, int total) {
+  Widget _buildPagination(int showing, int total, {bool isMobile = false}) {
     if (total == 0) return const SizedBox.shrink();
 
     int limit = int.tryParse(entriesValue) ?? 10;
     int maxPages = (total / limit).ceil();
     if (maxPages == 0) maxPages = 1;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final start = (currentPage - 1) * limit + 1;
+    final end = (start + showing - 1).clamp(0, total);
+
+    final showingText = Text(
+      "Showing $start to $end of $total entries",
+      style: const TextStyle(
+        fontWeight: FontWeight.bold,
+        fontSize: 13,
+        color: Colors.black54,
+      ),
+    );
+
+    final pagination = Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          "Showing $showing out of $total entries",
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-            color: Colors.black54,
-          ),
+        _buildPageBtn(
+          "Previous",
+          enabled: currentPage > 1,
+          onTap: () => setState(() => currentPage--),
         ),
-        Row(
-          children: [
-            _buildPageBtn(
-              "Previous",
-              enabled: currentPage > 1,
-              onTap: () => setState(() => currentPage--),
-            ),
-            ..._buildPageNumberButtons(maxPages),
-            _buildPageBtn(
-              "Next",
-              enabled: currentPage < maxPages,
-              onTap: () => setState(() => currentPage++),
-            ),
-          ],
+        ..._buildPageNumberButtons(maxPages),
+        _buildPageBtn(
+          "Next",
+          enabled: currentPage < maxPages,
+          onTap: () => setState(() => currentPage++),
         ),
       ],
     );
+
+    return isMobile
+        ? SizedBox(
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                showingText,
+                const SizedBox(height: 10),
+                pagination,
+              ],
+            ),
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [showingText, pagination],
+          );
   }
 
   List<Widget> _buildPageNumberButtons(int totalPages) {
@@ -1080,8 +1231,8 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                             _isEditing ? 'Edit User' : 'Add User',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                               letterSpacing: -0.5,
                             ),
                           ),

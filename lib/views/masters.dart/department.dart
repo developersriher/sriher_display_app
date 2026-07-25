@@ -348,14 +348,22 @@ class _DepartmentViewState extends State<DepartmentView> {
   }
 
   void _showDepartmentDialog() {
+    final isMobile = MediaQuery.of(context).size.width < 800;
     StylishDialog.show(
       context: context,
       title: editingId == null ? "Add Department" : "Edit Department",
+      titleStyle: TextStyle(
+        fontSize: isMobile ? 15 : 20,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
       subtitle: "Manage organizational units and categories",
       icon: editingId == null
           ? Icons.add_business_rounded
           : Icons.edit_note_rounded,
-      width: MediaQuery.of(context).size.width * 0.4,
+      width: isMobile
+          ? MediaQuery.of(context).size.width * 0.8
+          : MediaQuery.of(context).size.width * 0.4,
       child: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -524,64 +532,87 @@ class _DepartmentViewState extends State<DepartmentView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SelectionArea(
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
+    final int rowsPerPage = int.tryParse(entriesValue) ?? 10;
+    final int totalRows = filteredList.length;
+    final int totalPages = (totalRows / rowsPerPage).ceil().clamp(1, 9999);
+    final int safePage = currentPage.clamp(0, totalPages - 1);
+    final int start = safePage * rowsPerPage;
+    final int end = (start + rowsPerPage).clamp(0, totalRows);
+    final int currentItemCount = totalRows == 0 ? 1 : (end - start);
+    final double tableHeight = 250.0 + (currentItemCount * 65.0);
+
+    final bodyContent = Padding(
+      padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: Colors.grey.shade200),
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(isMobile ? 10.0 : 20.0),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const AnimatedHeading(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 600;
+                  final heading = const AnimatedHeading(
                     text: "Department List",
                     style: TextStyle(
                       color: Colors.blue,
                       fontWeight: FontWeight.bold,
                       fontSize: 22,
                     ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      _clearForm();
-                      _showDepartmentDialog();
-                    },
-                    icon: const Icon(Icons.add_business_rounded, size: 20),
-                    label: const Text(
-                      "ADD DEPARTMENT",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
+                  );
+
+                  return isNarrow
+                      ? SizedBox(
+                          width: double.infinity,
+                          child: Center(child: heading),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            heading,
+                            _buildAddDepartmentButton(isNarrow),
+                          ],
+                        );
+                },
               ),
               const SizedBox(height: 20),
-
-              // List Card
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(20.0),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: _buildTableCard(),
-                ),
-              ),
+              isMobile
+                  ? SizedBox(
+                      height: tableHeight,
+                      child: _buildTableCard(),
+                    )
+                  : Expanded(
+                      child: _buildTableCard(),
+                    ),
             ],
           ),
         ),
+      ),
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
+      body: SelectionArea(
+        child: isMobile
+            ? SingleChildScrollView(
+                child: bodyContent,
+              )
+            : bodyContent,
       ),
     );
   }
@@ -641,6 +672,14 @@ class _DepartmentViewState extends State<DepartmentView> {
   }
 
   Widget _buildTableCard() {
+    final int rowsPerPage = int.tryParse(entriesValue) ?? 10;
+    final int totalRows = filteredList.length;
+    final int totalPages = (totalRows / rowsPerPage).ceil().clamp(1, 9999);
+    // Clamp currentPage safely (read-only in build path)
+    final int safePage = currentPage.clamp(0, totalPages - 1);
+    final int start = safePage * rowsPerPage;
+    final int end = (start + rowsPerPage).clamp(0, totalRows);
+
     return Column(
       children: [
         _buildListHeader(),
@@ -652,34 +691,7 @@ class _DepartmentViewState extends State<DepartmentView> {
               borderRadius: BorderRadius.circular(8),
             ),
             clipBehavior: Clip.antiAlias,
-            child: (categoryList.isNotEmpty && filteredList.isEmpty)
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off_rounded,
-                          size: 48,
-                          color: Colors.blue.shade200,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          "No matching departments found",
-                          style: TextStyle(
-                            color: Colors.blue.shade900,
-                            fontSize: 16.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          "Try a different search term",
-                          style: TextStyle(color: Colors.grey, fontSize: 13.0),
-                        ),
-                      ],
-                    ),
-                  )
-                : Column(
+          child: Column(
                     children: [
                       if (isLoading)
                         const LinearProgressIndicator(
@@ -689,6 +701,226 @@ class _DepartmentViewState extends State<DepartmentView> {
                       Expanded(
                         child: LayoutBuilder(
                           builder: (context, constraints) {
+                            final isNarrow = constraints.maxWidth < 1200;
+                            final pagedData = filteredList.sublist(start, end);
+
+                            if (isNarrow) {
+                              final Map<int, TableColumnWidth> colWidths = const {
+                                0: MaxColumnWidth(FlexColumnWidth(), FixedColumnWidth(120)),
+                                1: FixedColumnWidth(50),
+                                2: FixedColumnWidth(50),
+                                3: FixedColumnWidth(55),
+                              };
+
+                              final double tableWidth = constraints.maxWidth > 275 ? constraints.maxWidth : 275;
+
+                              return SizedBox(
+                                width: double.infinity,
+                                height: constraints.maxHeight,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.grey.shade200),
+                                    ),
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: SizedBox(
+                                        width: tableWidth,
+                                        height: constraints.maxHeight,
+                                        child: Column(
+                                          children: [
+                                            // Fixed Header Row — never scrolls vertically
+                                            Container(
+                                              height: 45,
+                                              alignment: Alignment.center,
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.shade50,
+                                                border: Border(
+                                                  bottom: BorderSide(color: Colors.grey.shade300, width: 1.0),
+                                                ),
+                                              ),
+                                              child: Table(
+                                                columnWidths: colWidths,
+                                                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                                                children: [
+                                                  TableRow(
+                                                    children: [
+                                                      Padding(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                                        child: Row(
+                                                          children: [
+                                                            const Text(
+                                                              "Department",
+                                                              style: TextStyle(
+                                                                color: Colors.blue,
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 11,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(width: 4),
+                                                            Column(
+                                                              mainAxisAlignment: MainAxisAlignment.center,
+                                                              children: [
+                                                                GestureDetector(
+                                                                  onTap: () {
+                                                                    setState(() {
+                                                                      _sortColumnIndex = 0;
+                                                                      _sortAscending = true;
+                                                                    });
+                                                                  },
+                                                                  child: Align(
+                                                                    heightFactor: 0.5,
+                                                                    child: Icon(
+                                                                      Icons.arrow_drop_up,
+                                                                      size: 14,
+                                                                      color: _sortColumnIndex == 0 && _sortAscending
+                                                                          ? Colors.blue
+                                                                          : const Color(0xFF94A3B8),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                GestureDetector(
+                                                                  onTap: () {
+                                                                    setState(() {
+                                                                      _sortColumnIndex = 0;
+                                                                      _sortAscending = false;
+                                                                    });
+                                                                  },
+                                                                  child: Align(
+                                                                    heightFactor: 0.5,
+                                                                    child: Icon(
+                                                                      Icons.arrow_drop_down,
+                                                                      size: 14,
+                                                                      color: _sortColumnIndex == 0 && !_sortAscending
+                                                                          ? Colors.blue
+                                                                          : const Color(0xFF94A3B8),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      const Center(
+                                                        child: Text(
+                                                          "Edit",
+                                                          style: TextStyle(
+                                                            color: Colors.blue,
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 11,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const Center(
+                                                        child: Text(
+                                                          "Action",
+                                                          style: TextStyle(
+                                                            color: Colors.blue,
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 11,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const Center(
+                                                        child: Text(
+                                                          "Delete",
+                                                          style: TextStyle(
+                                                            color: Colors.blue,
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 11,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            // Vertically scrollable body rows only
+                                            Expanded(
+                                              child: SingleChildScrollView(
+                                                scrollDirection: Axis.vertical,
+                                                child: Table(
+                                                  columnWidths: colWidths,
+                                                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                                                  children: pagedData.isEmpty
+                                                      ? [
+                                                          TableRow(
+                                                            children: [
+                                                              Padding(
+                                                                padding: const EdgeInsets.symmetric(vertical: 36.0),
+                                                                child: Column(
+                                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                                  children: [
+                                                                    Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
+                                                                    const SizedBox(height: 8),
+                                                                    Text("No matching departments found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
+                                                                    const SizedBox(height: 4),
+                                                                    const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                              const SizedBox.shrink(),
+                                                              const SizedBox.shrink(),
+                                                              const SizedBox.shrink(),
+                                                            ],
+                                                          )
+                                                        ]
+                                                      : pagedData.map((item) {
+                                                    return TableRow(
+                                                      decoration: BoxDecoration(
+                                                        border: Border(
+                                                          bottom: BorderSide(color: Colors.grey.shade100),
+                                                        ),
+                                                      ),
+                                                      children: [
+                                                        Padding(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+                                                          child: Text(
+                                                            item['category_name']?.toString() ?? "-",
+                                                            style: const TextStyle(fontSize: 13),
+                                                          ),
+                                                        ),
+                                                        Center(
+                                                          child: IconButton(
+                                                            icon: const Icon(Icons.edit, color: Colors.blueAccent, size: 18),
+                                                            onPressed: () => loadForEdit(item['id']),
+                                                          ),
+                                                        ),
+                                                        Center(
+                                                          child: Transform.scale(
+                                                            scale: 0.7,
+                                                            child: Switch(
+                                                              value: item['status'] == 1 || item['status'] == "1",
+                                                              activeColor: Colors.greenAccent,
+                                                              onChanged: (v) => toggleStatus(item['id'], item['status']),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        Center(
+                                                          child: IconButton(
+                                                            icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                                                            onPressed: () => deleteCategory(item['id']),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    );
+                                                  }).toList(),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+
                             return SingleChildScrollView(
                               scrollDirection: Axis.vertical,
                               child: SingleChildScrollView(
@@ -706,7 +938,32 @@ class _DepartmentViewState extends State<DepartmentView> {
                                       color: Colors.grey.shade100,
                                     ),
                                     columns: _getColumns(),
-                                    rows: _getCurrentPageRows(),
+                                    rows: filteredList.isEmpty
+                                        ? [
+                                            DataRow(
+                                              cells: [
+                                                DataCell(
+                                                  Padding(
+                                                    padding: const EdgeInsets.symmetric(vertical: 20.0),
+                                                    child: Column(
+                                                      mainAxisAlignment: MainAxisAlignment.center,
+                                                      children: [
+                                                        Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
+                                                        const SizedBox(height: 6),
+                                                        Text("No matching departments found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
+                                                        const SizedBox(height: 4),
+                                                        const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                                const DataCell(SizedBox.shrink()),
+                                                const DataCell(SizedBox.shrink()),
+                                                const DataCell(SizedBox.shrink()),
+                                              ],
+                                            ),
+                                          ]
+                                        : pagedData.map((item) => _getRow(item)).toList(),
                                   ),
                                 ),
                               ),
@@ -799,22 +1056,12 @@ class _DepartmentViewState extends State<DepartmentView> {
   }
 
   List<DataRow> _getCurrentPageRows() {
-    int rowsPerPage = int.parse(entriesValue);
-    int start = currentPage * rowsPerPage;
-    int end = (start + rowsPerPage < filteredList.length)
-        ? (start + rowsPerPage)
-        : filteredList.length;
-
-    if (start >= filteredList.length && filteredList.isNotEmpty) {
-      currentPage = (filteredList.length / rowsPerPage).floor();
-      start = currentPage * rowsPerPage;
-      end = filteredList.length;
-    }
-
-    return filteredList
-        .sublist(start, end)
-        .map((item) => _getRow(item))
-        .toList();
+    final int rowsPerPage = int.tryParse(entriesValue) ?? 10;
+    final int totalPages = (filteredList.length / rowsPerPage).ceil().clamp(1, 9999);
+    final int safePage = currentPage.clamp(0, totalPages - 1);
+    final int start = safePage * rowsPerPage;
+    final int end = (start + rowsPerPage).clamp(0, filteredList.length);
+    return filteredList.sublist(start, end).map((item) => _getRow(item)).toList();
   }
 
   DataRow _getRow(dynamic item) {
@@ -863,6 +1110,29 @@ class _DepartmentViewState extends State<DepartmentView> {
     ),
   );
 
+  Widget _buildAddDepartmentButton(bool isNarrow) {
+    return ElevatedButton.icon(
+      onPressed: () {
+        _clearForm();
+        _showDepartmentDialog();
+      },
+      icon: Icon(Icons.add_business_rounded, size: isNarrow ? 14 : 20),
+      style: isNarrow
+          ? ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: const Size(80, 32),
+            )
+          : null,
+      label: Text(
+        "ADD DEPARTMENT",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: isNarrow ? 10 : 12,
+        ),
+      ),
+    );
+  }
+
   Widget _buildListHeader() {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -876,9 +1146,10 @@ class _DepartmentViewState extends State<DepartmentView> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
-                color: Colors.black87,
+                color: Color(0xFF334155),
               ),
             ),
+            const SizedBox(width: 6),
             SizedBox(
               width: 75,
               height: 35,
@@ -916,44 +1187,73 @@ class _DepartmentViewState extends State<DepartmentView> {
                 }),
               ),
             ),
-            const Text(
-              " entries",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Colors.black87,
+            if (!isNarrow) ...[
+              const SizedBox(width: 6),
+              const Text(
+                " entries",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Color(0xFF334155),
+                ),
               ),
-            ),
+            ],
           ],
         );
 
-        final searchBox = SizedBox(
-          width: isNarrow ? 200 : 250,
-          height: 40,
-          child: TextField(
-            controller: _searchController,
-            onChanged: _onSearchChanged,
-            style: const TextStyle(color: Colors.black87, fontSize: 13),
-            decoration: const InputDecoration(
-              hintText: "Search Departments...",
-              prefixIcon: Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-              contentPadding: EdgeInsets.symmetric(horizontal: 10),
+        final searchBox = ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
+          child: SizedBox(
+            height: 38,
+            child: TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
+              decoration: InputDecoration(
+                hintText: 'Search Departments...',
+                hintStyle: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 12,
+                ),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 16,
+                  color: Color(0xFF94A3B8),
+                ),
+                isDense: true,
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+              ),
             ),
           ),
         );
 
         return isNarrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  showEntries,
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: searchBox,
-                  ),
-                ],
+            ? SizedBox(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _buildAddDepartmentButton(isNarrow),
+                    const SizedBox(height: 10),
+                    showEntries,
+                    const SizedBox(height: 10),
+                    searchBox,
+                  ],
+                ),
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -967,157 +1267,121 @@ class _DepartmentViewState extends State<DepartmentView> {
   }
 
   Widget _buildTableFooter() {
-    int rowsPerPage = int.parse(entriesValue);
-    int totalPages = (filteredList.length / rowsPerPage).ceil();
-    if (totalPages == 0) totalPages = 1;
+    final limit = int.tryParse(entriesValue) ?? 10;
+    final total = filteredList.length;
+    final totalPages = (total / limit).ceil().clamp(1, 9999);
+    final safePage = currentPage.clamp(0, totalPages - 1);
+    final start = total == 0 ? 0 : safePage * limit + 1;
+    final end = (safePage * limit + limit).clamp(0, total);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 600;
-
-        final totalText = Text(
-          "Total: ${filteredList.length} Departments",
+        final paginationText = Text(
+          "Showing $start to $end of $total entries",
           style: const TextStyle(
-            fontSize: 11,
             fontWeight: FontWeight.bold,
-            color: Colors.grey,
+            fontSize: 11,
+            color: Colors.black54,
           ),
         );
-
-        final paginationRow = Row(
+        final paginationControls = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            GestureDetector(
-              onTap: currentPage > 0
-                  ? () => setState(() => currentPage--)
-                  : null,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(6),
-                    bottomLeft: Radius.circular(6),
-                  ),
-                  border: Border.all(
-                    color: currentPage > 0
-                        ? Colors.blue.shade300
-                        : Colors.grey.shade300,
-                  ),
-                ),
-                child: Text(
-                  "Prev",
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: currentPage > 0 ? Colors.blue.shade700 : Colors.grey,
-                  ),
-                ),
-              ),
+            _buildPageBtn(
+              "Previous",
+              enabled: currentPage > 0,
+              onTap: () => setState(() => currentPage--),
             ),
-            ...List.generate(totalPages, (index) {
-              if (totalPages > 7) {
-                if (index != 0 &&
-                    index != totalPages - 1 &&
-                    (index < currentPage - 1 || index > currentPage + 1)) {
-                  if (index == currentPage - 2 || index == currentPage + 2) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: const Text(
-                        "...",
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                }
-              }
-              return InkWell(
-                onTap: () => setState(() => currentPage = index),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: currentPage == index
-                        ? Colors.blue.shade600
-                        : Colors.white,
-                    border: Border.all(
-                      color: currentPage == index
-                          ? Colors.blue.shade600
-                          : Colors.grey.shade300,
-                    ),
-                  ),
-                  child: Text(
-                    "${index + 1}",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: currentPage == index
-                          ? Colors.white
-                          : Colors.black87,
-                    ),
-                  ),
-                ),
-              );
-            }),
-            GestureDetector(
-              onTap: currentPage < totalPages - 1
-                  ? () => setState(() => currentPage++)
-                  : null,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: const BorderRadius.only(
-                    topRight: Radius.circular(6),
-                    bottomRight: Radius.circular(6),
-                  ),
-                  border: Border.all(
-                    color: currentPage < totalPages - 1
-                        ? Colors.blue.shade300
-                        : Colors.grey.shade300,
-                  ),
-                ),
-                child: Text(
-                  "Next",
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: currentPage < totalPages - 1
-                        ? Colors.blue.shade700
-                        : Colors.grey,
-                  ),
-                ),
-              ),
+            ..._buildPageNumberButtons(totalPages),
+            _buildPageBtn(
+              "Next",
+              enabled: currentPage < totalPages - 1,
+              onTap: () => setState(() => currentPage++),
             ),
           ],
         );
 
         return isNarrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  totalText,
-                  const SizedBox(height: 10),
-                  paginationRow,
-                ],
+            ? SizedBox(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    paginationText,
+                    const SizedBox(height: 10),
+                    paginationControls,
+                  ],
+                ),
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  totalText,
-                  paginationRow,
+                  paginationText,
+                  paginationControls,
                 ],
               );
       },
+    );
+  }
+
+  List<Widget> _buildPageNumberButtons(int totalPages) {
+    final visibleCount = totalPages.clamp(1, 3);
+    int windowStart = currentPage - 1; // try to place currentPage in middle
+    if (windowStart < 0) windowStart = 0;
+    if (windowStart + visibleCount - 1 >= totalPages) {
+      windowStart = totalPages - visibleCount;
+    }
+    List<Widget> widgets = [];
+    for (int i = windowStart; i < windowStart + visibleCount; i++) {
+      final idx = i; // capture for closure
+      widgets.add(
+        _buildPageBtn(
+          "${idx + 1}",
+          active: currentPage == idx,
+          onTap: () => setState(() => currentPage = idx),
+        ),
+      );
+    }
+    return widgets;
+  }
+
+  Widget _buildPageBtn(
+    String label, {
+    bool active = false,
+    bool enabled = true,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
+        ),
+        constraints: const BoxConstraints(minWidth: 34),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active
+              ? Colors.blue
+              : (enabled ? Colors.white : Colors.grey.shade50),
+          border: Border.all(
+            color: active ? Colors.blue : Colors.grey.shade300,
+          ),
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active
+                ? Colors.white
+                : (enabled ? Colors.black87 : Colors.black26),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
     );
   }
 

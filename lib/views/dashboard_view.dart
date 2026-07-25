@@ -410,7 +410,7 @@ class _DashboardViewState extends State<DashboardView>
                         "$greeting, ${_userName ?? 'User'}",
                         style: TextStyle(
                           fontFamily: _kFont,
-                          fontSize: isMobile ? 18 : 28,
+                          fontSize: isMobile ? 22 : 32,
                           fontWeight: FontWeight.normal,
                           color: const Color(0xFF0F172A),
                           letterSpacing: -0.5,
@@ -577,7 +577,14 @@ class _DashboardViewState extends State<DashboardView>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: color, size: 14),
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 12),
+              ),
               const SizedBox(width: 8),
               Text(
                 title,
@@ -1392,8 +1399,6 @@ class _DashboardViewState extends State<DashboardView>
         // Can grow above 480 px but never forces below that even on small windows.
         constraints: const BoxConstraints(minHeight: 480),
         child: Container(
-          // Use a preferred height that stays within the available space;
-          // the ConstrainedBox minHeight keeps it tall on big screens.
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(28),
@@ -1406,37 +1411,38 @@ class _DashboardViewState extends State<DashboardView>
               ),
             ],
           ),
-          clipBehavior: Clip.antiAlias,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Hide the 240px side panel when the card is narrower than 600px
-              final showSidePanel = constraints.maxWidth >= 600;
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Side View (Category Selector) — hidden on narrow screens
-                  if (showSidePanel) _buildRegistrySideView(),
-
-                  // On narrow screens show a compact category selector row instead
-                  // Main Table View
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!showSidePanel) _buildNarrowCategorySelector(),
-                        _buildRegistryHeaderTitle(),
-                        // Give the table a fixed 380px slot; it scrolls internally.
-                        SizedBox(
-                          height: 380,
-                          child: _buildRegistryTable(d),
-                        ),
-                        _buildRegistryFooter(d),
-                      ],
+          // Use ClipRRect to clip children to rounded corners without hiding the border
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(27),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final showSidePanel = constraints.maxWidth >= 600;
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (showSidePanel) _buildRegistrySideView(),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!showSidePanel) _buildNarrowCategorySelector(),
+                          _buildRegistryHeaderTitle(),
+                          // Adaptive height: min 300, max unconstrained, shrinkwraps to content
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              minHeight: 300,
+                              maxHeight: 480,
+                            ),
+                            child: _buildRegistryTable(d),
+                          ),
+                          _buildRegistryFooter(d),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              );
-            },
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -1481,10 +1487,10 @@ class _DashboardViewState extends State<DashboardView>
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: isSel ? cat.$3.withOpacity(0.12) : Colors.transparent,
+                  color: isSel ? cat.$3.withOpacity(0.12) : cat.$3.withOpacity(0.03),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: isSel ? cat.$3 : const Color(0xFFE2E8F0),
+                    color: isSel ? cat.$3 : cat.$3.withOpacity(0.15),
                   ),
                 ),
                 child: Row(
@@ -1493,7 +1499,7 @@ class _DashboardViewState extends State<DashboardView>
                     Icon(
                       cat.$2,
                       size: 14,
-                      color: isSel ? cat.$3 : const Color(0xFF94A3B8),
+                      color: cat.$3,
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -1501,7 +1507,7 @@ class _DashboardViewState extends State<DashboardView>
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
-                        color: isSel ? cat.$3 : const Color(0xFF64748B),
+                        color: isSel ? cat.$3 : const Color(0xFF475569),
                       ),
                     ),
                   ],
@@ -1716,15 +1722,17 @@ class _DashboardViewState extends State<DashboardView>
                 },
               ),
             ),
-            const SizedBox(width: 6),
-            const Text(
-              'entries',
-              style: TextStyle(
-                fontSize: 13,
-                color: Color(0xFF1E293B),
-                fontWeight: FontWeight.bold,
+            if (!isNarrow) ...[
+              const SizedBox(width: 6),
+              const Text(
+                'entries',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF1E293B),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
+            ],
           ],
         );
 
@@ -1768,9 +1776,12 @@ class _DashboardViewState extends State<DashboardView>
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
           child: isNarrow
               ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    showEntriesWidget,
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: showEntriesWidget,
+                    ),
                     const SizedBox(height: 10),
                     Align(
                       alignment: Alignment.centerRight,
@@ -1779,9 +1790,10 @@ class _DashboardViewState extends State<DashboardView>
                   ],
                 )
               : Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     showEntriesWidget,
+                    const SizedBox(width: 16),
                     searchWidget,
                   ],
                 ),
@@ -2020,20 +2032,20 @@ class _DashboardViewState extends State<DashboardView>
         color: Colors.white,
         border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
       ),
-      child: OverflowBar(
-        alignment: MainAxisAlignment.spaceBetween,
-        overflowAlignment: OverflowBarAlignment.start,
-        overflowSpacing: 8,
-        children: [
-          Text(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 600;
+
+          final showingText = Text(
             'Showing $start to $end of $total entries',
             style: const TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 11,
-              color: Colors.black54,
+              fontSize: 13,
+              color: Colors.black87,
             ),
-          ),
-          Row(
+          );
+
+          final paginationControls = Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildPageBtn(
@@ -2048,8 +2060,30 @@ class _DashboardViewState extends State<DashboardView>
                 onTap: () => setState(() => _currentPage++),
               ),
             ],
-          ),
-        ],
+          );
+
+          return SizedBox(
+            width: double.infinity,
+            child: isNarrow
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      showingText,
+                      const SizedBox(height: 10),
+                      paginationControls,
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      showingText,
+                      const SizedBox(width: 16),
+                      paginationControls,
+                    ],
+                  ),
+          );
+        },
       ),
     );
   }
@@ -2082,33 +2116,31 @@ class _DashboardViewState extends State<DashboardView>
     bool enabled = true,
     VoidCallback? onTap,
   }) {
-    return Container(
-      margin: EdgeInsets.zero,
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          backgroundColor: active
-              ? Colors.blue
-              : enabled
-                  ? Colors.grey.shade100
-                  : Colors.grey.shade50,
-          foregroundColor: active
-              ? Colors.white
-              : enabled
-                  ? Colors.black87
-                  : Colors.grey.shade400,
-          side: active
-              ? const BorderSide(color: Colors.blue)
-              : BorderSide(color: Colors.grey.shade300),
-          padding: EdgeInsets.symmetric(
-              horizontal: label.length > 1 ? 15 : 12),
-          minimumSize: const Size(40, 36),
-          shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.zero),
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
         ),
-        onPressed: enabled ? onTap : null,
+        constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active
+              ? Colors.blue
+              : (enabled ? Colors.white : Colors.grey.shade50),
+          border: Border.all(
+            color: active ? Colors.blue : Colors.grey.shade300,
+          ),
+          borderRadius: BorderRadius.zero,
+        ),
         child: Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
+            color: active
+                ? Colors.white
+                : (enabled ? Colors.black87 : Colors.black26),
             fontSize: 12,
             fontWeight: FontWeight.bold,
           ),

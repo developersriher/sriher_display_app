@@ -412,16 +412,24 @@ class _MappingViewState extends State<MappingView> {
 
   void _showMappingDialog() {
     _formKey = GlobalKey<FormState>();
+    final isMobile = MediaQuery.of(context).size.width < 800;
     StylishDialog.show(
       context: context,
       title: _editingId == null
-          ? "Create Device Mapping"
-          : "Edit Mapping Details",
+          ? "Create Mapping"
+          : "Edit Mapping ",
+      titleStyle: TextStyle(
+        fontSize: isMobile ? 17 : 20,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
       subtitle: "Link display hardware to facility locations",
       icon: _editingId == null
           ? Icons.add_link_rounded
           : Icons.edit_note_rounded,
-      width: MediaQuery.of(context).size.width * 0.6,
+      width: isMobile
+          ? MediaQuery.of(context).size.width * 0.8
+          : MediaQuery.of(context).size.width * 0.6,
       builder: (context, setDialogState) {
         return Form(
           key: _formKey,
@@ -431,62 +439,116 @@ class _MappingViewState extends State<MappingView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildSectionHeader("DEVICE INFORMATION"),
-              Row(
-                children: [
-                  Expanded(
-                    child: _dropsLoading
-                        ? const Center(
-                            child: SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        : _buildDropdownField(
-                            hint: "Select Device Code",
-                            value: _selDeviceId,
-                            items: _deviceList
-                                .map(
-                                  (d) => SearchableDropdownItem<String>(
-                                    value: d['id'].toString(),
-                                    label:
-                                        d['device_code']?.toString() ??
-                                        d['id'].toString(),
+              isMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _dropsLoading
+                            ? const Center(
+                                child: SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              )
+                            : _buildDropdownField(
+                                hint: "Select Device Code",
+                                value: _selDeviceId,
+                                items: _deviceList
+                                    .map(
+                                      (d) => SearchableDropdownItem<String>(
+                                        value: d['id'].toString(),
+                                        label:
+                                            d['device_code']?.toString() ??
+                                            d['id'].toString(),
+                                      ),
+                                    )
+                                    .toList(),
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'Please select the Device Code'
+                                    : null,
+                                onChanged: (v) {
+                                  final dev = _deviceList.firstWhere(
+                                    (d) => d['id'].toString() == v,
+                                    orElse: () => <String, dynamic>{},
+                                  );
+                                  if ((dev as Map).isNotEmpty) {
+                                    _devNameCtrl.text =
+                                        dev['device_name']?.toString() ?? '';
+                                    _devModelCtrl.text =
+                                        dev['device_model']?.toString() ?? '';
+                                  }
+                                  setDialogState(() => _selDeviceId = v);
+                                  setState(() => _selDeviceId = v);
+                                },
+                              ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          "Device Name",
+                          _devNameCtrl,
+                          readOnly: false,
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Please enter the Device Name'
+                              : null,
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: _dropsLoading
+                              ? const Center(
+                                  child: SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
                                   ),
                                 )
-                                .toList(),
+                              : _buildDropdownField(
+                                  hint: "Select Device Code",
+                                  value: _selDeviceId,
+                                  items: _deviceList
+                                      .map(
+                                        (d) => SearchableDropdownItem<String>(
+                                          value: d['id'].toString(),
+                                          label:
+                                              d['device_code']?.toString() ??
+                                              d['id'].toString(),
+                                        ),
+                                      )
+                                      .toList(),
+                                  validator: (v) => (v == null || v.isEmpty)
+                                      ? 'Please select the Device Code'
+                                      : null,
+                                  onChanged: (v) {
+                                    final dev = _deviceList.firstWhere(
+                                      (d) => d['id'].toString() == v,
+                                      orElse: () => <String, dynamic>{},
+                                    );
+                                    if ((dev as Map).isNotEmpty) {
+                                      _devNameCtrl.text =
+                                          dev['device_name']?.toString() ?? '';
+                                      _devModelCtrl.text =
+                                          dev['device_model']?.toString() ?? '';
+                                    }
+                                    setDialogState(() => _selDeviceId = v);
+                                    setState(() => _selDeviceId = v);
+                                  },
+                                ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildTextField(
+                            "Device Name",
+                            _devNameCtrl,
+                            readOnly: false,
                             validator: (v) => (v == null || v.isEmpty)
-                                ? 'Please select the Device Code'
+                                ? 'Please enter the Device Name'
                                 : null,
-                            onChanged: (v) {
-                              final dev = _deviceList.firstWhere(
-                                (d) => d['id'].toString() == v,
-                                orElse: () => <String, dynamic>{},
-                              );
-                              if ((dev as Map).isNotEmpty) {
-                                _devNameCtrl.text =
-                                    dev['device_name']?.toString() ?? '';
-                                _devModelCtrl.text =
-                                    dev['device_model']?.toString() ?? '';
-                              }
-                              setDialogState(() => _selDeviceId = v);
-                              setState(() => _selDeviceId = v);
-                            },
                           ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildTextField(
-                      "Device Name",
-                      _devNameCtrl,
-                      readOnly: false,
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Please enter the Device Name'
-                          : null,
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
               const SizedBox(height: 16),
               _buildTextField(
                 "Device Model",
@@ -736,63 +798,81 @@ class _MappingViewState extends State<MappingView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SelectionArea(
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
+    final int currentItemCount = _paged.isEmpty ? 1 : _paged.length;
+    final double tableHeight = 250.0 + (currentItemCount * 65.0);
+
+    final bodyContent = Padding(
+      padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: Colors.grey.shade200),
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(isMobile ? 10.0 : 20.0),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const AnimatedHeading(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 600;
+                  final heading = const AnimatedHeading(
                     text: "Device Mapping",
                     style: TextStyle(
                       color: Colors.blue,
                       fontWeight: FontWeight.bold,
                       fontSize: 22,
                     ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      _clearForm();
-                      _showMappingDialog();
-                    },
-                    icon: const Icon(Icons.add_link_rounded, size: 20),
-                    label: const Text(
-                      "CREATE MAPPING",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
+                  );
+
+                  return isNarrow
+                      ? SizedBox(
+                          width: double.infinity,
+                          child: Center(child: heading),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            heading,
+                            _buildCreateMappingButton(isNarrow),
+                          ],
+                        );
+                },
               ),
               const SizedBox(height: 20),
-
-              // List Card
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: _buildTableCard(),
-                ),
-              ),
+              isMobile
+                  ? SizedBox(
+                      height: tableHeight,
+                      child: _buildTableCard(),
+                    )
+                  : Expanded(
+                      child: _buildTableCard(),
+                    ),
             ],
           ),
         ),
+      ),
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
+      body: SelectionArea(
+        child: isMobile
+            ? SingleChildScrollView(
+                child: bodyContent,
+              )
+            : bodyContent,
       ),
     );
   }
@@ -1119,6 +1199,107 @@ class _MappingViewState extends State<MappingView> {
 
   // ─── TABLE CARD ───────────────────────────────────────────────────────────
 
+  Widget _buildCreateMappingButton(bool isNarrow) {
+    return ElevatedButton.icon(
+      onPressed: () {
+        _clearForm();
+        _showMappingDialog();
+      },
+      icon: Icon(Icons.add_link_rounded, size: isNarrow ? 14 : 20),
+      style: isNarrow
+          ? ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: const Size(80, 32),
+            )
+          : null,
+      label: Text(
+        "CREATE MAPPING",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: isNarrow ? 10 : 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSortHeader(String label, int colIndex) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (_sortColumnIndex == colIndex) {
+            _sortAscending = !_sortAscending;
+          } else {
+            _sortColumnIndex = colIndex;
+            _sortAscending = true;
+          }
+          _page = 1;
+        });
+      },
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+                fontSize: 10,
+              ),
+              textAlign: TextAlign.left,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 2),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Align(
+                heightFactor: 0.5,
+                child: Icon(
+                  Icons.arrow_drop_up,
+                  size: 14,
+                  color: _sortColumnIndex == colIndex && _sortAscending
+                      ? Colors.blue
+                      : const Color(0xFF94A3B8),
+                ),
+              ),
+              Align(
+                heightFactor: 0.5,
+                child: Icon(
+                  Icons.arrow_drop_down,
+                  size: 14,
+                  color: _sortColumnIndex == colIndex && !_sortAscending
+                      ? Colors.blue
+                      : const Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderCell(String label, {int colIndex = -1}) {
+    if (colIndex < 0) {
+      return Center(
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.blue,
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    return _buildSortHeader(label, colIndex);
+  }
+
   Widget _buildTableCard() {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1132,9 +1313,10 @@ class _MappingViewState extends State<MappingView> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.black87,
+                color: Color(0xFF334155),
               ),
             ),
+            const SizedBox(width: 6),
             SizedBox(
               width: 75,
               height: 35,
@@ -1181,58 +1363,68 @@ class _MappingViewState extends State<MappingView> {
                 },
               ),
             ),
-            const Text(
-              ' entries',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
+            if (!isNarrow) ...[
+              const SizedBox(width: 6),
+              const Text(
+                ' entries',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF334155),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
+            ],
           ],
         );
 
-        final searchBox = SizedBox(
-          width: isNarrow ? 200 : 250,
-          height: 40,
-          child: TextField(
-            controller: _searchCtrl,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black87,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Search mappings...',
-              hintStyle: const TextStyle(
+        final searchBox = ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
+          child: SizedBox(
+            height: 38,
+            child: TextField(
+              controller: _searchCtrl,
+              style: const TextStyle(
                 fontSize: 12,
-                color: Color(0xFF94A3B8),
+                color: Colors.black87,
               ),
-              prefixIcon: const Icon(Icons.search, size: 16),
-              isDense: true,
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+              decoration: InputDecoration(
+                hintText: 'Search mappings...',
+                hintStyle: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF94A3B8),
+                ),
+                prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF94A3B8)),
+                isDense: true,
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200), 
+                ),
               ),
             ),
           ),
         );
 
+        final total = _filtered.length;
+        final perPage = int.tryParse(_entries) ?? 10;
+        final start = total == 0 ? 0 : (_page - 1) * perPage + 1;
+        final end = (start + perPage - 1 < total) ? start + perPage - 1 : total;
+
         final showingText = Text(
-          'Showing ${_paged.length} of ${_filtered.length} records',
+          "Showing $start to $end of $total entries",
           style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
             color: Colors.black54,
           ),
         );
@@ -1255,21 +1447,23 @@ class _MappingViewState extends State<MappingView> {
         );
 
         return Padding(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(isNarrow ? 10.0 : 20.0),
           child: Column(
             children: [
               // Header Controls
               isNarrow
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        showEntries,
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: searchBox,
-                        ),
-                      ],
+                  ? SizedBox(
+                      width: double.infinity,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _buildCreateMappingButton(isNarrow),
+                          const SizedBox(height: 10),
+                          showEntries,
+                          const SizedBox(height: 10),
+                          searchBox,
+                        ],
+                      ),
                     )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1290,13 +1484,16 @@ class _MappingViewState extends State<MappingView> {
 
               // Footer Pagination
               isNarrow
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        showingText,
-                        const SizedBox(height: 10),
-                        paginationRow,
-                      ],
+                  ? SizedBox(
+                      width: double.infinity,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          showingText,
+                          const SizedBox(height: 10),
+                          paginationRow,
+                        ],
+                      ),
                     )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1314,36 +1511,198 @@ class _MappingViewState extends State<MappingView> {
 
   Widget _buildTable() {
     final rows = _paged;
-    if (_mappingList.isNotEmpty && _filtered.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.search_off_rounded,
-              size: 48,
-              color: Colors.blue.shade200,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              "No matching mappings found",
-              style: TextStyle(
-                color: Colors.blue.shade900,
-                fontSize: 16.0,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              "Try a different search term",
-              style: TextStyle(color: Colors.grey, fontSize: 13.0),
-            ),
-          ],
-        ),
-      );
-    }
     return LayoutBuilder(
       builder: (ctx, constraints) {
+        final isNarrow = constraints.maxWidth < 1200;
+
+        if (isNarrow) {
+          final Map<int, TableColumnWidth> colWidths = const {
+            0: FixedColumnWidth(35),
+            1: FixedColumnWidth(95),
+            2: FixedColumnWidth(130),
+            3: FixedColumnWidth(90),
+            4: FixedColumnWidth(115),
+            5: FixedColumnWidth(75),
+            6: FixedColumnWidth(115),
+            7: FixedColumnWidth(40),
+            8: FixedColumnWidth(40),
+          };
+
+          final double tableWidth = constraints.maxWidth > 735 ? constraints.maxWidth : 735;
+
+          return SizedBox(
+            width: double.infinity,
+            height: constraints.maxHeight,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: tableWidth,
+                    height: constraints.maxHeight,
+                    child: Column(
+                      children: [
+                        // Fixed Header Row — never scrolls vertically
+                        Container(
+                          height: 45,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            border: Border(
+                              bottom: BorderSide(color: Colors.grey.shade300, width: 1.0),
+                            ),
+                          ),
+                          child: Table(
+                            columnWidths: colWidths,
+                            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                            children: [
+                              TableRow(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                    child: _buildHeaderCell('S.No'),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                    child: _buildHeaderCell('Device Code', colIndex: 1),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                    child: _buildHeaderCell('Device Name', colIndex: 2),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                    child: _buildHeaderCell('Model', colIndex: 3),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                    child: _buildHeaderCell('Location', colIndex: 4),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                    child: _buildHeaderCell('Floor', colIndex: 5),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                    child: _buildHeaderCell('Sub Location', colIndex: 6),
+                                  ),
+                                  const Center(child: Text('Edit', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 10))),
+                                  const Center(child: Text('Delete', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 10))),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Vertically scrollable body rows only
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: Table(
+                              columnWidths: colWidths,
+                              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                              children: rows.isEmpty
+                                  ? [
+                                      TableRow(
+                                        children: [
+                                          const SizedBox.shrink(),
+                                          const SizedBox.shrink(),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 36.0),
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
+                                                const SizedBox(height: 8),
+                                                Text("No matching mappings found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
+                                                const SizedBox(height: 4),
+                                                const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox.shrink(),
+                                          const SizedBox.shrink(),
+                                          const SizedBox.shrink(),
+                                          const SizedBox.shrink(),
+                                          const SizedBox.shrink(),
+                                          const SizedBox.shrink(),
+                                        ],
+                                      )
+                                    ]
+                                  : List.generate(rows.length, (i) {
+                                final item = rows[i];
+                                final sno = (_page - 1) * (int.tryParse(_entries) ?? 10) + i + 1;
+                                return TableRow(
+                                  decoration: BoxDecoration(
+                                    color: i.isEven ? Colors.grey.shade50 : Colors.white,
+                                    border: Border(
+                                      bottom: BorderSide(color: Colors.grey.shade100),
+                                    ),
+                                  ),
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                      child: Text('$sno', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                      child: Text(item['device_code']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                      child: Text(item['device_name']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                      child: Text(item['device_model']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                      child: Text(item['location_name']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                      child: Text(item['floor']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                      child: Text(item['sublocation']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    Center(
+                                      child: IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.blue, size: 16),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () => _loadForEdit(item['id']),
+                                      ),
+                                    ),
+                                    Center(
+                                      child: IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () => _delete(item['id']),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
         return SingleChildScrollView(
           scrollDirection: Axis.vertical,
           child: SingleChildScrollView(
@@ -1372,87 +1731,57 @@ class _MappingViewState extends State<MappingView> {
                 rows: rows.isEmpty
                     ? [
                         DataRow(
-                          cells: List.generate(
-                            9,
-                            (i) => DataCell(
-                              i == 0
-                                  ? const Text(
-                                      'No data available',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey,
-                                      ),
-                                    )
-                                  : const SizedBox(),
+                          cells: [
+                            const DataCell(SizedBox.shrink()),
+                            const DataCell(SizedBox.shrink()),
+                            DataCell(
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 20.0),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
+                                    const SizedBox(height: 6),
+                                    Text("No matching mappings found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
+                                    const SizedBox(height: 4),
+                                    const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
+                            const DataCell(SizedBox.shrink()),
+                            const DataCell(SizedBox.shrink()),
+                            const DataCell(SizedBox.shrink()),
+                            const DataCell(SizedBox.shrink()),
+                            const DataCell(SizedBox.shrink()),
+                            const DataCell(SizedBox.shrink()),
+                          ],
                         ),
                       ]
                     : List.generate(rows.length, (i) {
                         final item = rows[i];
-                        final sno =
-                            (_page - 1) * (int.tryParse(_entries) ?? 10) +
-                            i +
-                            1;
+                        final sno = (_page - 1) * (int.tryParse(_entries) ?? 10) + i + 1;
                         return DataRow(
                           color: WidgetStateProperty.resolveWith(
-                            (s) =>
-                                i.isEven ? Colors.grey.shade50 : Colors.white,
+                            (s) => i.isEven ? Colors.grey.shade50 : Colors.white,
                           ),
                           cells: [
                             DataCell(_cellText('$sno', 40)),
-                            DataCell(
-                              _cellText(
-                                item['device_code']?.toString() ?? '-',
-                                80,
-                              ),
-                            ),
-                            DataCell(
-                              _cellText(
-                                item['device_name']?.toString() ?? '-',
-                                120,
-                              ),
-                            ),
-                            DataCell(
-                              _cellText(
-                                item['device_model']?.toString() ?? '-',
-                                120,
-                              ),
-                            ),
-                            DataCell(
-                              _cellText(
-                                item['location_name']?.toString() ?? '-',
-                                120,
-                              ),
-                            ),
-                            DataCell(
-                              _cellText(item['floor']?.toString() ?? '-', 100),
-                            ),
-                            DataCell(
-                              _cellText(
-                                item['sublocation']?.toString() ?? '-',
-                                100,
-                              ),
-                            ),
+                            DataCell(_cellText(item['device_code']?.toString() ?? '-', 80)),
+                            DataCell(_cellText(item['device_name']?.toString() ?? '-', 120)),
+                            DataCell(_cellText(item['device_model']?.toString() ?? '-', 120)),
+                            DataCell(_cellText(item['location_name']?.toString() ?? '-', 120)),
+                            DataCell(_cellText(item['floor']?.toString() ?? '-', 60)),
+                            DataCell(_cellText(item['sublocation']?.toString() ?? '-', 100)),
                             DataCell(
                               IconButton(
-                                icon: const Icon(
-                                  Icons.edit,
-                                  color: Colors.blue,
-                                  size: 18,
-                                ),
-                                tooltip: 'Edit',
+                                icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
                                 onPressed: () => _loadForEdit(item['id']),
                               ),
                             ),
                             DataCell(
                               IconButton(
-                                icon: const Icon(
-                                  Icons.delete,
-                                  color: Colors.red,
-                                  size: 18,
-                                ),
-                                tooltip: 'Delete',
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 18),
                                 onPressed: () => _delete(item['id']),
                               ),
                             ),

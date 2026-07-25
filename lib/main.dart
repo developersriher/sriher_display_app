@@ -125,6 +125,21 @@ class MyApp extends StatelessWidget {
           dividerThickness: 1,
         ),
       ),
+      builder: (context, child) {
+        final mediaQueryData = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQueryData.copyWith(
+            textScaler: const TextScaler.linear(0.93), // Slightly zoomed out for small screens
+          ),
+          child: SafeArea(
+            top: false,   // Keeps top AppBars consistent
+            bottom: true, // Prevents bottom UI/pagination from hiding behind Android/iOS navigation bars
+            left: true,
+            right: true,
+            child: child!,
+          ),
+        );
+      },
       home: const LoginPage(), // Changed to always show login page as requested
     );
   }

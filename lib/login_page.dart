@@ -566,7 +566,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Widget _buildSignInButton(double scale) {
-    final btnHeight = (48 * scale).clamp(36.0, 58.0);
+    final btnHeight = (54 * scale).clamp(48.0, 64.0);
     final btnFontSize = (14 * scale).clamp(11.0, 18.0);
     final btnIconSize = (18 * scale).clamp(14.0, 22.0);
     final btnRadius = (14 * scale).clamp(10.0, 18.0);
@@ -608,6 +608,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   backgroundColor: Colors.transparent,
                   foregroundColor: Colors.white,
                   shadowColor: Colors.transparent,
+                  padding: EdgeInsets.zero,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(btnRadius - 2),
                   ),

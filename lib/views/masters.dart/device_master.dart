@@ -30,6 +30,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   String searchQuery = "";
   int currentPage = 0;
   final TextEditingController _searchController = TextEditingController();
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
 
   // --- FORM CONTROLLERS ---
   final TextEditingController _deviceCodeController = TextEditingController();
@@ -313,21 +315,24 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     StylishDialog.show(
       context: context,
       title: editingId == null ? "Create New Device" : "Edit Device Details",
+      titleStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
       subtitle: "Configure system hardware and specifications",
       icon: editingId == null
           ? Icons.add_to_queue_rounded
           : Icons.edit_note_rounded,
-      width: MediaQuery.of(context).size.width * 0.7,
+      width: MediaQuery.of(context).size.width * 0.8,
       builder: (context, setDialogState) {
+        final isDialogMobile = MediaQuery.of(context).size.width < 800;
         return Form(
           key: dialogFormKey,
           autovalidateMode:
               AutovalidateMode.disabled, // ← no validation until submit
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader("DEVICE IDENTITY"),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSectionHeader("DEVICE IDENTITY"),
               Row(
                 children: [
                   Expanded(
@@ -462,32 +467,56 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
               ),
               const SizedBox(height: 32),
               _buildSectionHeader("MANUFACTURING DETAILS"),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildTextField(
-                      "Enter Manufacturer Name",
-                      _manufacturerController,
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Please enter the Manufacturer Name'
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildTextField(
-                      "Enter Warranty Status",
-                      _warrantyController,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+              isDialogMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildTextField(
+                          "Enter Manufacturer Name",
+                          _manufacturerController,
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Please enter the Manufacturer Name'
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          "Enter Warranty Status",
+                          _warrantyController,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                          ],
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Please enter the Warranty Status'
+                              : null,
+                        ),
                       ],
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Please enter the Warranty Status'
-                          : null,
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextField(
+                            "Enter Manufacturer Name",
+                            _manufacturerController,
+                            validator: (v) => (v == null || v.isEmpty)
+                                ? 'Please enter the Manufacturer Name'
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildTextField(
+                            "Enter Warranty Status",
+                            _warrantyController,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                            ],
+                            validator: (v) => (v == null || v.isEmpty)
+                                ? 'Please enter the Warranty Status'
+                                : null,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
               const SizedBox(height: 32),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -499,7 +528,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     },
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
-                        vertical: 14,
+                        vertical: 8,
                         horizontal: 20,
                       ),
                       shape: RoundedRectangleBorder(
@@ -530,7 +559,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                       backgroundColor: const Color(0xFF0F172A),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                        vertical: 14,
+                        vertical: 8,
                         horizontal: 32,
                       ),
                       elevation: 0,
@@ -559,6 +588,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
               ),
             ],
           ),
+         ),
         );
       },
     );
@@ -585,81 +615,82 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SelectionArea(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    final int currentItemCount = _filteredList.isEmpty ? 1 : _filteredList.length;
+    final double tableHeight = 250.0 + (currentItemCount * 65.0);
+
+    final bodyContent = Padding(
+      padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: Colors.grey.shade200),
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(isMobile ? 10.0 : 20.0),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
                   final isNarrow = constraints.maxWidth < 600;
+                  final heading = const AnimatedHeading(
+                    text: "Device List",
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                    ),
+                  );
+
                   return isNarrow
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const AnimatedHeading(
-                              text: "Device List",
-                              style: TextStyle(
-                                color: Colors.blue,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 22,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                _clearForm();
-                                _showDeviceDialog();
-                              },
-                              icon: const Icon(Icons.add_to_queue_rounded, size: 20),
-                              label: const Text(
-                                "CREATE DEVICE",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
+                      ? SizedBox(
+                          width: double.infinity,
+                          child: Center(child: heading),
                         )
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const AnimatedHeading(
-                              text: "Device List",
-                              style: TextStyle(
-                                color: Colors.blue,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 22,
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                _clearForm();
-                                _showDeviceDialog();
-                              },
-                              icon: const Icon(Icons.add_to_queue_rounded, size: 20),
-                              label: const Text(
-                                "CREATE DEVICE",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
+                            heading,
+                            _buildCreateDeviceButton(isNarrow),
                           ],
                         );
                 },
               ),
               const SizedBox(height: 20),
-
-              // List Card
-              Expanded(child: _buildTableCard()),
+              isMobile
+                  ? SizedBox(
+                      height: tableHeight,
+                      child: _buildTableCard(),
+                    )
+                  : Expanded(
+                      child: _buildTableCard(),
+                    ),
             ],
           ),
         ),
+      ),
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
+      body: SelectionArea(
+        child: isMobile
+            ? SingleChildScrollView(
+                child: bodyContent,
+              )
+            : bodyContent,
       ),
     );
   }
@@ -669,31 +700,342 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     return const SizedBox.shrink(); // No longer used directly
   }
 
-  Widget _buildTableCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+  Widget _buildSortHeader(String label, int colIndex) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (_sortColumnIndex == colIndex) {
+            _sortAscending = !_sortAscending;
+          } else {
+            _sortColumnIndex = colIndex;
+            _sortAscending = true;
+          }
+          currentPage = 0;
+        });
+      },
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+                fontSize: 10,
+              ),
+              textAlign: TextAlign.left,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 2),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Align(
+                heightFactor: 0.5,
+                child: Icon(
+                  Icons.arrow_drop_up,
+                  size: 14,
+                  color: _sortColumnIndex == colIndex && _sortAscending
+                      ? Colors.blue
+                      : const Color(0xFF94A3B8),
+                ),
+              ),
+              Align(
+                heightFactor: 0.5,
+                child: Icon(
+                  Icons.arrow_drop_down,
+                  size: 14,
+                  color: _sortColumnIndex == colIndex && !_sortAscending
+                      ? Colors.blue
+                      : const Color(0xFF94A3B8),
+                ),
+              ),
+            ],
           ),
         ],
-        border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            _buildListHeaderControls(),
-            const SizedBox(height: 16),
+    );
+  }
+
+  Widget _buildHeaderCell(String label, {int colIndex = -1}) {
+    if (colIndex < 0) {
+      return Center(
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.blue,
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    return _buildSortHeader(label, colIndex);
+  }
+
+  Widget _buildTableCard() {
+    return Column(
+      children: [
+        _buildListHeaderControls(),
+        const SizedBox(height: 16),
 
             // The Scrollable Table Container
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 1200;
+
+                  if (isNarrow) {
+                    final Map<int, TableColumnWidth> colWidths = const {
+                      0: FixedColumnWidth(125),
+                      1: FixedColumnWidth(95),
+                      2: FixedColumnWidth(110),
+                      3: FixedColumnWidth(90),
+                      4: FixedColumnWidth(70),
+                      5: FixedColumnWidth(70),
+                      6: FixedColumnWidth(95),
+                      7: FixedColumnWidth(105),
+                      8: FixedColumnWidth(110),
+                      9: FixedColumnWidth(45),
+                      10: FixedColumnWidth(50),
+                    };
+
+                    final double tableWidth = constraints.maxWidth > 965 ? constraints.maxWidth : 965;
+                    final pagedList = _filteredList;
+
+                    return SizedBox(
+                      width: double.infinity,
+                      height: constraints.maxHeight,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: tableWidth,
+                              height: constraints.maxHeight,
+                              child: Column(
+                                children: [
+                                  // Fixed Header Row — never scrolls vertically
+                                  Container(
+                                    height: 45,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      border: Border(
+                                        bottom: BorderSide(color: Colors.grey.shade300, width: 1.0),
+                                      ),
+                                    ),
+                                    child: Table(
+                                      columnWidths: colWidths,
+                                      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                                      children: [
+                                        TableRow(
+                                          children: [
+                                            _buildHeaderCell("Type of Device", colIndex: 0),
+                                            _buildHeaderCell("Device ID", colIndex: 1),
+                                            _buildHeaderCell("Name", colIndex: 2),
+                                            _buildHeaderCell("Model", colIndex: 3),
+                                            _buildHeaderCell("OS", colIndex: 4),
+                                            _buildHeaderCell("Year", colIndex: 5),
+                                            _buildHeaderCell("Warranty", colIndex: 6),
+                                            _buildHeaderCell("Serial No", colIndex: 7),
+                                            _buildHeaderCell("Manufacture", colIndex: 8),
+                                            _buildHeaderCell("Edit"),
+                                            _buildHeaderCell("Action"),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Vertically scrollable body rows only
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.vertical,
+                                      child: Table(
+                                        columnWidths: colWidths,
+                                        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                                        children: pagedList.isEmpty
+                                            ? [
+                                                TableRow(
+                                                  children: [
+                                                    const SizedBox.shrink(),
+                                                    const SizedBox.shrink(),
+                                                    Padding(
+                                                      padding: const EdgeInsets.symmetric(vertical: 36.0),
+                                                      child: Column(
+                                                        mainAxisAlignment: MainAxisAlignment.center,
+                                                        children: [
+                                                          Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
+                                                          const SizedBox(height: 8),
+                                                          Text("No matching devices found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
+                                                          const SizedBox(height: 4),
+                                                          const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox.shrink(),
+                                                    const SizedBox.shrink(),
+                                                    const SizedBox.shrink(),
+                                                    const SizedBox.shrink(),
+                                                    const SizedBox.shrink(),
+                                                    const SizedBox.shrink(),
+                                                    const SizedBox.shrink(),
+                                                    const SizedBox.shrink(),
+                                                  ],
+                                                )
+                                              ]
+                                            : pagedList.map((device) {
+                                          final Map<String, dynamic> data = (device is Map) ? Map<String, dynamic>.from(device) : {};
+                                          String val(List<String> keys) {
+                                            for (var k in keys) {
+                                              if (data.containsKey(k) && data[k] != null) return data[k].toString();
+                                            }
+                                            return "-";
+                                          }
+
+                                          return TableRow(
+                                            decoration: BoxDecoration(
+                                              border: Border(
+                                                bottom: BorderSide(color: Colors.grey.shade100),
+                                              ),
+                                            ),
+                                            children: [
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                                child: Text(
+                                                  val(['type_of_device', 'typeOfDevice', 'device_type', 'type']),
+                                                  style: const TextStyle(fontSize: 11),
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                                child: Text(
+                                                  val(['device_code', 'deviceCode', 'code']),
+                                                  style: const TextStyle(fontSize: 11),
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                                child: Text(
+                                                  val(['device_name', 'deviceName', 'name']),
+                                                  style: const TextStyle(fontSize: 11),
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                                child: Text(
+                                                  val(['device_model', 'deviceModel', 'model']),
+                                                  style: const TextStyle(fontSize: 11),
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                                child: Text(
+                                                  val(['device_os', 'deviceOs', 'os']),
+                                                  style: const TextStyle(fontSize: 11),
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                                child: Text(
+                                                  val(['device_yr_model', 'deviceYrModel', 'year', 'year_of_model']),
+                                                  style: const TextStyle(fontSize: 11),
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                                child: Text(
+                                                  val(['device_warranty', 'deviceWarranty', 'warranty']),
+                                                  style: const TextStyle(fontSize: 11),
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                                child: Text(
+                                                  val(['device_s_no', 'deviceSNo', 'serial_number', 'serial']),
+                                                  style: const TextStyle(fontSize: 11),
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                                                child: Text(
+                                                  val(['Manufacture', 'manufacture']),
+                                                  style: const TextStyle(fontSize: 11),
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              Center(
+                                                child: IconButton(
+                                                  icon: const Icon(Icons.edit, color: Colors.blue, size: 16),
+                                                  padding: EdgeInsets.zero,
+                                                  constraints: const BoxConstraints(),
+                                                  onPressed: () {
+                                                    Map<String, dynamic> localData = data is Map<String, dynamic> ? data : Map<String, dynamic>.from(data);
+                                                    loadDeviceToEdit(data['id'] ?? data['ID'], localData);
+                                                  },
+                                                ),
+                                              ),
+                                              Center(
+                                                child: Transform.scale(
+                                                  scale: 0.65,
+                                                  child: Switch(
+                                                    value: data['active_status'] == 1 || data['status'] == 1 || data['status'] == "1",
+                                                    activeColor: Colors.green,
+                                                    onChanged: (v) {},
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
                   return Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.white10),
@@ -710,38 +1052,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                           ),
 
                         Expanded(
-                          child:
-                              (deviceList.isNotEmpty && _filteredList.isEmpty)
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.search_off_rounded,
-                                        size: 48,
-                                        color: Colors.blue.shade200,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        "No matching devices found",
-                                        style: TextStyle(
-                                          color: Colors.blue.shade900,
-                                          fontSize: 16.0,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      const Text(
-                                        "Try a different search term",
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 13.0,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : SingleChildScrollView(
+                          child: SingleChildScrollView(
                                   scrollDirection: Axis.vertical,
                                   child: SingleChildScrollView(
                                     scrollDirection: Axis.horizontal,
@@ -760,7 +1071,39 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                                           color: Colors.white10,
                                         ),
                                         columns: _getColumns(),
-                                        rows: _filteredList
+                                        rows: _filteredList.isEmpty
+                                            ? [
+                                                DataRow(
+                                                  cells: [
+                                                    const DataCell(SizedBox.shrink()),
+                                                    const DataCell(SizedBox.shrink()),
+                                                    DataCell(
+                                                      Padding(
+                                                        padding: const EdgeInsets.symmetric(vertical: 20.0),
+                                                        child: Column(
+                                                          mainAxisAlignment: MainAxisAlignment.center,
+                                                          children: [
+                                                            Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
+                                                            const SizedBox(height: 6),
+                                                            Text("No matching devices found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
+                                                            const SizedBox(height: 4),
+                                                            const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const DataCell(SizedBox.shrink()),
+                                                    const DataCell(SizedBox.shrink()),
+                                                    const DataCell(SizedBox.shrink()),
+                                                    const DataCell(SizedBox.shrink()),
+                                                    const DataCell(SizedBox.shrink()),
+                                                    const DataCell(SizedBox.shrink()),
+                                                    const DataCell(SizedBox.shrink()),
+                                                    const DataCell(SizedBox.shrink()),
+                                                  ],
+                                                ),
+                                              ]
+                                            : _filteredList
                                             .map(
                                               (device) => _getDataRow(device),
                                             )
@@ -776,24 +1119,87 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 },
               ),
             ),
-
             const SizedBox(height: 20),
             _buildTableFooter(),
-          ],
-        ),
-      ),
+      ],
     );
   }
 
   List<dynamic> get _allFilteredList {
-    if (searchQuery.isEmpty) return deviceList;
-    return deviceList.where((device) {
-      final code = (device['device_code'] ?? '').toString().toLowerCase();
-      final name = (device['device_name'] ?? '').toString().toLowerCase();
-      final model = (device['device_model'] ?? '').toString().toLowerCase();
-      final q = searchQuery.toLowerCase();
-      return code.contains(q) || name.contains(q) || model.contains(q);
-    }).toList();
+    List<dynamic> list = [];
+    if (searchQuery.isEmpty) {
+      list = List.from(deviceList);
+    } else {
+      list = deviceList.where((device) {
+        final code = (device['device_code'] ?? '').toString().toLowerCase();
+        final name = (device['device_name'] ?? '').toString().toLowerCase();
+        final model = (device['device_model'] ?? '').toString().toLowerCase();
+        final q = searchQuery.toLowerCase();
+        return code.contains(q) || name.contains(q) || model.contains(q);
+      }).toList();
+    }
+
+    if (_sortColumnIndex != null) {
+      list.sort((a, b) {
+        final Map<String, dynamic> dataA = (a is Map) ? Map<String, dynamic>.from(a) : {};
+        final Map<String, dynamic> dataB = (b is Map) ? Map<String, dynamic>.from(b) : {};
+
+        String val(Map<String, dynamic> data, List<String> keys) {
+          for (var k in keys) {
+            if (data.containsKey(k) && data[k] != null) return data[k].toString();
+          }
+          return "";
+        }
+
+        String aVal = "";
+        String bVal = "";
+
+        switch (_sortColumnIndex) {
+          case 0:
+            aVal = val(dataA, ['type_of_device', 'typeOfDevice', 'device_type', 'type']);
+            bVal = val(dataB, ['type_of_device', 'typeOfDevice', 'device_type', 'type']);
+            break;
+          case 1:
+            aVal = val(dataA, ['device_code', 'deviceCode', 'code']);
+            bVal = val(dataB, ['device_code', 'deviceCode', 'code']);
+            break;
+          case 2:
+            aVal = val(dataA, ['device_name', 'deviceName', 'name']);
+            bVal = val(dataB, ['device_name', 'deviceName', 'name']);
+            break;
+          case 3:
+            aVal = val(dataA, ['device_model', 'deviceModel', 'model']);
+            bVal = val(dataB, ['device_model', 'deviceModel', 'model']);
+            break;
+          case 4:
+            aVal = val(dataA, ['device_os', 'deviceOs', 'os']);
+            bVal = val(dataB, ['device_os', 'deviceOs', 'os']);
+            break;
+          case 5:
+            aVal = val(dataA, ['device_yr_model', 'deviceYrModel', 'year', 'year_of_model']);
+            bVal = val(dataB, ['device_yr_model', 'deviceYrModel', 'year', 'year_of_model']);
+            break;
+          case 6:
+            aVal = val(dataA, ['device_warranty', 'deviceWarranty', 'warranty']);
+            bVal = val(dataB, ['device_warranty', 'deviceWarranty', 'warranty']);
+            break;
+          case 7:
+            aVal = val(dataA, ['device_s_no', 'deviceSNo', 'serial_number', 'serial']);
+            bVal = val(dataB, ['device_s_no', 'deviceSNo', 'serial_number', 'serial']);
+            break;
+          case 8:
+            aVal = val(dataA, ['Manufacture', 'manufacture']);
+            bVal = val(dataB, ['Manufacture', 'manufacture']);
+            break;
+        }
+
+        return _sortAscending
+            ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
+            : bVal.toLowerCase().compareTo(aVal.toLowerCase());
+      });
+    }
+
+    return list;
   }
 
   List<dynamic> get _filteredList {
@@ -1001,9 +1407,9 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
-              vertical: 14,
+              vertical: 10,
             ),
-            helperText: ' ', // Reserve space
+            helperText: null,
           ),
         ),
       ],
@@ -1050,9 +1456,32 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
               .toList(),
           validator: validator,
           autovalidateMode: AutovalidateMode.onUserInteraction,
-          helperText: ' ',
+          helperText: null,
         ),
       ],
+    );
+  }
+
+  Widget _buildCreateDeviceButton(bool isNarrow) {
+    return ElevatedButton.icon(
+      onPressed: () {
+        _clearForm();
+        _showDeviceDialog();
+      },
+      icon: Icon(Icons.add_to_queue_rounded, size: isNarrow ? 14 : 20),
+      style: isNarrow
+          ? ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: const Size(80, 32),
+            )
+          : null,
+      label: Text(
+        "CREATE DEVICE",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: isNarrow ? 10 : 12,
+        ),
+      ),
     );
   }
 
@@ -1069,7 +1498,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
-                color: Colors.black87,
+                color: Color(0xFF334155),
               ),
             ),
             const SizedBox(width: 6),
@@ -1111,68 +1540,74 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 }),
               ),
             ),
-            const SizedBox(width: 6),
-            const Text(
-              " entries",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Colors.black87,
+            if (!isNarrow) ...[
+              const SizedBox(width: 6),
+              const Text(
+                " entries",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Color(0xFF334155),
+                ),
               ),
-            ),
+            ],
           ],
         );
 
-        final searchBox = SizedBox(
-          width: isNarrow ? 200 : 250,
-          height: 40,
-          child: TextField(
-            controller: _searchController,
-            onChanged: (val) {
-              setState(() {
-                searchQuery = val;
-                currentPage = 0;
-              });
-            },
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-            decoration: InputDecoration(
-              hintText: "Search Devices...",
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF94A3B8),
-              ),
-              prefixIcon: const Icon(Icons.search, size: 16),
-              isDense: true,
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+        final searchBox = ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
+          child: SizedBox(
+            height: 38,
+            child: TextField(
+              controller: _searchController,
+              onChanged: (val) {
+                setState(() {
+                  searchQuery = val;
+                  currentPage = 0;
+                });
+              },
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
+              decoration: InputDecoration(
+                hintText: "Search Devices...",
+                hintStyle: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 12,
+                ),
+                prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF94A3B8)),
+                isDense: true,
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
               ),
             ),
           ),
         );
 
         return isNarrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  showEntries,
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: searchBox,
-                  ),
-                ],
+            ? SizedBox(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _buildCreateDeviceButton(isNarrow),
+                    const SizedBox(height: 10),
+                    showEntries,
+                    const SizedBox(height: 10),
+                    searchBox,
+                  ],
+                ),
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1188,9 +1623,10 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   Widget _buildTableFooter() {
     final limit = int.tryParse(entriesValue) ?? 10;
     final total = _allFilteredList.length;
-    final totalPages = (total / limit).ceil().clamp(1, double.maxFinite).toInt();
-    final start = total == 0 ? 0 : currentPage * limit + 1;
-    final end = (currentPage * limit + limit).clamp(0, total);
+    final totalPages = (total / limit).ceil().clamp(1, 9999);
+    final safePage = currentPage.clamp(0, totalPages - 1);
+    final start = total == 0 ? 0 : safePage * limit + 1;
+    final end = (safePage * limit + limit).clamp(0, total);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1221,13 +1657,16 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
         );
 
         return isNarrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  paginationText,
-                  const SizedBox(height: 10),
-                  paginationControls,
-                ],
+            ? SizedBox(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    paginationText,
+                    const SizedBox(height: 10),
+                    paginationControls,
+                  ],
+                ),
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1241,9 +1680,6 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   }
 
   List<Widget> _buildPageNumberButtons(int totalPages) {
-    // Strict max-3 sliding window (0-indexed currentPage).
-    // Shows exactly min(3, totalPages) consecutive page buttons — no ellipsis.
-    // Window operates in 0-indexed space; labels display i+1.
     final visibleCount = totalPages.clamp(1, 3);
     int windowStart = currentPage - 1; // try to place currentPage in middle
     if (windowStart < 0) windowStart = 0;
@@ -1270,34 +1706,34 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     bool enabled = true,
     VoidCallback? onTap,
   }) {
-    return Container(
-      margin: EdgeInsets.zero,
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          backgroundColor: active
-              ? Colors.blue
-              : enabled
-                  ? Colors.grey.shade100
-                  : Colors.grey.shade50,
-          foregroundColor: active
-              ? Colors.white
-              : enabled
-                  ? Colors.black87
-                  : Colors.grey.shade400,
-          side: active
-              ? const BorderSide(color: Colors.blue)
-              : BorderSide(color: Colors.grey.shade300),
-          padding: EdgeInsets.symmetric(
-              horizontal: label.length > 1 ? 15 : 12),
-          minimumSize: const Size(40, 36),
-          shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.zero),
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label.length > 2 ? 12 : 8,
+          vertical: 8,
         ),
-        onPressed: enabled ? onTap : null,
+        constraints: const BoxConstraints(minWidth: 34),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active
+              ? Colors.blue
+              : (enabled ? Colors.white : Colors.grey.shade50),
+          border: Border.all(
+            color: active ? Colors.blue : Colors.grey.shade300,
+          ),
+          borderRadius: BorderRadius.zero,
+        ),
         child: Text(
           label,
-          style: const TextStyle(
-              fontSize: 12, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: active
+                ? Colors.white
+                : (enabled ? Colors.black87 : Colors.black26),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
