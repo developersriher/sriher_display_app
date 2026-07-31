@@ -532,7 +532,9 @@ class _DepartmentViewState extends State<DepartmentView> {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.of(context).size.width < 600;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isTabletOrMobile = screenWidth < 950;
     
     final int rowsPerPage = int.tryParse(entriesValue) ?? 10;
     final int totalRows = filteredList.length;
@@ -541,7 +543,7 @@ class _DepartmentViewState extends State<DepartmentView> {
     final int start = safePage * rowsPerPage;
     final int end = (start + rowsPerPage).clamp(0, totalRows);
     final int currentItemCount = totalRows == 0 ? 1 : (end - start);
-    final double tableHeight = 250.0 + (currentItemCount * 65.0);
+    final double tableHeight = (isTabletOrMobile ? 180.0 : 250.0) + (currentItemCount * 48.0);
 
     final bodyContent = Padding(
       padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
@@ -975,7 +977,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                   ),
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: MediaQuery.of(context).size.width < 950 ? 4 : 16),
         _buildTableFooter(),
       ],
     );

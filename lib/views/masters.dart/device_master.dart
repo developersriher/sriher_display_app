@@ -617,9 +617,10 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
+    final isTabletOrMobile = screenWidth < 950;
     
     final int currentItemCount = _filteredList.isEmpty ? 1 : _filteredList.length;
-    final double tableHeight = 250.0 + (currentItemCount * 65.0);
+    final double tableHeight = (isTabletOrMobile ? 180.0 : 250.0) + (currentItemCount * 45.0);
 
     final bodyContent = Padding(
       padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
@@ -1119,7 +1120,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 },
               ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: MediaQuery.of(context).size.width < 950 ? 4 : 20),
             _buildTableFooter(),
       ],
     );

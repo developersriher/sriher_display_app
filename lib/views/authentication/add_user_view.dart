@@ -497,9 +497,6 @@ class _AddUserViewState extends State<AddUserView> {
       ),
     );
 
-    final int currentItemCount = pagedUsers.isEmpty ? 1 : pagedUsers.length;
-    final double tableHeight = 150.0 + (currentItemCount * 65.0);
-
     final bodyContent = Padding(
       padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
       child: Container(
@@ -518,6 +515,7 @@ class _AddUserViewState extends State<AddUserView> {
         child: Padding(
           padding: EdgeInsets.all(isMobile ? 10.0 : 20.0),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               // ── Responsive heading row ──
               LayoutBuilder(
@@ -537,71 +535,42 @@ class _AddUserViewState extends State<AddUserView> {
               const SizedBox(height: 20),
               _buildListHeader(isMobile: isMobile, addUserBtn: addUserBtn),
               const SizedBox(height: 20),
-              isMobile
-                  ? SizedBox(
-                      height: tableHeight,
-                      child: isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : (allUsers.isNotEmpty && pagedUsers.isEmpty)
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.search_off_rounded,
-                                          size: 48,
-                                          color: Colors.blue.shade200),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        "No matching users found",
-                                        style: TextStyle(
-                                          color: Colors.blue.shade900,
-                                          fontSize: 16.0,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      const Text(
-                                        "Try a different search term",
-                                        style: TextStyle(
-                                            color: Colors.grey, fontSize: 13.0),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : _buildTableContainer(pagedUsers),
+              isLoading
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Center(child: CircularProgressIndicator()),
                     )
-                  : Expanded(
-                      child: isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : (allUsers.isNotEmpty && pagedUsers.isEmpty)
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.search_off_rounded,
-                                          size: 48,
-                                          color: Colors.blue.shade200),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        "No matching users found",
-                                        style: TextStyle(
-                                          color: Colors.blue.shade900,
-                                          fontSize: 16.0,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      const Text(
-                                        "Try a different search term",
-                                        style: TextStyle(
-                                            color: Colors.grey, fontSize: 13.0),
-                                      ),
-                                    ],
+                  : (allUsers.isNotEmpty && pagedUsers.isEmpty)
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 30),
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.search_off_rounded,
+                                    size: 48,
+                                    color: Colors.blue.shade200),
+                                const SizedBox(height: 12),
+                                Text(
+                                  "No matching users found",
+                                  style: TextStyle(
+                                    color: Colors.blue.shade900,
+                                    fontSize: 16.0,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                )
-                              : _buildTableContainer(pagedUsers),
-                    ),
-              const SizedBox(height: 20),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  "Try a different search term",
+                                  style: TextStyle(
+                                      color: Colors.grey, fontSize: 13.0),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : _buildTableContainer(pagedUsers),
+              const SizedBox(height: 16),
               _buildPagination(
                 pagedUsers.length,
                 filtered.length,
@@ -617,11 +586,9 @@ class _AddUserViewState extends State<AddUserView> {
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
       body: SelectionArea(
-        child: isMobile
-            ? SingleChildScrollView(
-                child: bodyContent,
-              )
-            : bodyContent,
+        child: SingleChildScrollView(
+          child: bodyContent,
+        ),
       ),
     );
   }

@@ -57,6 +57,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   List<dynamic> _deptList = []; // loaded from /categoryview
   bool isLoading = true;
   bool isSubmitting = false;
+  bool _isSubmitting = false;
 
   // Tracks IDs whose status toggle API call is currently in-flight.
   // Prevents double-tap flicker and race conditions.
@@ -274,68 +275,82 @@ class _FileUploadViewState extends State<FileUploadView> {
   // API 2: INSERT FILE — instant dialog dismiss + background streaming upload
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> insertFileAction() async {
+    if (_isSubmitting) return;
+
     if (!_formKey.currentState!.validate() || _selectedFile == null) {
       if (_selectedFile == null) _showSnackBar("Please pick a file to upload.");
       return;
     }
     if (!mounted) return;
 
-    // Snapshot all form values BEFORE the dialog is popped.
-    final String uploadName = _nameController.text.trim();
-    final String uploadDesc = _descController.text.trim();
-    final String uploadCatId = _selectedDeptId!;
-    final String uploadType = _selectedType;
-    final String uploadFromDate = _fromDateController.text;
-    final String uploadToDate = _toDateController.text;
-    final PlatformFile uploadFile = _selectedFile!;
-    final String filename = uploadFile.name;
-    final String extension = filename.split('.').last.toLowerCase();
-    final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    setState(() {
+      _isSubmitting = true;
+    });
 
-    // Unique key for this upload session
-    final String tempId = 'upload_${DateTime.now().millisecondsSinceEpoch}';
+    try {
+      // Snapshot all form values BEFORE the dialog is popped.
+      final String uploadName = _nameController.text.trim();
+      final String uploadDesc = _descController.text.trim();
+      final String uploadCatId = _selectedDeptId!;
+      final String uploadType = _selectedType;
+      final String uploadFromDate = _fromDateController.text;
+      final String uploadToDate = _toDateController.text;
+      final PlatformFile uploadFile = _selectedFile!;
+      final String filename = uploadFile.name;
+      final String extension = filename.split('.').last.toLowerCase();
+      final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-    // ── STEP 1: Dismiss dialog immediately (before any await) ──
-    if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-    if (mounted) _resetForm();
+      // Unique key for this upload session
+      final String tempId = 'upload_${DateTime.now().millisecondsSinceEpoch}';
 
-    // ── STEP 2: Insert optimistic "uploading" row at top of table ──
-    final Map<String, dynamic> optimisticRow = {
-      'id': tempId,
-      '_isUploading': true,
-      'user_filename': uploadName,
-      'description': uploadDesc,
-      'category_id': uploadCatId,
-      'file_name': filename,
-      'file_type': extension,
-      'file_status': 0,
-      'status': 0,
-      'type': uploadType == 'Short Term' ? 'Temporary' : uploadType,
-      'valid_from_date': uploadType == 'Short Term' ? uploadFromDate : today,
-      'valid_upto_date': uploadType == 'Short Term' ? uploadToDate : null,
-    };
+      // ── STEP 1: Dismiss dialog immediately (before any await) ──
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+      if (mounted) _resetForm();
 
-    if (mounted) {
-      setState(() {
-        fileList = [optimisticRow, ...fileList];
-        _uploadTasks[tempId] = _UploadTask(tempId: tempId);
-      });
+      // ── STEP 2: Insert optimistic "uploading" row at top of table ──
+      final Map<String, dynamic> optimisticRow = {
+        'id': tempId,
+        '_isUploading': true,
+        'user_filename': uploadName,
+        'description': uploadDesc,
+        'category_id': uploadCatId,
+        'file_name': filename,
+        'file_type': extension,
+        'file_status': 0,
+        'status': 0,
+        'type': uploadType == 'Short Term' ? 'Temporary' : uploadType,
+        'valid_from_date': uploadType == 'Short Term' ? uploadFromDate : today,
+        'valid_upto_date': uploadType == 'Short Term' ? uploadToDate : null,
+      };
+
+      if (mounted) {
+        setState(() {
+          fileList = [optimisticRow, ...fileList];
+          _uploadTasks[tempId] = _UploadTask(tempId: tempId);
+        });
+      }
+
+      // ── STEP 3: Fire-and-forget background upload ──
+      _runBackgroundUpload(
+        tempId: tempId,
+        uploadName: uploadName,
+        uploadDesc: uploadDesc,
+        uploadCatId: uploadCatId,
+        uploadType: uploadType,
+        uploadFromDate: uploadFromDate,
+        uploadToDate: uploadToDate,
+        uploadFile: uploadFile,
+        filename: filename,
+        extension: extension,
+        today: today,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
-
-    // ── STEP 3: Fire-and-forget background upload ──
-    _runBackgroundUpload(
-      tempId: tempId,
-      uploadName: uploadName,
-      uploadDesc: uploadDesc,
-      uploadCatId: uploadCatId,
-      uploadType: uploadType,
-      uploadFromDate: uploadFromDate,
-      uploadToDate: uploadToDate,
-      uploadFile: uploadFile,
-      filename: filename,
-      extension: extension,
-      today: today,
-    );
   }
 
   /// Runs the actual multipart upload in the background.
@@ -392,10 +407,28 @@ class _FileUploadViewState extends State<FileUploadView> {
           final idx = fileList.indexWhere((e) => e['id']?.toString() == tempId);
           if (idx != -1) {
             fileList[idx] = Map<String, dynamic>.from(fileList[idx])
+              ..['_isUploading'] = false
               ..['_uploadError'] = msg;
           }
         });
-        _showSnackBar('Upload failed: $msg', isError: true);
+        if (msg.contains('403')) {
+          _showSnackBar(
+            "⚠️ Server rejected upload (HTTP 403). Please contact backend team/server admin.",
+            isError: true,
+          );
+        } else if (msg.contains('413')) {
+          _showSnackBar(
+            "⚠️ File is too large for the server (HTTP 413). Please contact server administrator.",
+            isError: true,
+          );
+        } else if (msg.contains('500')) {
+          _showSnackBar(
+            "⚠️ Internal server error (HTTP 500). Please contact server admin.",
+            isError: true,
+          );
+        } else {
+          _showSnackBar('Upload failed: $msg', isError: true);
+        }
       } catch (e) {
         debugPrint('_markError setState failed: $e');
       }
@@ -452,6 +485,12 @@ class _FileUploadViewState extends State<FileUploadView> {
         _markError('No file data available.');
         return;
       }
+
+      // Calculate and set Content-Length and Connection headers explicitly to disable
+      // chunked transfer encoding (which Cloudflare / WAF / IIS proxies block or time out for large files).
+      final contentLength = request.contentLength;
+      request.headers['Content-Length'] = contentLength.toString();
+      request.headers['Connection'] = 'keep-alive';
 
       // ── Send the request and collect the response ──
       // Note: the http package does not expose per-chunk upload progress;
@@ -1618,7 +1657,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             ),
             const SizedBox(width: 16),
             ElevatedButton(
-              onPressed: isSubmitting
+              onPressed: isSubmitting || _isSubmitting
                   ? null
                   : () {
                       setDialogState(() {
@@ -1652,7 +1691,7 @@ class _FileUploadViewState extends State<FileUploadView> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: isSubmitting
+              child: (isSubmitting || _isSubmitting)
                   ? const SizedBox(
                       width: 16,
                       height: 16,

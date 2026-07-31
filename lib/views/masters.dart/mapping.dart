@@ -798,10 +798,12 @@ class _MappingViewState extends State<MappingView> {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.of(context).size.width < 600;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isTabletOrMobile = screenWidth < 950;
     
     final int currentItemCount = _paged.isEmpty ? 1 : _paged.length;
-    final double tableHeight = 250.0 + (currentItemCount * 65.0);
+    final double tableHeight = (isTabletOrMobile ? 180.0 : 250.0) + (currentItemCount * 42.0);
 
     final bodyContent = Padding(
       padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
@@ -1480,7 +1482,7 @@ class _MappingViewState extends State<MappingView> {
                     : _buildTable(),
               ),
 
-              const SizedBox(height: 16),
+              SizedBox(height: MediaQuery.of(context).size.width < 950 ? 4 : 16),
 
               // Footer Pagination
               isNarrow

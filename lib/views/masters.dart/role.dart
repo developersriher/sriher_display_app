@@ -1566,7 +1566,7 @@ class _RoleViewState extends State<RoleView>
 
   Widget _buildPagination(int totalCount, int limit) {
     int totalPages = (totalCount / limit).ceil();
-    if (totalPages <= 1) return const SizedBox.shrink();
+    if (totalPages < 1) totalPages = 1;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
