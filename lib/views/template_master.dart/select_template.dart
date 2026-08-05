@@ -4,8 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:async';
 import 'dart:convert';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
@@ -35,7 +33,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
   List<dynamic> templates = [];
   List<dynamic> categories = [];
-  List<dynamic> availableFiles = [];
+
+  /// Master list: ALL files fetched for current dept+template (images+videos combined).
+  /// Radio buttons filter this in-memory — no extra network calls.
+  List<dynamic> _masterAvailableFiles = [];
+
+  /// Derived filtered view — updated whenever _masterAvailableFiles or fileType changes.
+  List<dynamic> _displayedFiles = [];
   List<dynamic> assignedFiles = [];
 
   bool isLoadingTemplates = false;
@@ -54,6 +58,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
   // Map to store controllers for each available file to prevent recreation
   final Map<int, TextEditingController> _availableFileControllers = {};
+
+  // Set tracking file IDs currently in the process of being assigned (debouncing)
+  final Set<int> _addingFileIds = {};
 
   // Background polling timer — re-fetches assignedFiles every 30 s when a
   // template is selected so the controller list stays in sync with the backend
@@ -78,6 +85,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted && selectedTemplateId != null) {
         _silentRefreshAssignedFiles();
+        // Also silently sync available files in the background
+        _silentRefreshAvailableFiles();
       }
     });
   }
@@ -127,6 +136,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   // API CALLS
   // ──────────────────────────────────────────────────────────────────────────
 
+  Future<dynamic> _parseJsonAsync(String body) async {
+    if (kIsWeb) {
+      return jsonDecode(body);
+    }
+    return await compute(jsonDecode, body);
+  }
+
   Future<void> _fetchTemplates() async {
     if (!mounted) return;
     setState(() => isLoadingTemplates = true);
@@ -139,7 +155,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         headers: {'Content-Type': 'application/json'},
       );
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final data = await _parseJsonAsync(response.body);
         if (mounted) {
           setState(() {
             final List<dynamic> list = data['data'] ?? [];
@@ -171,7 +187,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         headers: {'Content-Type': 'application/json'},
       );
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final data = await _parseJsonAsync(response.body);
         if (mounted) {
           setState(() {
             final List<dynamic> list = data['data'] ?? [];
@@ -191,146 +207,223 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
   }
 
+  /// Filters _masterAvailableFiles by the current [fileType] and stores result in
+  /// [_displayedFiles]. Pure in-memory — zero network calls.
+  void _applyFileTypeFilter() {
+    if (fileType == 'videos') {
+      _displayedFiles = _masterAvailableFiles.where((f) => _isFileVideo(f)).toList();
+    } else {
+      _displayedFiles = _masterAvailableFiles.where((f) => !_isFileVideo(f)).toList();
+    }
+  }
+
+  /// Fetches files available for the selected department + template by fetching
+  /// BOTH [selectTemplate_availableFilesview] and the Department Library [/fileview].
+  /// Merges both lists into [_masterAvailableFiles] and deduplicates by file_id.
   Future<void> _fetchAvailableFiles() async {
     if (selectedTemplateId == null || selectedCategoryId == null) return;
     if (!mounted) return;
-    setState(() => isLoadingAvailableFiles = true);
+    setState(() {
+      isLoadingAvailableFiles = true;
+      _masterAvailableFiles = [];
+      _displayedFiles = [];
+      for (var c in _availableFileControllers.values) c.dispose();
+      _availableFileControllers.clear();
+    });
 
-    // ── FIX #1: category_id in selectTemplate_availableFilesview is a MEDIA
-    // type (1 = images, 2 = videos), NOT the department id. Fetch both in
-    // parallel so that videos (category_id=2) are never silently excluded.
     try {
+      final ts = DateTime.now().millisecondsSinceEpoch;
+
+      // Parallel fetch:
+      // a) selectTemplate_availableFilesview (template + category scoped)
+      // b) /fileview (Department library uploaded files)
       final results = await Future.wait([
         http.post(
-          Uri.parse('$_baseUrl/selectTemplate_availableFilesview'),
+          Uri.parse('$_baseUrl/selectTemplate_availableFilesview?_t=$ts'),
           body: jsonEncode({
             "api_key": _apiKey,
             "template_id": selectedTemplateId,
-            "category_id": 1, // images
+            "category_id": selectedCategoryId,
           }),
           headers: {'Content-Type': 'application/json'},
         ),
         http.post(
-          Uri.parse('$_baseUrl/selectTemplate_availableFilesview'),
-          body: jsonEncode({
-            "api_key": _apiKey,
-            "template_id": selectedTemplateId,
-            "category_id": 2, // videos
-          }),
+          Uri.parse('$_baseUrl/fileview?_t=$ts'),
+          body: jsonEncode({"api_key": _apiKey}),
           headers: {'Content-Type': 'application/json'},
         ),
       ]);
 
-      if (mounted) {
-        final List<dynamic> merged = [];
-        final Set<String> seenIds = {};
+      if (!mounted) return;
 
-        for (final resp in results) {
-          if (resp.statusCode == 200) {
-            final data = jsonDecode(resp.body);
-            final files = List<dynamic>.from(data['data'] ?? []);
-            for (final f in files) {
-              final id = f['id']?.toString() ?? '';
-              if (seenIds.add(id)) merged.add(f);
+      final List<dynamic> merged = [];
+      final Set<String> seenIds = {};
+
+      // 1. Parse selectTemplate_availableFilesview
+      final r1 = results[0];
+      if (r1.statusCode == 200) {
+        final data = await _parseJsonAsync(r1.body);
+        final List<dynamic> files = List<dynamic>.from(data['data'] ?? []);
+        for (final f in files) {
+          final id = f['id']?.toString() ?? f['file_id']?.toString() ?? '';
+          if (id.isNotEmpty && seenIds.add(id)) {
+            merged.add(f);
+          }
+        }
+      }
+
+      // 2. Parse /fileview — filter by selectedCategoryId department if set
+      final r2 = results[1];
+      if (r2.statusCode == 200) {
+        final data = await _parseJsonAsync(r2.body);
+        if ((data['status']?.toString() ?? '') == 'Success') {
+          final List<dynamic> allFiles = List<dynamic>.from(data['data'] ?? []);
+          for (final f in allFiles) {
+            final deptId = f['category_id']?.toString() ?? '';
+            final deptMatches = deptId.isEmpty || deptId == selectedCategoryId.toString();
+            if (!deptMatches) continue;
+            final id = f['id']?.toString() ?? f['file_id']?.toString() ?? '';
+            if (id.isNotEmpty && seenIds.add(id)) {
+              merged.add(f);
             }
           }
         }
+      }
 
+      if (mounted) {
         setState(() {
-          availableFiles = merged;
-          for (var c in _availableFileControllers.values) c.dispose();
-          _availableFileControllers.clear();
+          _masterAvailableFiles = merged;
+          _applyFileTypeFilter();
         });
-
         debugPrint(
-          '[AvailableFiles] fetched ${merged.length} file(s) '
-          '(images + videos) for template $selectedTemplateId',
+          '[AvailableFiles] Merged ${merged.length} master file(s), ${_displayedFiles.length} filtered for '
+          'template=$selectedTemplateId dept=$selectedCategoryId fileType=$fileType',
         );
       }
     } catch (e) {
-      debugPrint("_fetchAvailableFiles error: $e");
+      debugPrint('_fetchAvailableFiles error: $e');
     } finally {
       if (mounted) setState(() => isLoadingAvailableFiles = false);
     }
-
-    // Also pull in any extra video files that are marked LIVE in the
-    // file_upload screen, so they always appear in the video category.
-    await _fetchAndMergeLiveVideos();
   }
 
-  /// Fetches all uploaded files from /fileview and merges VIDEO files that are
-  /// LIVE (status=1) into [availableFiles] without duplicates.
-  /// NOTE: /fileview uses category_id as a DEPARTMENT id, which is unrelated
-  /// to the media-type category_id used by selectTemplate_availableFilesview.
-  /// We therefore only use the LIVE status flag here — no category_id filter.
-  Future<void> _fetchAndMergeLiveVideos() async {
-    if (!mounted) return;
+  /// Silent background refresh — no spinner, no UI lock.
+  /// Updates [_masterAvailableFiles] if any new files are available.
+  Future<void> _silentRefreshAvailableFiles() async {
+    if (selectedTemplateId == null || selectedCategoryId == null || !mounted) return;
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/fileview'),
-        body: jsonEncode({"api_key": _apiKey}),
-        headers: {'Content-Type': 'application/json'},
-      );
-      if (response.statusCode != 200) return;
-      final data = jsonDecode(response.body);
-      if ((data['status']?.toString() ?? '') != 'Success') return;
+      final ts = DateTime.now().millisecondsSinceEpoch;
 
-      final allFiles = List<dynamic>.from(data['data'] ?? []);
+      final results = await Future.wait([
+        http.post(
+          Uri.parse('$_baseUrl/selectTemplate_availableFilesview?_t=$ts'),
+          body: jsonEncode({
+            "api_key": _apiKey,
+            "template_id": selectedTemplateId,
+            "category_id": selectedCategoryId,
+          }),
+          headers: {'Content-Type': 'application/json'},
+        ),
+        http.post(
+          Uri.parse('$_baseUrl/fileview?_t=$ts'),
+          body: jsonEncode({"api_key": _apiKey}),
+          headers: {'Content-Type': 'application/json'},
+        ),
+      ]);
+      if (!mounted) return;
 
-      // IDs already in the available list (to avoid duplicates)
-      final existingIds = availableFiles
-          .map((f) => f['id']?.toString() ?? '')
-          .toSet();
+      final List<dynamic> merged = [];
+      final Set<String> seenIds = {};
 
-      // ── FIX #1 (continued): Do NOT filter by category_id here because
-      // /fileview's category_id is a department id, not a media type. Only
-      // include files that are explicitly toggled LIVE.
-      final matchingVideos = allFiles
-          .where((f) {
-            // Skip if already in the list
-            if (existingIds.contains(f['id']?.toString() ?? '')) return false;
-
-            // Must be a video file
-            final type = f['file_type']?.toString().toLowerCase() ?? '';
-            final fmt = f['file_format']?.toString().toLowerCase() ?? '';
-            final name = f['file_name']?.toString().toLowerCase() ?? '';
-            final isVideo =
-                type.contains('video') ||
-                type == 'mp4' ||
-                type == 'avi' ||
-                type == 'mov' ||
-                type == 'mkv' ||
-                type == 'webm' ||
-                type == 'vinci' ||
-                type == 'live' ||
-                fmt.contains('video') ||
-                name.endsWith('.mp4') ||
-                name.endsWith('.avi') ||
-                name.endsWith('.mov') ||
-                name.endsWith('.mkv') ||
-                name.endsWith('.webm');
-            if (!isVideo) return false;
-
-            // Only include if the file is set as LIVE
-            final status =
-                f['file_status']?.toString() ?? f['status']?.toString() ?? '0';
-            return status == '1';
-          })
-          .map((f) {
-            return Map<String, dynamic>.from(f)..['_isLive'] = true;
-          })
-          .toList();
-
-      if (mounted && matchingVideos.isNotEmpty) {
-        setState(() => availableFiles = [...availableFiles, ...matchingVideos]);
+      final r1 = results[0];
+      if (r1.statusCode == 200) {
+        final data = await _parseJsonAsync(r1.body);
+        for (final f in List<dynamic>.from(data['data'] ?? [])) {
+          final id = f['id']?.toString() ?? f['file_id']?.toString() ?? '';
+          if (id.isNotEmpty && seenIds.add(id)) merged.add(f);
+        }
       }
 
-      debugPrint(
-        '[LiveVideos] merged ${matchingVideos.length} LIVE video(s) into available files',
-      );
+      final r2 = results[1];
+      if (r2.statusCode == 200) {
+        final data = await _parseJsonAsync(r2.body);
+        if ((data['status']?.toString() ?? '') == 'Success') {
+          for (final f in List<dynamic>.from(data['data'] ?? [])) {
+            final deptId = f['category_id']?.toString() ?? '';
+            if (deptId.isNotEmpty && deptId != selectedCategoryId.toString()) {
+              continue;
+            }
+            final id = f['id']?.toString() ?? f['file_id']?.toString() ?? '';
+            if (id.isNotEmpty && seenIds.add(id)) merged.add(f);
+          }
+        }
+      }
+
+      final currentIds = _masterAvailableFiles.map((f) => f['id']?.toString()).join(',');
+      final freshIds = merged.map((f) => f['id']?.toString()).join(',');
+      if (currentIds != freshIds) {
+        debugPrint('[BgSync] Available files updated: ${merged.length} total');
+        if (mounted) {
+          setState(() {
+            _masterAvailableFiles = merged;
+            _applyFileTypeFilter();
+          });
+        }
+      }
     } catch (e) {
-      debugPrint("_fetchAndMergeLiveVideos error: $e");
+      debugPrint('[BgSync] _silentRefreshAvailableFiles error: $e');
     }
+  }
+
+  String _normalizeAbsoluteUrl(String path) {
+    if (path.isEmpty) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    if (path.startsWith('/uploads/')) {
+      return 'https://display.sriher.com$path';
+    }
+    if (path.startsWith('uploads/')) {
+      return 'https://display.sriher.com/$path';
+    }
+    return 'https://display.sriher.com/uploads/${Uri.encodeFull(path)}';
+  }
+
+  List<dynamic> _normalizeAssignedFiles(List<dynamic> rawList) {
+    return rawList.map((file) {
+      final Map<String, dynamic> item = Map<String, dynamic>.from(file);
+      final String rawName = (item['file_name'] ?? item['user_filename'] ?? '').toString();
+      final String video720 = (item['video_720p'] ?? '').toString();
+      final String video1080 = (item['video_1080p'] ?? '').toString();
+      final bool isVid = _isFileVideo(item);
+
+      // Always build full URLs for image/video fields
+      final String fullRawUrl = _normalizeAbsoluteUrl(rawName);
+      final String full720 = _normalizeAbsoluteUrl(video720);
+      final String full1080 = _normalizeAbsoluteUrl(video1080);
+
+      item['file_url'] = fullRawUrl;
+      item['url'] = fullRawUrl;
+
+      if (isVid) {
+        // For video files, ensure video_720p and video_1080p always point to a
+        // playable URL. Fall back to file_name URL when the converted fields
+        // are still empty (e.g. file_status == 2, conversion in progress).
+        item['video_720p'] = full720.isNotEmpty ? full720 : fullRawUrl;
+        item['video_1080p'] = full1080.isNotEmpty ? full1080 : fullRawUrl;
+        // video_url: canonical field the TV device uses
+        item['video_url'] = full720.isNotEmpty
+            ? full720
+            : full1080.isNotEmpty
+                ? full1080
+                : fullRawUrl;
+      } else {
+        if (full720.isNotEmpty) item['video_720p'] = full720;
+        if (full1080.isNotEmpty) item['video_1080p'] = full1080;
+      }
+
+      return item;
+    }).toList();
   }
 
   Future<void> _fetchAssignedFiles() async {
@@ -347,10 +440,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         headers: {'Content-Type': 'application/json'},
       );
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final data = await _parseJsonAsync(response.body);
         debugPrint('[AssignedFiles] response: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
         if (mounted) {
-          setState(() => assignedFiles = data['data'] ?? []);
+          final List<dynamic> normalized = _normalizeAssignedFiles(data['data'] ?? []);
+          setState(() => assignedFiles = normalized);
           if (_tvSlideTimer == null || !_tvSlideTimer!.isActive) {
             _startTvPlayer();
           }
@@ -381,8 +475,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         headers: {'Content-Type': 'application/json'},
       );
       if (response.statusCode == 200 && mounted) {
-        final data = jsonDecode(response.body);
-        final List<dynamic> fresh = data['data'] ?? [];
+        final data = await _parseJsonAsync(response.body);
+        final List<dynamic> fresh = _normalizeAssignedFiles(data['data'] ?? []);
         // Compare id sequences — only rebuild if order/content changed
         final currentIds = assignedFiles.map((f) => f['id']?.toString()).join(',');
         final freshIds = fresh.map((f) => f['id']?.toString()).join(',');
@@ -418,25 +512,31 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     if (assignedFiles.isEmpty) return;
 
     if (_tvSlideIndex >= assignedFiles.length) {
-      print('[TV_PLAYER] Cycle complete. Re-fetching playlist from backend...');
+      debugPrint('[TV_PLAYER] Cycle complete. Re-fetching playlist from backend...');
       await _fetchAssignedFiles();
       _tvSlideIndex = 0;
       if (assignedFiles.isEmpty) return;
     }
 
-    final currentItem = assignedFiles[_tvSlideIndex];
+    final currentItem = assignedFiles[_tvSlideIndex % assignedFiles.length];
     final String itemId = (currentItem['file_id'] ?? currentItem['id'] ?? '').toString();
     final String userFilename = (currentItem['user_filename'] ?? currentItem['file_name'] ?? '').toString();
-
-    print('[TV_PLAYER] Now Playing Slide: $itemId - $userFilename');
+    final bool isVideo = _isFileVideo(currentItem);
 
     if (mounted) setState(() {});
 
     int durationSecs = 10;
-    if (currentItem['duration'] != null) {
-      durationSecs = int.tryParse(currentItem['duration'].toString()) ?? 10;
+    final rawDur = currentItem['file_duration'] ?? currentItem['video_duration'] ?? currentItem['duration'];
+    if (rawDur != null && rawDur.toString() != 'null') {
+      double d = double.tryParse(rawDur.toString()) ?? 10.0;
+      durationSecs = d.ceil();
     }
     if (durationSecs < 1) durationSecs = 10;
+
+    debugPrint(
+      '[TV_PLAYER] Playing slide ${_tvSlideIndex + 1}/${assignedFiles.length}: '
+      '$itemId - $userFilename [${isVideo ? "VIDEO" : "IMAGE"}, ${durationSecs}s]',
+    );
 
     _tvSlideTimer = Timer(Duration(seconds: durationSecs), () async {
       if (!mounted || selectedTemplateId == null) return;
@@ -456,24 +556,106 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   Future<void> _assignFile(
     int fileId,
     String formattedDuration,
-    String fileName,
-  ) async {
-    // Use stored raw duration or parse formatted back to seconds
-    final int durationSecs =
+    String fileName, {
+    dynamic fileRecord,
+  }) async {
+    if (fileId <= 0 || selectedTemplateId == null) return;
+
+    // Debounce rapid double-clicks
+    if (_addingFileIds.contains(fileId)) return;
+
+    // Duplicate check: check if fileId is already in assignedFiles
+    final bool isAlreadyAssigned = assignedFiles.any((f) {
+      final id = int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0;
+      return id == fileId;
+    });
+
+    if (isAlreadyAssigned) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("'$fileName' is already in the current selection list."),
+            backgroundColor: Colors.orange.shade800,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _addingFileIds.add(fileId);
+    });
+
+    // Check if file is a video
+    final bool isVideo = _isFileVideo(fileRecord);
+
+    // Extract video-specific or configured duration
+    int durationSecs =
         _rawFileDurations[fileId] ?? _parseFormattedDuration(formattedDuration);
+    if (fileRecord != null) {
+      final rawDur = fileRecord['file_duration'] ??
+          fileRecord['video_duration'] ??
+          fileRecord['duration'];
+      if (rawDur != null && rawDur.toString() != 'null') {
+        double d = double.tryParse(rawDur.toString()) ?? 0;
+        if (d > 0) durationSecs = d.ceil();
+      }
+    }
+    if (durationSecs < 1) durationSecs = isVideo ? 15 : 10;
+
+    final Map<String, dynamic> payload = {
+      "api_key": _apiKey,
+      "template_id": selectedTemplateId,
+      "file_id": fileId,
+      "duration": durationSecs,
+    };
+
+    debugPrint('[ASSIGN FILE REQUEST]: $payload');
+
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/selectTemplate_assignFileview'),
-        body: jsonEncode({
-          "api_key": _apiKey,
-          "template_id": selectedTemplateId,
-          "file_id": fileId,
-          "duration": durationSecs,
-        }),
+        body: jsonEncode(payload),
         headers: {'Content-Type': 'application/json'},
       );
+
+      // Terminal Diagnostic Logging
+      print('[ASSIGN VIDEO SUCCESS]: Status ${response.statusCode} - ${response.body}');
+      debugPrint('[ASSIGN VIDEO SUCCESS]: Status ${response.statusCode} - ${response.body}');
+
       if (response.statusCode == 200) {
+        // Refetch current assigned files via selectTemplate_filesview
         await _fetchAssignedFiles();
+
+        // Extract the updated array of assigned file_ids
+        final fileIds = assignedFiles
+            .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
+            .where((id) => id > 0)
+            .toList();
+
+        // Automatically update play order
+        if (fileIds.isNotEmpty) {
+          try {
+            await http.post(
+              Uri.parse('$_baseUrl/selectTemplate_updatePlayOrderview'),
+              body: jsonEncode({
+                "api_key": _apiKey,
+                "template_id": selectedTemplateId,
+                "file_ids": fileIds,
+              }),
+              headers: {'Content-Type': 'application/json'},
+            );
+            debugPrint('[Auto-Sync PlayOrder] Success for fileIds: $fileIds');
+          } catch (e) {
+            debugPrint('[Auto-Sync PlayOrder] Error: $e');
+          }
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -489,9 +671,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                         decorationColor: Colors.white,
                       ),
                     ),
-                    const TextSpan(
-                      text: " has been added to the current selection list.",
-                      style: TextStyle(color: Colors.white),
+                    TextSpan(
+                      text: " (${isVideo ? 'Video' : 'Image'}, ${durationSecs}s) has been added to the current selection list.",
+                      style: const TextStyle(color: Colors.white),
                     ),
                   ],
                 ),
@@ -505,9 +687,17 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             ),
           );
         }
+      } else {
+        debugPrint('[ASSIGN FILE ERROR]: HTTP ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("_assignFile error: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _addingFileIds.remove(fileId);
+        });
+      }
     }
   }
 
@@ -577,12 +767,21 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         debugPrint('[PlayOrder] Success: ${response.body}');
         // Persist the new order into parent state immediately
         if (orderedFiles != null && mounted) {
-          setState(() => assignedFiles = List.from(orderedFiles));
+          setState(() {
+            assignedFiles = List.from(orderedFiles);
+            if (_tvSlideIndex >= assignedFiles.length) {
+              _tvSlideIndex = 0;
+            }
+          });
+        }
+        await _fetchAssignedFiles();
+        if (_tvSlideTimer == null || !_tvSlideTimer!.isActive) {
+          _startTvPlayer();
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("Play order updated"),
+              content: Text("Play order updated successfully"),
               backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
             ),
@@ -636,8 +835,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             (v) {
               setState(() {
                 selectedTemplateId = v;
-                availableFiles.clear();
+                _masterAvailableFiles.clear();
+                _displayedFiles.clear();
                 assignedFiles.clear();
+                if (v != null) {
+                  isLoadingAvailableFiles = true;
+                  isLoadingAssignedFiles = true;
+                }
               });
               if (v != null) {
                 _fetchAssignedFiles();
@@ -657,7 +861,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             (v) {
               setState(() {
                 selectedCategoryId = v;
-                availableFiles.clear();
+                _masterAvailableFiles.clear();
+                _displayedFiles.clear();
+                if (v != null) {
+                  isLoadingAvailableFiles = true;
+                }
               });
               if (v != null) {
                 _fetchAvailableFiles();
@@ -688,8 +896,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   value: "images",
                   groupValue: fileType,
                   activeColor: Colors.blue,
-                  onChanged: (v) =>
-                      setState(() => fileType = v!),
+                  onChanged: (v) {
+                    if (v == fileType) return;
+                    setState(() {
+                      fileType = v!;
+                      _applyFileTypeFilter();
+                    });
+                  },
                 ),
                 const Text(
                   "Images",
@@ -703,8 +916,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   value: "videos",
                   groupValue: fileType,
                   activeColor: Colors.blue,
-                  onChanged: (v) =>
-                      setState(() => fileType = v!),
+                  onChanged: (v) {
+                    if (v == fileType) return;
+                    setState(() {
+                      fileType = v!;
+                      _applyFileTypeFilter();
+                    });
+                  },
                 ),
                 const Text(
                   "Videos",
@@ -888,82 +1106,185 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   }
 
   Widget _buildAvailableFilesTable() {
-    final filteredFiles = availableFiles.where((f) {
-      final type = f['file_type']?.toString().toLowerCase() ?? '';
-      final name = f['file_name']?.toString().toLowerCase() ?? '';
-      final format = f['file_format']?.toString().toLowerCase() ?? '';
-      if (fileType == null) return false;
+    // _displayedFiles is already filtered by _applyFileTypeFilter().
+    // No secondary filter needed — just use it directly.
+    final filteredFiles = _displayedFiles;
 
-      if (fileType == 'images') {
-        // Images: standard image types only
-        return type.contains('image') ||
-            type == 'png' ||
-            type == 'jpg' ||
-            type == 'jpeg' ||
-            type == 'webp' ||
-            name.endsWith('.png') ||
-            name.endsWith('.jpg') ||
-            name.endsWith('.jpeg') ||
-            name.endsWith('.webp') ||
-            format.contains('image');
-      } else {
-        // Videos: include standard video types AND live/vinci types.
-        // The server stores live-enabled videos as file_type="vinci" or "live".
-        final isStandardVideo =
-            type.contains('video') ||
-            type == 'mp4' ||
-            type == 'avi' ||
-            type == 'mov' ||
-            type == 'mkv' ||
-            type == 'webm' ||
-            name.endsWith('.mp4') ||
-            name.endsWith('.avi') ||
-            name.endsWith('.mov') ||
-            name.endsWith('.mkv') ||
-            name.endsWith('.webm') ||
-            format.contains('video');
+    // ── Table header ──────────────────────────────────────────────────────────
+    final header = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
+        children: [
+          Expanded(flex: 2, child: Text("File", style: _headerStyle())),
+          const SizedBox(width: 28),
+          Expanded(flex: 5, child: Text("File Name", style: _headerStyle())),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 3,
+            child: Text(
+              "Add",
+              textAlign: TextAlign.center,
+              style: _headerStyle(),
+            ),
+          ),
+        ],
+      ),
+    );
 
-        // Live videos toggled ON in File Upload get type "vinci" or "live".
-        final isLiveVideo =
-            type == 'vinci' ||
-            type == 'live' ||
-            type.contains('vinci') ||
-            type.contains('live');
+    // ── Body ─────────────────────────────────────────────────────────────────
+    Widget body;
+    if (isLoadingAvailableFiles) {
+      body = const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: LinearProgressIndicator(),
+      );
+    } else if (filteredFiles.isEmpty) {
+      body = const Padding(
+        padding: EdgeInsets.all(48.0),
+        child: Center(
+          child: Text(
+            "No files available for this selection",
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      );
+    } else {
+      // ── Lazy ListView.builder — renders only visible rows instantly ─────────
+      body = ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: filteredFiles.length,
+        itemBuilder: (context, i) {
+          final file = filteredFiles[i];
+          final fileId = int.tryParse(file['id']?.toString() ?? '0') ?? 0;
+          final bool isVideo = _isFileVideo(file);
 
-        return isStandardVideo || isLiveVideo;
-      }
-    }).toList();
+          // Lazily initialise the duration controller for this row
+          if (!_availableFileControllers.containsKey(fileId)) {
+            final rawDurationVal = file['file_duration'] ?? file['duration'];
+            final rawDurationStr =
+                (rawDurationVal != null &&
+                    rawDurationVal.toString() != 'null')
+                    ? rawDurationVal.toString()
+                    : '30';
+            final rawSecs = double.tryParse(rawDurationStr)?.toInt() ?? 30;
+            _rawFileDurations[fileId] = rawSecs;
+            _availableFileControllers[fileId] = TextEditingController(
+              text: _formatSeconds(rawSecs),
+            );
+          }
+          final controller = _availableFileControllers[fileId]!;
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (i > 0) const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 15,
+                ),
+                child: Row(
+                  children: [
+                    // ── Thumbnail ─────────────────────────────────────────
+                    Expanded(
+                      flex: 2,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: isVideo ? 140 : 75,
+                          height: 75,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: _buildFilePreview(file),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 28),
+                    // ── File name ─────────────────────────────────────────
+                    Expanded(
+                      flex: 5,
+                      child: Text(
+                        file['user_filename'] ?? file['file_name'] ?? '',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // ── Add button ────────────────────────────────────────
+                    Expanded(
+                      flex: 3,
+                      child: Center(
+                        child: ElevatedButton(
+                          onPressed: _addingFileIds.contains(fileId)
+                              ? null
+                              : () => _assignFile(
+                                    fileId,
+                                    controller.text,
+                                    file['user_filename'] ??
+                                        file['file_name'] ??
+                                        'File',
+                                    fileRecord: file,
+                                  ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: _addingFileIds.contains(fileId)
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  "Add",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
-          decoration: BoxDecoration(
-            color: Colors.blue.shade50,
-            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-          ),
-          child: Row(
-            children: [
-              Expanded(flex: 2, child: Text("File", style: _headerStyle())),
-              const SizedBox(width: 28),
-              Expanded(
-                flex: 5,
-                child: Text("File Name", style: _headerStyle()),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  "Add",
-                  textAlign: TextAlign.center,
-                  style: _headerStyle(),
-                ),
-              ),
-            ],
-          ),
-        ),
+        header,
         Container(
           width: double.infinity,
           decoration: BoxDecoration(
@@ -973,143 +1294,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               bottom: Radius.circular(12),
             ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isLoadingAvailableFiles)
-                const LinearProgressIndicator()
-              else if (filteredFiles.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(48.0),
-                  child: Center(
-                    child: Text(
-                      "No files available for this selection",
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                )
-              else
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: filteredFiles.length,
-                  separatorBuilder: (c, i) => const Divider(height: 1),
-                  itemBuilder: (c, i) {
-                    final file = filteredFiles[i];
-                    final fileId = int.tryParse(file['id'].toString()) ?? 0;
-                    final bool isVideo = _isFileVideo(file);
-
-                    if (!_availableFileControllers.containsKey(fileId)) {
-                      // ── FIX #3: video-specific fields (file_duration,
-                      // video_720p) may arrive as JSON null rather than a
-                      // missing key, so we guard against null before .toString().
-                      final rawDurationVal =
-                          file['file_duration'] ?? file['duration'];
-                      final rawDurationStr =
-                          (rawDurationVal != null &&
-                              rawDurationVal.toString() != 'null')
-                          ? rawDurationVal.toString()
-                          : '30';
-                      final rawSecs =
-                          double.tryParse(rawDurationStr)?.toInt() ?? 30;
-                      _rawFileDurations[fileId] = rawSecs;
-                      _availableFileControllers[fileId] = TextEditingController(
-                        text: _formatSeconds(rawSecs),
-                      );
-                    }
-                    final controller = _availableFileControllers[fileId]!;
-
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 15,
-                      ),
-                      color: null,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 2,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Container(
-                                    width: isVideo ? 140 : 75,
-                                    height: 75,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: Colors.grey.shade200,
-                                      ),
-                                    ),
-                                    clipBehavior: Clip.antiAlias,
-                                    child: _buildFilePreview(file),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 28),
-                              Expanded(
-                                flex: 5,
-                                child: Text(
-                                  file['user_filename'] ??
-                                      file['file_name'] ??
-                                      '',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                flex: 3,
-                                child: Center(
-                                  child: ElevatedButton(
-                                    onPressed: () => _assignFile(
-                                      fileId,
-                                      controller.text,
-                                      file['user_filename'] ??
-                                          file['file_name'] ??
-                                          'File',
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue.shade600,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 20,
-                                        vertical: 10,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    child: const Text(
-                                      "Add",
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ], // end inner Row children
-                          ), // end inner Row
-                        ], // end Column children
-                      ), // end Column
-                    ); // end Container
-                  },
-                ),
-            ],
-          ),
+          child: body,
         ),
       ],
     );
@@ -1117,44 +1302,73 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
   bool _isFileVideo(dynamic file) {
     if (file == null) return false;
-    String fileName = file['file_name'] ?? '';
-    String userFileName = file['user_filename'] ?? '';
-    String fType = file['file_type']?.toString().toLowerCase() ?? '';
-    String fFormat = file['file_format']?.toString().toLowerCase() ?? '';
-    String lowerName = fileName.toLowerCase();
-    String lowerUser = userFileName.toLowerCase();
+    final String fileName = (file['file_name'] ?? '').toString();
+    final String userFileName = (file['user_filename'] ?? '').toString();
+    final String fType = (file['file_type'] ?? '').toString().toLowerCase();
+    final String fFormat = (file['file_format'] ?? '').toString().toLowerCase();
+    final String mimeType = (file['mime_type'] ?? '').toString().toLowerCase();
+    final String lowerName = fileName.toLowerCase();
+    final String lowerUser = userFileName.toLowerCase();
 
-    return lowerName.endsWith('.mp4') ||
-        lowerName.endsWith('.avi') ||
-        lowerName.endsWith('.mov') ||
-        lowerName.endsWith('.mkv') ||
-        lowerName.endsWith('.webm') ||
-        lowerUser.endsWith('.mp4') ||
-        lowerUser.endsWith('.avi') ||
-        lowerUser.endsWith('.mov') ||
-        lowerUser.endsWith('.mkv') ||
-        lowerUser.endsWith('.webm') ||
-        fType.contains('video') ||
-        fType == 'mp4' ||
-        fType == 'avi' ||
-        fType == 'mov' ||
-        fType == 'mkv' ||
-        fType == 'webm' ||
-        fType == 'vinci' ||
-        fType == 'live' ||
-        fType.contains('vinci') ||
-        fType.contains('live') ||
-        fFormat.contains('video');
+    // 1. Check file extension in file_name / user_filename
+    const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.3gp', '.flv', '.wmv', '.ts', '.m2ts'];
+    for (final ext in exts) {
+      if (lowerName.endsWith(ext) || lowerUser.endsWith(ext)) return true;
+    }
+
+    // 2. file_type field — raw extension string or MIME-like
+    if (fType == 'mp4' || fType == 'mov' || fType == 'avi' ||
+        fType == 'mkv' || fType == 'webm' || fType == 'm4v' ||
+        fType == '3gp' || fType == 'flv' || fType == 'wmv' ||
+        fType == 'ts' || fType == 'm2ts' ||
+        fType == 'vinci' || fType == 'live' ||
+        fType.contains('video') || fType.contains('vinci') ||
+        fType.contains('live')) {
+      return true;
+    }
+
+    // 3. file_format or mime_type contains 'video'
+    if (fFormat.contains('video') || mimeType.contains('video')) return true;
+
+    // 4. Presence of video_720p or video_1080p field with a non-empty value
+    //    — server sets these only for video files.
+    final String v720 = (file['video_720p'] ?? '').toString().trim();
+    final String v1080 = (file['video_1080p'] ?? '').toString().trim();
+    final String vUrl = (file['video_url'] ?? '').toString().trim();
+    if (v720.isNotEmpty || v1080.isNotEmpty || vUrl.isNotEmpty) return true;
+
+    return false;
+  }
+
+  String _getMediaUrl(dynamic file) {
+    if (file == null) return '';
+    final bool isVid = _isFileVideo(file);
+    String raw;
+    if (isVid) {
+      // For videos: prefer pre-converted URLs, fall back to original file_name
+      raw = (file['video_url'] ??
+              file['video_720p'] ??
+              file['video_1080p'] ??
+              file['file_url'] ??
+              file['url'] ??
+              file['file_name'] ??
+              file['user_filename'] ??
+              '').toString();
+    } else {
+      raw = (file['file_url'] ??
+              file['url'] ??
+              file['file_name'] ??
+              file['user_filename'] ??
+              '').toString();
+    }
+    return _normalizeAbsoluteUrl(raw);
   }
 
   Widget _buildFilePreview(dynamic file) {
-    String fileName = file['file_name'] ?? '';
-    String userFileName = file['user_filename'] ?? '';
+    String fileName = (file['file_name'] ?? file['user_filename'] ?? '').toString();
+    String userFileName = (file['user_filename'] ?? file['file_name'] ?? '').toString();
     bool isVideo = _isFileVideo(file);
-
-    // Build URL: only encode the filename part, not the whole URL
-    final encodedName = Uri.encodeFull(fileName);
-    final fileUrl = '$_baseUrl/uploads/$encodedName';
+    final fileUrl = _getMediaUrl(file);
 
     if (isVideo) {
       return VideoThumbnail(
@@ -1165,6 +1379,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       return WebCompatImage(
         url: fileUrl,
         fit: BoxFit.cover,
+        cacheWidth: 300,
       );
     }
   }
@@ -1200,7 +1415,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   final file = assignedFiles[i];
                   final String fType = (file['file_type'] ?? '').toString().toLowerCase();
                   final int fileId = int.tryParse(file['id']?.toString() ?? '') ?? 0;
-                  final availableFile = availableFiles.firstWhere(
+                  final availableFile = _displayedFiles.firstWhere(
                     (f) => (int.tryParse(f['id']?.toString() ?? '') ?? 0) == fileId,
                     orElse: () => null,
                   );
@@ -1504,7 +1719,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               setState(() {
                 selectedTemplateId = int.tryParse(newTemplate['id'].toString());
                 selectedCategoryId = null;
-                availableFiles = [];
+                _masterAvailableFiles = [];
+                _displayedFiles = [];
                 assignedFiles = [];
               });
               _fetchAssignedFiles();
@@ -1878,7 +2094,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                       final file = dialogFiles[index];
                       final String fType = (file['file_type'] ?? '').toString().toLowerCase();
                       final int fileId = int.tryParse(file['id']?.toString() ?? '') ?? 0;
-                      final availableFile = availableFiles.firstWhere(
+                      final availableFile = _displayedFiles.firstWhere(
                         (f) => (int.tryParse(f['id']?.toString() ?? '') ?? 0) == fileId,
                         orElse: () => null,
                       );
@@ -2068,7 +2284,12 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                       // Capture the exact dragged order before closing dialog
                       final orderedList = List<dynamic>.from(dialogFiles);
                       // Immediately update parent state so the list & TV reflect new order
-                      setState(() => assignedFiles = orderedList);
+                      setState(() {
+                        assignedFiles = orderedList;
+                        if (_tvSlideIndex >= assignedFiles.length) {
+                          _tvSlideIndex = 0;
+                        }
+                      });
                       Navigator.pop(context);
                       // Push exact order to backend
                       await _updatePlayOrder(orderedList);

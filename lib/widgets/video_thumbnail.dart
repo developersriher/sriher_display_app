@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import 'package:video_player/video_player.dart';
+import 'web_video_thumbnail.dart';
 
 class VideoThumbnail extends StatefulWidget {
   final String url;
@@ -18,110 +18,216 @@ class VideoThumbnail extends StatefulWidget {
 }
 
 class _VideoThumbnailState extends State<VideoThumbnail> {
-  Player? _player;
-  VideoController? _controller;
-  bool _isPlaying = false;
+  VideoPlayerController? _controller;
   bool _initialized = false;
+  bool _hasError = false;
+  String _normalizedUrl = '';
 
   @override
   void initState() {
     super.initState();
-    _initializePlayer();
+    _normalizedUrl = _normalizeUrl(widget.url);
+    if (!kIsWeb && _normalizedUrl.isNotEmpty) {
+      _initializePlayer();
+    }
   }
 
-  void _initializePlayer() {
-    try {
-      final player = Player();
-      final controller = VideoController(player);
-
-      if (!kIsWeb && player.platform is NativePlayer) {
-        (player.platform as dynamic).setProperty('hwdec', 'auto');
-        (player.platform as dynamic).setProperty('cache', 'yes');
-        (player.platform as dynamic).setProperty('demuxer-max-bytes', '10000000');
+  @override
+  void didUpdateWidget(VideoThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _normalizedUrl = _normalizeUrl(widget.url);
+      if (!kIsWeb && _normalizedUrl.isNotEmpty) {
+        _controller?.dispose();
+        _initializePlayer();
       }
+    }
+  }
 
-      // Open media but keep paused so the first frame loads and displays
-      player.open(Media(widget.url), play: false);
+  String _normalizeUrl(String url) {
+    if (url.isEmpty) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    if (url.startsWith('/uploads/')) {
+      return 'https://display.sriher.com$url';
+    }
+    if (url.startsWith('uploads/')) {
+      return 'https://display.sriher.com/$url';
+    }
+    return 'https://display.sriher.com/uploads/${Uri.encodeFull(url)}';
+  }
 
-      player.stream.playing.listen((playing) {
-        if (mounted) setState(() => _isPlaying = playing);
-      });
-
-      setState(() {
-        _player = player;
-        _controller = controller;
-        _initialized = true;
-      });
+  Future<void> _initializePlayer() async {
+    if (!mounted || _normalizedUrl.isEmpty) return;
+    setState(() {
+      _initialized = false;
+      _hasError = false;
+    });
+    try {
+      final controller =
+          VideoPlayerController.networkUrl(Uri.parse(_normalizedUrl));
+      _controller = controller;
+      await controller.initialize();
+      if (mounted) {
+        setState(() {
+          _initialized = true;
+        });
+      }
     } catch (e) {
       debugPrint("VideoThumbnail initialization error: $e");
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+        });
+      }
     }
   }
 
   void _togglePlay() {
-    _player?.playOrPause();
+    if (_controller == null || !_initialized) return;
+    setState(() {
+      if (_controller!.value.isPlaying) {
+        _controller!.pause();
+      } else {
+        _controller!.play();
+      }
+    });
   }
 
   @override
   void dispose() {
-    _player?.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // ── WEB PLATFORM: render native HTML5 video thumbnail via WebVideoThumbnail ──
+    if (kIsWeb && _normalizedUrl.isNotEmpty) {
+      return GestureDetector(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => FullScreenVideoPlayer(
+                url: widget.url,
+                title: widget.title ?? 'Video Preview',
+              ),
+            ),
+          );
+        },
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            WebVideoThumbnail(
+              url: _normalizedUrl,
+              fit: BoxFit.cover,
+            ),
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.black38, Colors.transparent, Colors.black45],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
+            const Center(
+              child: Icon(
+                Icons.play_circle_fill_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            Positioned(
+              bottom: 2,
+              right: 2,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.fullscreen,
+                  color: Colors.white,
+                  size: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── NON-WEB / FALLBACK PLATFORM ──
     return GestureDetector(
       onTap: _togglePlay,
       child: Stack(
         fit: StackFit.expand,
         alignment: Alignment.center,
         children: [
-          Container(color: Colors.black),
+          Container(color: const Color(0xFF0F172A)),
           if (_initialized && _controller != null)
-            SizedBox.expand(
-              child: Video(
-                controller: _controller!,
-                controls: NoVideoControls,
-                fit: BoxFit.cover,
-                fill: Colors.black,
+            Center(
+              child: AspectRatio(
+                aspectRatio: _controller!.value.aspectRatio,
+                child: VideoPlayer(_controller!),
               ),
             ),
-          if (!_initialized)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
+          if (!_initialized || _hasError)
+            // Styled video thumbnail card — clean, professional, never displays error box
+            Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
                 ),
-              ),
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.play_circle_fill_rounded,
+                        color: Colors.white70,
+                        size: 26,
+                      ),
+                      const SizedBox(height: 2),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          widget.title ?? 'Video',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          if (_initialized && !_isPlaying)
+          if (_initialized && _controller != null && !_controller!.value.isPlaying)
             Container(
               color: Colors.black26,
               child: const Center(
                 child: Icon(
                   Icons.play_circle_fill,
                   color: Colors.white,
-                  size: 32,
-                ),
-              ),
-            ),
-          if (_initialized && _isPlaying)
-            Container(
-              color: Colors.transparent,
-              child: const Center(
-                child: Icon(
-                  Icons.pause_circle_filled,
-                  color: Colors.white54,
                   size: 28,
                 ),
               ),
             ),
-          // Fullscreen button
           Positioned(
             bottom: 4,
             right: 4,
@@ -137,15 +243,15 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
                 );
               },
               child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.fullscreen,
                   color: Colors.white,
-                  size: 18,
+                  size: 16,
                 ),
               ),
             ),
@@ -171,26 +277,63 @@ class FullScreenVideoPlayer extends StatefulWidget {
 }
 
 class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
-  late final Player _player;
-  late final VideoController _controller;
+  VideoPlayerController? _controller;
+  bool _initialized = false;
+  bool _hasError = false;
+  String _normalizedUrl = '';
 
   @override
   void initState() {
     super.initState();
-    _player = Player();
-    _controller = VideoController(_player);
+    _normalizedUrl = _normalizeUrl(widget.url);
+    _initializePlayer();
+  }
 
-    if (!kIsWeb && _player.platform is NativePlayer) {
-      (_player.platform as dynamic).setProperty('hwdec', 'auto');
-      (_player.platform as dynamic).setProperty('cache', 'yes');
-      (_player.platform as dynamic).setProperty('demuxer-max-bytes', '10000000');
+  String _normalizeUrl(String url) {
+    if (url.isEmpty) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
     }
-    _player.open(Media(widget.url), play: true);
+    if (url.startsWith('/uploads/')) {
+      return 'https://display.sriher.com$url';
+    }
+    if (url.startsWith('uploads/')) {
+      return 'https://display.sriher.com/$url';
+    }
+    return 'https://display.sriher.com/uploads/${Uri.encodeFull(url)}';
+  }
+
+  Future<void> _initializePlayer() async {
+    if (!mounted || _normalizedUrl.isEmpty) return;
+    setState(() {
+      _initialized = false;
+      _hasError = false;
+    });
+    try {
+      final controller =
+          VideoPlayerController.networkUrl(Uri.parse(_normalizedUrl));
+      _controller = controller;
+      await controller.initialize();
+      if (mounted) {
+        setState(() {
+          _initialized = true;
+        });
+        controller.play();
+        controller.setLooping(true);
+      }
+    } catch (e) {
+      debugPrint("FullScreenVideoPlayer initialization error: $e");
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
-    _player.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -201,15 +344,36 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       body: Stack(
         children: [
           Center(
-            child: SizedBox.expand(
-              child: Video(
-                controller: _controller,
-                controls: AdaptiveVideoControls,
-                fit: BoxFit.contain,
-              ),
-            ),
+            child: _initialized && _controller != null
+                ? AspectRatio(
+                    aspectRatio: _controller!.value.aspectRatio,
+                    child: VideoPlayer(_controller!),
+                  )
+                : _hasError
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.movie_creation_rounded,
+                              color: Colors.white70, size: 48),
+                          const SizedBox(height: 16),
+                          Text(
+                            widget.title,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 16),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                            ),
+                            onPressed: _initializePlayer,
+                            child: const Text('Retry Playback',
+                                style: TextStyle(color: Colors.white)),
+                          ),
+                        ],
+                      )
+                    : const CircularProgressIndicator(color: Colors.white),
           ),
-          // Top bar with Back button and Title
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 10,
@@ -217,21 +381,23 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
             child: Row(
               children: [
                 Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                    icon: const Icon(Icons.arrow_back,
+                        color: Colors.white, size: 24),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black54,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -249,6 +415,35 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
               ],
             ),
           ),
+          if (_initialized && _controller != null)
+            Positioned(
+              bottom: 20,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      _controller!.value.isPlaying
+                          ? Icons.pause
+                          : Icons.play_arrow,
+                      color: Colors.white,
+                      size: 36,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        if (_controller!.value.isPlaying) {
+                          _controller!.pause();
+                        } else {
+                          _controller!.play();
+                        }
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

@@ -272,7 +272,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // API 2: INSERT FILE — instant dialog dismiss + background streaming upload
+  // API 2: INSERT FILE — instant dialog dismiss + synchronous upload
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> insertFileAction() async {
     if (_isSubmitting) return;
@@ -288,7 +288,6 @@ class _FileUploadViewState extends State<FileUploadView> {
     });
 
     try {
-      // Snapshot all form values BEFORE the dialog is popped.
       final String uploadName = _nameController.text.trim();
       final String uploadDesc = _descController.text.trim();
       final String uploadCatId = _selectedDeptId!;
@@ -300,39 +299,7 @@ class _FileUploadViewState extends State<FileUploadView> {
       final String extension = filename.split('.').last.toLowerCase();
       final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-      // Unique key for this upload session
-      final String tempId = 'upload_${DateTime.now().millisecondsSinceEpoch}';
-
-      // ── STEP 1: Dismiss dialog immediately (before any await) ──
-      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-      if (mounted) _resetForm();
-
-      // ── STEP 2: Insert optimistic "uploading" row at top of table ──
-      final Map<String, dynamic> optimisticRow = {
-        'id': tempId,
-        '_isUploading': true,
-        'user_filename': uploadName,
-        'description': uploadDesc,
-        'category_id': uploadCatId,
-        'file_name': filename,
-        'file_type': extension,
-        'file_status': 0,
-        'status': 0,
-        'type': uploadType == 'Short Term' ? 'Temporary' : uploadType,
-        'valid_from_date': uploadType == 'Short Term' ? uploadFromDate : today,
-        'valid_upto_date': uploadType == 'Short Term' ? uploadToDate : null,
-      };
-
-      if (mounted) {
-        setState(() {
-          fileList = [optimisticRow, ...fileList];
-          _uploadTasks[tempId] = _UploadTask(tempId: tempId);
-        });
-      }
-
-      // ── STEP 3: Fire-and-forget background upload ──
-      _runBackgroundUpload(
-        tempId: tempId,
+      final bool success = await _uploadFileToServer(
         uploadName: uploadName,
         uploadDesc: uploadDesc,
         uploadCatId: uploadCatId,
@@ -344,6 +311,13 @@ class _FileUploadViewState extends State<FileUploadView> {
         extension: extension,
         today: today,
       );
+
+      if (success) {
+        if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+        if (mounted) _resetForm();
+        // Re-fetch real database records directly from server
+        await fetchFilesFromServer();
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -353,11 +327,8 @@ class _FileUploadViewState extends State<FileUploadView> {
     }
   }
 
-  /// Runs the actual multipart upload in the background.
-  /// Updates [_uploadTasks[tempId].progress] as bytes are sent,
-  /// then promotes the optimistic row to live-green on success.
-  Future<void> _runBackgroundUpload({
-    required String tempId,
+  /// Sends the multipart upload request to the server and strictly verifies response.
+  Future<bool> _uploadFileToServer({
     required String uploadName,
     required String uploadDesc,
     required String uploadCatId,
@@ -369,7 +340,20 @@ class _FileUploadViewState extends State<FileUploadView> {
     required String extension,
     required String today,
   }) async {
-    // Resolve MIME type
+    final bool isVideo = [
+      'mp4',
+      'mov',
+      'avi',
+      'mkv',
+      'webm',
+      'm4v',
+      '3gp',
+      'flv',
+      'wmv',
+      'ts',
+      'm2ts',
+    ].contains(extension.toLowerCase());
+
     MediaType contentType;
     if (['jpg', 'jpeg'].contains(extension)) {
       contentType = MediaType('image', 'jpeg');
@@ -391,49 +375,6 @@ class _FileUploadViewState extends State<FileUploadView> {
       contentType = MediaType('application', 'octet-stream');
     }
 
-    void _markError(String msg) {
-      // Guard against calling setState on a defunct/unmounted widget
-      // (can happen with long video uploads if user navigates away)
-      if (!mounted) {
-        debugPrint('_markError skipped (not mounted): $msg');
-        return;
-      }
-      try {
-        setState(() {
-          _uploadTasks[tempId]
-            ?..hasError = true
-            ..errorMessage = msg;
-          // Mark the row itself as errored so _getRow can show red UI
-          final idx = fileList.indexWhere((e) => e['id']?.toString() == tempId);
-          if (idx != -1) {
-            fileList[idx] = Map<String, dynamic>.from(fileList[idx])
-              ..['_isUploading'] = false
-              ..['_uploadError'] = msg;
-          }
-        });
-        if (msg.contains('403')) {
-          _showSnackBar(
-            "⚠️ Server rejected upload (HTTP 403). Please contact backend team/server admin.",
-            isError: true,
-          );
-        } else if (msg.contains('413')) {
-          _showSnackBar(
-            "⚠️ File is too large for the server (HTTP 413). Please contact server administrator.",
-            isError: true,
-          );
-        } else if (msg.contains('500')) {
-          _showSnackBar(
-            "⚠️ Internal server error (HTTP 500). Please contact server admin.",
-            isError: true,
-          );
-        } else {
-          _showSnackBar('Upload failed: $msg', isError: true);
-        }
-      } catch (e) {
-        debugPrint('_markError setState failed: $e');
-      }
-    }
-
     final client = http.Client();
     try {
       final request = http.MultipartRequest(
@@ -442,7 +383,8 @@ class _FileUploadViewState extends State<FileUploadView> {
       );
 
       request.fields['api_key'] = _apiKey;
-      request.fields['category_id'] = uploadCatId;
+      request.fields['department_id'] = uploadCatId;
+      request.fields['category_id'] = isVideo ? '2' : '1';
       request.fields['name'] = uploadName;
       request.fields['desc'] = uploadDesc;
       request.fields['group5'] = uploadType == 'Short Term'
@@ -482,126 +424,90 @@ class _FileUploadViewState extends State<FileUploadView> {
           ),
         );
       } else {
-        _markError('No file data available.');
-        return;
+        _showSnackBar('❌ No file data available.', isError: true);
+        return false;
       }
 
-      // Calculate and set Content-Length and Connection headers explicitly to disable
-      // chunked transfer encoding (which Cloudflare / WAF / IIS proxies block or time out for large files).
       final contentLength = request.contentLength;
       request.headers['Content-Length'] = contentLength.toString();
       request.headers['Connection'] = 'keep-alive';
 
-      // ── Send the request and collect the response ──
-      // Note: the http package does not expose per-chunk upload progress;
-      // the progress indicator stays indeterminate (null value) while uploading.
       final streamedResponse = await client
           .send(request)
-          .timeout(const Duration(minutes: 15));
+          .timeout(const Duration(seconds: 120));
 
       final List<int> responseBytes = [];
       await for (final chunk in streamedResponse.stream) {
         responseBytes.addAll(chunk);
       }
 
-      // Use utf8.decode for safe multi-byte character handling in JSON
       final String responseBody = utf8.decode(
         responseBytes,
         allowMalformed: true,
       );
 
-      debugPrint(
-        'Insert response [${streamedResponse.statusCode}]: $responseBody',
-      );
+      final bool isStatusCodeOk =
+          streamedResponse.statusCode == 200 || streamedResponse.statusCode == 201;
 
-      if (streamedResponse.statusCode == 200) {
+      if (isStatusCodeOk) {
         Map<String, dynamic> body = {};
         try {
           body = jsonDecode(responseBody) as Map<String, dynamic>;
         } catch (jsonErr) {
-          debugPrint('JSON parse error: $jsonErr  raw: $responseBody');
-          _markError('Server returned invalid JSON.');
-          return;
+          debugPrint('JSON parse error: $jsonErr raw: $responseBody');
+          _showSnackBar('❌ Server returned invalid JSON.', isError: true);
+          return false;
         }
 
-        // ── Determine success: the server may return the status in two places:
-        //   1. Top-level:    {"status": "Success", ...}
-        //   2. Inside data:  {"data": {"status": "uploaded", ...}}
-        // Both are treated as success.
-        final String topStatus = (body['status']?.toString() ?? '')
-            .toLowerCase();
+        final String topStatus = (body['status']?.toString() ?? '').toLowerCase();
         final dynamic dataObj = body['data'];
         final String dataStatus = (dataObj is Map)
             ? (dataObj['status']?.toString() ?? '').toLowerCase()
             : '';
 
-        final bool isSuccess =
-            topStatus == 'success' ||
-            topStatus == 'uploaded' ||
-            dataStatus == 'success' ||
-            dataStatus == 'uploaded';
+        final bool isStatusNotFalse = body['status'] != false &&
+            body['success'] != false &&
+            topStatus != 'false' &&
+            topStatus != 'error' &&
+            dataStatus != 'false' &&
+            dataStatus != 'error';
+
+        final bool isSuccess = isStatusNotFalse &&
+            (topStatus == 'success' ||
+                topStatus == 'uploaded' ||
+                topStatus == '1' ||
+                topStatus == 'true' ||
+                dataStatus == 'success' ||
+                dataStatus == 'uploaded' ||
+                dataStatus == '1' ||
+                dataStatus == 'true' ||
+                body['status'] == true ||
+                body['success'] == true);
 
         if (isSuccess) {
-          // ── STEP 1: Promote the temp row to a green "completed" state INSTANTLY
-          //    so the user sees it turn green immediately, not disappear suddenly.
-          if (mounted) {
-            try {
-              setState(() {
-                final idx = fileList.indexWhere(
-                  (e) => e['id']?.toString() == tempId,
-                );
-                if (idx != -1) {
-                  fileList[idx] = Map<String, dynamic>.from(fileList[idx])
-                    ..['_isUploading'] = false
-                    ..['_uploadError'] = null
-                    ..['file_status'] = 1
-                    ..['status'] = 1;
-                }
-                _uploadTasks.remove(tempId);
-              });
-            } catch (e) {
-              debugPrint('setState after upload failed: $e');
-            }
-          }
-
-          // ── STEP 2: Show success snackbar immediately ──
-          final isVideo = [
-            'mp4',
-            'mov',
-            'avi',
-            'mkv',
-            'webm',
-          ].contains(extension.toLowerCase());
           final mediaType = isVideo ? 'Video' : 'Image';
           _showSnackBar('✅ $mediaType uploaded successfully!', isSuccess: true);
-
-          // ── STEP 3: Silent background refresh — replaces temp row with the
-          //    real server row (with actual ID) without showing a loading spinner.
-          String? serverFileName;
-          if (dataObj is Map && dataObj['original_path'] != null) {
-            final String pathStr = dataObj['original_path'].toString();
-            serverFileName = pathStr.split('/').last;
-          }
-          _silentRefresh(
-            targetFileNameToSetLive: isVideo ? serverFileName : null,
-          );
+          return true;
         } else {
-          _markError(
-            body['Message']?.toString() ??
-                body['message']?.toString() ??
-                (dataObj is Map ? dataObj['message']?.toString() : null) ??
-                'Upload failed.',
-          );
+          final errMsg = body['Message']?.toString() ??
+              body['message']?.toString() ??
+              (dataObj is Map ? dataObj['message']?.toString() : null) ??
+              'Upload failed according to server response.';
+          _showSnackBar('❌ $errMsg', isError: true);
+          return false;
         }
       } else {
         final hint = streamedResponse.statusCode == 413
             ? ' (file too large)'
             : '';
-        _markError('HTTP ${streamedResponse.statusCode}$hint');
+        final errMsg = 'HTTP ${streamedResponse.statusCode}$hint';
+        _showSnackBar('❌ Upload failed: $errMsg', isError: true);
+        return false;
       }
     } catch (e) {
-      debugPrint('_runBackgroundUpload error: $e');
-      _markError(e.toString());
+      debugPrint('_uploadFileToServer error: $e');
+      _showSnackBar('❌ Upload error: $e', isError: true);
+      return false;
     } finally {
       client.close();
     }
@@ -680,7 +586,7 @@ class _FileUploadViewState extends State<FileUploadView> {
         body: jsonEncode({
           "api_key": _apiKey,
           "id": editingId,
-          "category_id": _selectedDeptId,
+          "category_id": int.tryParse(_selectedDeptId ?? ''),
           "name": _nameController.text.trim(),
           "desc": _descController.text.trim(),
           "group5": _selectedType == "Short Term" ? "Temporary" : _selectedType,
@@ -2562,6 +2468,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             items: ["10", "25", "50", "100"]
                 .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                 .toList(),
+
             onChanged: (v) {
               if (v != null) {
                 setState(() {
@@ -2707,7 +2614,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
-              vertical: 10,
+              vertical: 10,     
             ),
             helperText: ' ', // Reserve space so errors don't cause layout jump
           ),

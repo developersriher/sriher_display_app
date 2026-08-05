@@ -25,6 +25,8 @@ class WebCompatImage extends StatelessWidget {
   final BoxFit fit;
   final Color? color;
   final BlendMode? colorBlendMode;
+  final int? cacheWidth;
+  final int? cacheHeight;
 
   const WebCompatImage({
     super.key,
@@ -32,6 +34,8 @@ class WebCompatImage extends StatelessWidget {
     this.fit = BoxFit.contain,
     this.color,
     this.colorBlendMode,
+    this.cacheWidth,
+    this.cacheHeight,
   });
 
   @override
@@ -44,6 +48,8 @@ class WebCompatImage extends StatelessWidget {
       fit: fit,
       color: color,
       colorBlendMode: colorBlendMode,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
         return const Center(child: CircularProgressIndicator(strokeWidth: 2));

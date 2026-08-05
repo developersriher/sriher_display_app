@@ -467,7 +467,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       body: SelectionArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 1100;
+            final isNarrow = constraints.maxWidth < 950;
             return Padding(
               padding: EdgeInsets.all(isNarrow ? 12.0 : 24.0),
               child: isNarrow
@@ -485,30 +485,53 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   : Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(flex: 7, child: _buildLeftColumn(isMobile: false)),
-                        const SizedBox(width: 32),
                         Expanded(
-                          flex: 5,
+                          flex: 6,
+                          child: _buildLeftColumn(isMobile: false),
+                        ),
+                        const SizedBox(width: 24),
+                        Expanded(
+                          flex: 6,
                           child: isSelectionComplete
                               ? _buildRightColumn(isMobile: false)
-                              : Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.auto_awesome_mosaic_rounded,
-                                        size: 64,
-                                        color: const Color(0xFFE2E8F0),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      const Text(
-                                        "Select a template to view details",
-                                        style: TextStyle(
-                                          color: Color(0xFF94A3B8),
-                                          fontWeight: FontWeight.w500,
-                                        ),
+                              : Container(
+                                  height: 500,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 15,
+                                        offset: const Offset(0, 5),
                                       ),
                                     ],
+                                    border: Border.all(
+                                      color: Colors.grey.shade200,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.auto_awesome_mosaic_rounded,
+                                          size: 56,
+                                          color: Color(0xFFCBD5E1),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        const Text(
+                                          "Select Schedule & Template Name to view template files & duration",
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Color(0xFF64748B),
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                         ),
@@ -1149,11 +1172,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       ),
     );
 
-    if (isMobile) {
-      return container;
-    }
-
-    return Expanded(child: container);
+    return container;
   }
 
   // UI Helpers

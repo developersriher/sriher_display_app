@@ -8,6 +8,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Image cache boundaries to prevent RAM exhaustion on long scrolls ──
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 100 * 1024 * 1024; // 100 MB max
+  PaintingBinding.instance.imageCache.maximumSize = 100;
+
   if (!kIsWeb) {
     MediaKit.ensureInitialized();
   }
