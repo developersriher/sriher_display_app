@@ -18,18 +18,16 @@ class VideoThumbnail extends StatefulWidget {
 }
 
 class _VideoThumbnailState extends State<VideoThumbnail> {
-  VideoPlayerController? _controller;
-  bool _initialized = false;
-  bool _hasError = false;
   String _normalizedUrl = '';
+  VideoPlayerController? _controller;
+  bool _isInitializing = false;
+  bool _isPlayingInline = false;
+  bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
     _normalizedUrl = _normalizeUrl(widget.url);
-    if (!kIsWeb && _normalizedUrl.isNotEmpty) {
-      _initializePlayer();
-    }
   }
 
   @override
@@ -37,11 +35,23 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.url != widget.url) {
       _normalizedUrl = _normalizeUrl(widget.url);
-      if (!kIsWeb && _normalizedUrl.isNotEmpty) {
-        _controller?.dispose();
-        _initializePlayer();
-      }
+      _disposeController();
     }
+  }
+
+  void _disposeController() {
+    _controller?.pause();
+    _controller?.dispose();
+    _controller = null;
+    _isPlayingInline = false;
+    _isInitializing = false;
+    _hasError = false;
+  }
+
+  @override
+  void dispose() {
+    _disposeController();
+    super.dispose();
   }
 
   String _normalizeUrl(String url) {
@@ -58,71 +68,123 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
     return 'https://display.sriher.com/uploads/${Uri.encodeFull(url)}';
   }
 
-  Future<void> _initializePlayer() async {
-    if (!mounted || _normalizedUrl.isEmpty) return;
-    setState(() {
-      _initialized = false;
-      _hasError = false;
-    });
-    try {
-      final controller =
-          VideoPlayerController.networkUrl(Uri.parse(_normalizedUrl));
-      _controller = controller;
-      await controller.initialize();
-      if (mounted) {
-        setState(() {
-          _initialized = true;
-        });
+  Future<void> _toggleInlinePlay() async {
+    if (_normalizedUrl.isEmpty) return;
+
+    if (_controller == null) {
+      setState(() {
+        _isInitializing = true;
+        _hasError = false;
+      });
+      try {
+        final controller =
+            VideoPlayerController.networkUrl(Uri.parse(_normalizedUrl));
+        _controller = controller;
+        await controller.initialize();
+        if (mounted) {
+          controller.setLooping(true);
+          controller.play();
+          setState(() {
+            _isInitializing = false;
+            _isPlayingInline = true;
+          });
+        }
+      } catch (e) {
+        debugPrint("Inline VideoPlayer error: $e");
+        if (mounted) {
+          setState(() {
+            _isInitializing = false;
+            _hasError = true;
+          });
+        }
       }
-    } catch (e) {
-      debugPrint("VideoThumbnail initialization error: $e");
-      if (mounted) {
+    } else {
+      if (_controller!.value.isPlaying) {
+        _controller!.pause();
         setState(() {
-          _hasError = true;
+          _isPlayingInline = false;
+        });
+      } else {
+        _controller!.play();
+        setState(() {
+          _isPlayingInline = true;
         });
       }
     }
   }
 
-  void _togglePlay() {
-    if (_controller == null || !_initialized) return;
+  void _openFullScreen() {
+    _controller?.pause();
     setState(() {
-      if (_controller!.value.isPlaying) {
-        _controller!.pause();
-      } else {
-        _controller!.play();
-      }
+      _isPlayingInline = false;
     });
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FullScreenVideoPlayer(
+          url: widget.url,
+          title: widget.title ?? 'Video Preview',
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // ── WEB PLATFORM: render native HTML5 video thumbnail via WebVideoThumbnail ──
-    if (kIsWeb && _normalizedUrl.isNotEmpty) {
-      return GestureDetector(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => FullScreenVideoPlayer(
-                url: widget.url,
-                title: widget.title ?? 'Video Preview',
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.black,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // ── Video layer (when initialized) or Static / Web Thumbnail ──
+          if (_controller != null && _controller!.value.isInitialized)
+            FittedBox(
+              fit: BoxFit.cover,
+              clipBehavior: Clip.antiAlias,
+              child: SizedBox(
+                width: _controller!.value.size.width > 0
+                    ? _controller!.value.size.width
+                    : 100,
+                height: _controller!.value.size.height > 0
+                    ? _controller!.value.size.height
+                    : 60,
+                child: VideoPlayer(_controller!),
               ),
-            ),
-          );
-        },
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
+            )
+          else if (kIsWeb && _normalizedUrl.isNotEmpty)
             WebVideoThumbnail(
               url: _normalizedUrl,
               fit: BoxFit.cover,
+            )
+          else
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    widget.title ?? 'Video',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
             ),
+
+          // Gradient overlay when paused or initial
+          if (!_isPlayingInline)
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -132,126 +194,61 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
                 ),
               ),
             ),
-            const Center(
-              child: Icon(
-                Icons.play_circle_fill_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
-            Positioned(
-              bottom: 2,
-              right: 2,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.fullscreen,
-                  color: Colors.white,
-                  size: 14,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
 
-    // ── NON-WEB / FALLBACK PLATFORM ──
-    return GestureDetector(
-      onTap: _togglePlay,
-      child: Stack(
-        fit: StackFit.expand,
-        alignment: Alignment.center,
-        children: [
-          Container(color: const Color(0xFF0F172A)),
-          if (_initialized && _controller != null)
-            Center(
-              child: AspectRatio(
-                aspectRatio: _controller!.value.aspectRatio,
-                child: VideoPlayer(_controller!),
-              ),
-            ),
-          if (!_initialized || _hasError)
-            // Styled video thumbnail card — clean, professional, never displays error box
-            Stack(
-              fit: StackFit.expand,
-              children: [
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                ),
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.play_circle_fill_rounded,
-                        color: Colors.white70,
-                        size: 26,
-                      ),
-                      const SizedBox(height: 2),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Text(
-                          widget.title ?? 'Video',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+          // ── Center Play/Pause triangle button: INLINE PLAYBACK ONLY ──
+          Center(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _toggleInlinePlay,
+                borderRadius: BorderRadius.circular(20),
+                child: _isInitializing
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.black45,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _isPlayingInline
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 22,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          if (_initialized && _controller != null && !_controller!.value.isPlaying)
-            Container(
-              color: Colors.black26,
-              child: const Center(
-                child: Icon(
-                  Icons.play_circle_fill,
-                  color: Colors.white,
-                  size: 28,
-                ),
               ),
             ),
+          ),
+
+          // ── Bottom Right Fullscreen icon: FULLSCREEN DISPLAY ONLY ──
           Positioned(
-            bottom: 4,
-            right: 4,
-            child: InkWell(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => FullScreenVideoPlayer(
-                      url: widget.url,
-                      title: widget.title ?? 'Video Preview',
-                    ),
+            bottom: 2,
+            right: 2,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _openFullScreen,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.65),
+                    shape: BoxShape.circle,
                   ),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.fullscreen,
-                  color: Colors.white,
-                  size: 16,
+                  child: const Icon(
+                    Icons.fullscreen,
+                    color: Colors.white,
+                    size: 14,
+                  ),
                 ),
               ),
             ),
@@ -332,8 +329,16 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   }
 
   @override
+  void deactivate() {
+    _controller?.pause();
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
+    _controller?.pause();
     _controller?.dispose();
+    _controller = null;
     super.dispose();
   }
 

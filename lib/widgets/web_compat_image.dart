@@ -34,8 +34,8 @@ class WebCompatImage extends StatelessWidget {
     this.fit = BoxFit.contain,
     this.color,
     this.colorBlendMode,
-    this.cacheWidth,
-    this.cacheHeight,
+    this.cacheWidth = 300,
+    this.cacheHeight = 300,
   });
 
   @override
@@ -48,8 +48,8 @@ class WebCompatImage extends StatelessWidget {
       fit: fit,
       color: color,
       colorBlendMode: colorBlendMode,
-      cacheWidth: cacheWidth,
-      cacheHeight: cacheHeight,
+      cacheWidth: cacheWidth ?? 300,
+      cacheHeight: cacheHeight ?? 300,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
         return const Center(child: CircularProgressIndicator(strokeWidth: 2));

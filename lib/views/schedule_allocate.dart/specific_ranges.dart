@@ -1487,6 +1487,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
+                
                 borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
               ),
               focusedBorder: OutlineInputBorder(

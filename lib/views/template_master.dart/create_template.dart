@@ -505,6 +505,12 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
             Align(
               alignment: isMobile ? Alignment.center : Alignment.centerLeft,
               child: heading,
+
+
+
+
+
+              
             ),
             const SizedBox(height: 20),
             _buildListHeader(isMobile: isMobile, createBtn: createBtn),

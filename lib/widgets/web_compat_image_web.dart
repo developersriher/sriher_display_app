@@ -9,7 +9,12 @@ final _registeredViewIds = <String>{};
 /// Web implementation: registers a native HTML <img> element as a platform view.
 /// This bypasses Flutter's Fetch-API-based Image.network which enforces CORS.
 /// Browser <img> elements can display cross-origin images without CORS headers.
-Widget buildWebImage({required String url, required BoxFit fit}) {
+Widget buildWebImage({
+  required String url,
+  required BoxFit fit,
+  int? cacheWidth,
+  int? cacheHeight,
+}) {
   // Create a unique view ID per URL
   final viewId = 'web-img-${url.hashCode.abs()}';
 

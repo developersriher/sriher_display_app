@@ -2,10 +2,17 @@ import 'package:flutter/material.dart';
 
 /// Stub implementation for non-web platforms.
 /// On Linux/Android/Windows, Image.network works fine (no CORS sandbox).
-Widget buildWebImage({required String url, required BoxFit fit}) {
+Widget buildWebImage({
+  required String url,
+  required BoxFit fit,
+  int? cacheWidth,
+  int? cacheHeight,
+}) {
   return Image.network(
     url,
     fit: fit,
+    cacheWidth: cacheWidth ?? 300,
+    cacheHeight: cacheHeight ?? 300,
     loadingBuilder: (context, child, loadingProgress) {
       if (loadingProgress == null) return child;
       return const Center(

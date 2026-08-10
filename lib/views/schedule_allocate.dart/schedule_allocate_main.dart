@@ -1348,7 +1348,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           enabled: enabled,
           style: const TextStyle(fontSize: 13.0, color: Colors.black87),
           decoration: InputDecoration(
-            hintText: 'MM/DD/YYYY',
+            hintText: 'MM/DD/YYYY',                                                                                                                                   
             hintStyle: const TextStyle(color: Colors.black38, fontSize: 13.0),
             filled: true,
             fillColor: Colors.white,

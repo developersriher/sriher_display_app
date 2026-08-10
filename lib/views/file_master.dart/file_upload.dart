@@ -1325,6 +1325,130 @@ class _FileUploadViewState extends State<FileUploadView> {
       ],
     );
 
+    Widget buildShortTermDateFields() {
+      return Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 36,
+              child: TextFormField(
+                controller: _fromDateController,
+                readOnly: true,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF1E293B),
+                ),
+                decoration: InputDecoration(
+                  hintText: "From Date",
+                  hintStyle: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  suffixIcon: const Icon(
+                    Icons.calendar_today_rounded,
+                    size: 15,
+                  ),
+                  isDense: true,
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF334155),
+                      width: 1.6,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                ),
+                onTap: () async {
+                  DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2101),
+                  );
+                  if (picked != null) {
+                    _fromDateController.text =
+                        "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                    setDialogState(() => _showDateError = false);
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SizedBox(
+              height: 36,
+              child: TextFormField(
+                controller: _toDateController,
+                readOnly: true,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF1E293B),
+                ),
+                decoration: InputDecoration(
+                  hintText: "To Date",
+                  hintStyle: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  suffixIcon: const Icon(
+                    Icons.calendar_today_rounded,
+                    size: 15,
+                  ),
+                  isDense: true,
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF334155),
+                      width: 1.6,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                ),
+                onTap: () async {
+                  DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2101),
+                  );
+                  if (picked != null) {
+                    _toDateController.text =
+                        "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                    setDialogState(() => _showDateError = false);
+                  }
+                },
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1355,7 +1479,8 @@ class _FileUploadViewState extends State<FileUploadView> {
           ),
         ),
         const SizedBox(height: 4),
-        // Row 1: Short Term Radio Button + Dates (if selected)
+
+        // Row 1: Short Term Radio Button + Dates (if selected and desktop)
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -1372,134 +1497,24 @@ class _FileUploadViewState extends State<FileUploadView> {
               "Short Term",
               style: TextStyle(color: Colors.black87, fontSize: 13),
             ),
-            if (_selectedType == "Short Term") ...[
+            if (!isNarrow && _selectedType == "Short Term") ...[
               const SizedBox(width: 12),
               Expanded(
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: SizedBox(
-                        height: 36,
-                        child: TextFormField(
-                          controller: _fromDateController,
-                          readOnly: true,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF1E293B),
-                          ),
-                          decoration: InputDecoration(
-                            hintText: "From Date",
-                            hintStyle: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF94A3B8),
-                            ),
-                            suffixIcon: const Icon(
-                              Icons.calendar_today_rounded,
-                              size: 15,
-                            ),
-                            isDense: true,
-                            filled: true,
-                            fillColor: const Color(0xFFF8FAFC),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFCBD5E1),
-                                width: 1.2,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF334155),
-                                width: 1.6,
-                              ),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 8,
-                            ),
-                          ),
-                          onTap: () async {
-                            DateTime? picked = await showDatePicker(
-                              context: context,
-                              initialDate: DateTime.now(),
-                              firstDate: DateTime(2000),
-                              lastDate: DateTime(2101),
-                            );
-                            if (picked != null) {
-                              _fromDateController.text =
-                                  "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                              setDialogState(() => _showDateError = false);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SizedBox(
-                        height: 36,
-                        child: TextFormField(
-                          controller: _toDateController,
-                          readOnly: true,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF1E293B),
-                          ),
-                          decoration: InputDecoration(
-                            hintText: "To Date",
-                            hintStyle: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF94A3B8),
-                            ),
-                            suffixIcon: const Icon(
-                              Icons.calendar_today_rounded,
-                              size: 15,
-                            ),
-                            isDense: true,
-                            filled: true,
-                            fillColor: const Color(0xFFF8FAFC),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFCBD5E1),
-                                width: 1.2,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF334155),
-                                width: 1.6,
-                              ),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 8,
-                            ),
-                          ),
-                          onTap: () async {
-                            DateTime? picked = await showDatePicker(
-                              context: context,
-                              initialDate: DateTime.now(),
-                              firstDate: DateTime(2000),
-                              lastDate: DateTime(2101),
-                            );
-                            if (picked != null) {
-                              _toDateController.text =
-                                  "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                              setDialogState(() => _showDateError = false);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                child: buildShortTermDateFields(),
               ),
             ],
           ],
         ),
+        if (isNarrow && _selectedType == "Short Term")
+          Padding(
+            padding: const EdgeInsets.only(
+              left: 12.0,
+              top: 6.0,
+              bottom: 6.0,
+              right: 4.0,
+            ),
+            child: buildShortTermDateFields(),
+          ),
         // Row 2: Permanent Radio Button (below Short Term)
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -1912,7 +1927,7 @@ class _FileUploadViewState extends State<FileUploadView> {
           // IMG/VID cell — spinner or error icon
           DataCell(
             Container(
-              width: isVideo ? 100 : 60,
+              width: 100,
               height: 60,
               margin: const EdgeInsets.symmetric(vertical: 6),
               decoration: BoxDecoration(
@@ -2043,7 +2058,7 @@ class _FileUploadViewState extends State<FileUploadView> {
           Align(
             alignment: Alignment.centerLeft,
             child: Container(
-              width: isVideo ? 100 : 60,
+              width: 100,
               height: 60,
               margin: const EdgeInsets.symmetric(vertical: 6),
               decoration: BoxDecoration(
