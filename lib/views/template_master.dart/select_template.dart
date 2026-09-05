@@ -31,18 +31,22 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
 
+  /// Device ID sent to the signage sync endpoint.
+  /// Change this value if the target TV device changes.
+  final String _deviceId = '1111';
+
   List<dynamic> templates = [];
   List<dynamic> categories = [];
 
-  /// Master list: ALL files fetched for current dept+template (images+videos combined).
-  /// Radio buttons filter this in-memory — no extra network calls.
-  List<dynamic> _masterAvailableFiles = [];
-
-  /// Derived filtered view — updated whenever _masterAvailableFiles or fileType changes.
+  /// Files fetched for the current template + file-type category.
+  /// Populated by [_fetchAvailableFiles] and sorted newest-first (id desc).
+  /// category_id 1 = Images, 2 = Videos (matches server upload convention).
   List<dynamic> _displayedFiles = [];
   List<dynamic> assignedFiles = [];
   List<dynamic>? _pendingAssignedFiles;
 
+  bool isLoading = false;
+  bool isAddingLoading = false;
   bool isLoadingTemplates = false;
   bool isLoadingCategories = false;
   bool isLoadingAvailableFiles = false;
@@ -63,6 +67,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   // Set tracking file IDs currently in the process of being assigned (debouncing)
   final Set<int> _addingFileIds = {};
 
+  // Set tracking file IDs currently in the process of being removed
+  final Set<int> _removingFileIds = {};
+
   // Background polling timer — re-fetches assignedFiles every 30 s when a
   // template is selected so the controller list stays in sync with the backend
   // (e.g. another user reordered, or the TV completed a cycle and updated).
@@ -80,16 +87,23 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     _startPollingTimer();
   }
 
-  /// Restarts the 30-second polling timer.
+  /// Restarts the 30-second background polling timer.
   void _startPollingTimer() {
     _pollingTimer?.cancel();
     _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted && selectedTemplateId != null) {
+        final now = DateTime.now();
+        print('\n[⏱ POLL_TIMER] ────────────────────────────────────────────');
+        print('[POLL_TIMER] Tick at $now');
+        print('[POLL_TIMER] baseUrl = ${getBaseUrl()}');
+        print('[POLL_TIMER] templateId = $selectedTemplateId  deptId = $selectedCategoryId');
+        print('[POLL_TIMER] ────────────────────────────────────────────');
         _silentRefreshAssignedFiles();
         // Also silently sync available files in the background
         _silentRefreshAvailableFiles();
       }
     });
+    print('[POLL_TIMER] 30-second polling timer started. baseUrl = ${getBaseUrl()}');
   }
 
   @override
@@ -220,99 +234,121 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
   }
 
-  /// Filters _masterAvailableFiles by the current [fileType] and stores result in
-  /// [_displayedFiles]. Pure in-memory — zero network calls.
-  void _applyFileTypeFilter() {
-    if (fileType == 'videos') {
-      _displayedFiles = _masterAvailableFiles.where((f) => _isFileVideo(f)).toList();
-    } else if (fileType == 'images') {
-      _displayedFiles = _masterAvailableFiles.where((f) => !_isFileVideo(f)).toList();
-    } else {
-      _displayedFiles = [];
+  /// Fetches files available for the current template, scoped by file-type
+  /// category: category_id=1 (Images) or category_id=2 (Videos).
+  /// Results are sorted descending by [id] — newest uploads appear first.
+  /// Called on initial load and whenever the radio button selection changes.
+  /// Helper that fetches template-scoped available files and merges them
+  /// with master uploaded files from `/fileview` so that all old and new
+  /// videos/images uploaded via `file_upload.dart` are available.
+  Future<List<dynamic>> _fetchMergedAvailableFilesList(
+    int categoryId,
+    bool wantVideos,
+  ) async {
+    final List<dynamic> categoryFiles = [];
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final url = '$_baseUrl/selectTemplate_availableFilesview?_t=$ts';
+    final payload = {
+      'api_key': _apiKey,
+      'template_id': selectedTemplateId,
+      'category_id': categoryId,
+    };
+
+    // 1. Fetch template-scoped available files
+    try {
+      final response = await http
+          .post(
+            Uri.parse(url),
+            body: jsonEncode(payload),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = await _parseJsonAsync(response.body);
+        if (data is Map && data['data'] is List) {
+          categoryFiles.addAll(List<dynamic>.from(data['data']));
+        }
+      }
+    } catch (e) {
+      debugPrint('[AvailableFiles] category fetch error: $e');
     }
+
+    // 2. Fetch master repository files (/fileview) to include all uploaded files from file_upload.dart
+    final List<dynamic> masterFiles = [];
+    try {
+      final masterResponse = await http
+          .post(
+            Uri.parse('$_baseUrl/fileview'),
+            body: jsonEncode({'api_key': _apiKey}),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (masterResponse.statusCode == 200) {
+        final mData = await _parseJsonAsync(masterResponse.body);
+        if (mData is Map && mData['data'] is List) {
+          masterFiles.addAll(List<dynamic>.from(mData['data']));
+        }
+      }
+    } catch (e) {
+      debugPrint('[AvailableFiles] master fileview fetch error: $e');
+    }
+
+    // Filter master files by requested file type (videos vs images/docs)
+    final filteredMaster = masterFiles.where((f) {
+      if (f == null) return false;
+      final bool isVid = _isFileVideo(f);
+      return wantVideos ? isVid : !isVid;
+    }).toList();
+
+    // 3. Merge categoryFiles and filteredMaster by ID
+    final Map<String, dynamic> mergedMap = {};
+    for (var f in categoryFiles) {
+      if (f == null) continue;
+      final idStr = (f['id'] ?? f['file_id'])?.toString();
+      if (idStr != null && idStr.isNotEmpty) {
+        mergedMap[idStr] = f;
+      }
+    }
+
+    for (var f in filteredMaster) {
+      if (f == null) continue;
+      final idStr = (f['id'] ?? f['file_id'])?.toString();
+      if (idStr != null && idStr.isNotEmpty && !mergedMap.containsKey(idStr)) {
+        mergedMap[idStr] = f;
+      }
+    }
+
+    return mergedMap.values.toList();
   }
 
-  /// Fetches files available for the selected department + template by fetching
-  /// BOTH [selectTemplate_availableFilesview] and the Department Library [/fileview].
-  /// Merges both lists into [_masterAvailableFiles] and deduplicates by file_id.
+  /// Fetches files available for the current template, scoped by file-type
+  /// category: category_id=1 (Images) or category_id=2 (Videos).
+  /// Results are sorted descending by [id] — newest uploads appear first.
+  /// Merges all uploaded videos from master file repository.
   Future<void> _fetchAvailableFiles() async {
-    if (selectedTemplateId == null || selectedCategoryId == null) return;
+    if (selectedTemplateId == null) return;
     if (!mounted) return;
     setState(() {
       isLoadingAvailableFiles = true;
-      _masterAvailableFiles = [];
       _displayedFiles = [];
       for (var c in _availableFileControllers.values) c.dispose();
       _availableFileControllers.clear();
     });
 
     try {
-      final ts = DateTime.now().millisecondsSinceEpoch;
-
-      // Parallel fetch:
-      // a) selectTemplate_availableFilesview (template + category scoped)
-      // b) /fileview (Department library uploaded files)
-      final results = await Future.wait([
-        http.post(
-          Uri.parse('$_baseUrl/selectTemplate_availableFilesview?_t=$ts'),
-          body: jsonEncode({
-            "api_key": _apiKey,
-            "template_id": selectedTemplateId,
-            "category_id": selectedCategoryId,
-          }),
-          headers: {'Content-Type': 'application/json'},
-        ),
-        http.post(
-          Uri.parse('$_baseUrl/fileview?_t=$ts'),
-          body: jsonEncode({"api_key": _apiKey}),
-          headers: {'Content-Type': 'application/json'},
-        ),
-      ]);
-
-      if (!mounted) return;
-
-      final List<dynamic> merged = [];
-      final Set<String> seenIds = {};
-
-      // 1. Parse selectTemplate_availableFilesview
-      final r1 = results[0];
-      if (r1.statusCode == 200) {
-        final data = await _parseJsonAsync(r1.body);
-        final List<dynamic> files = List<dynamic>.from(data['data'] ?? []);
-        for (final f in files) {
-          final id = f['id']?.toString() ?? f['file_id']?.toString() ?? '';
-          if (id.isNotEmpty && seenIds.add(id)) {
-            merged.add(f);
-          }
-        }
-      }
-
-      // 2. Parse /fileview — filter by selectedCategoryId department if set
-      final r2 = results[1];
-      if (r2.statusCode == 200) {
-        final data = await _parseJsonAsync(r2.body);
-        if ((data['status']?.toString() ?? '') == 'Success') {
-          final List<dynamic> allFiles = List<dynamic>.from(data['data'] ?? []);
-          for (final f in allFiles) {
-            final deptId = f['category_id']?.toString() ?? '';
-            final deptMatches = deptId.isEmpty || deptId == selectedCategoryId.toString();
-            if (!deptMatches) continue;
-            final id = f['id']?.toString() ?? f['file_id']?.toString() ?? '';
-            if (id.isNotEmpty && seenIds.add(id)) {
-              merged.add(f);
-            }
-          }
-        }
-      }
+      final bool wantVideos = fileType == 'videos';
+      final int categoryId = wantVideos ? 2 : 1;
+      final List<dynamic> merged =
+          await _fetchMergedAvailableFilesList(categoryId, wantVideos);
 
       if (mounted) {
-        setState(() {
-          _masterAvailableFiles = merged;
-          _applyFileTypeFilter();
-        });
+        final List<dynamic> normalized = _normalizeAvailableFiles(merged);
+        setState(() => _displayedFiles = normalized);
         debugPrint(
-          '[AvailableFiles] Merged ${merged.length} master file(s), ${_displayedFiles.length} filtered for '
-          'template=$selectedTemplateId dept=$selectedCategoryId fileType=$fileType',
+          '[AvailableFiles] Loaded ${normalized.length} total file(s) for '
+          'template=$selectedTemplateId category_id=$categoryId (${fileType ?? "none"})',
         );
       }
     } catch (e) {
@@ -323,85 +359,81 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   }
 
   /// Silent background refresh — no spinner, no UI lock.
-  /// Updates [_masterAvailableFiles] if any new files are available.
+  /// Re-fetches files and updates [_displayedFiles] when the list changes.
   Future<void> _silentRefreshAvailableFiles() async {
-    if (selectedTemplateId == null || selectedCategoryId == null || !mounted) return;
+    if (selectedTemplateId == null || fileType == null || !mounted) return;
     try {
-      final ts = DateTime.now().millisecondsSinceEpoch;
+      final bool wantVideos = fileType == 'videos';
+      final int categoryId = wantVideos ? 2 : 1;
+      final List<dynamic> merged =
+          await _fetchMergedAvailableFilesList(categoryId, wantVideos);
 
-      final results = await Future.wait([
-        http.post(
-          Uri.parse('$_baseUrl/selectTemplate_availableFilesview?_t=$ts'),
-          body: jsonEncode({
-            "api_key": _apiKey,
-            "template_id": selectedTemplateId,
-            "category_id": selectedCategoryId,
-          }),
-          headers: {'Content-Type': 'application/json'},
-        ),
-        http.post(
-          Uri.parse('$_baseUrl/fileview?_t=$ts'),
-          body: jsonEncode({"api_key": _apiKey}),
-          headers: {'Content-Type': 'application/json'},
-        ),
-      ]);
       if (!mounted) return;
+      final List<dynamic> fresh = _normalizeAvailableFiles(merged);
 
-      final List<dynamic> merged = [];
-      final Set<String> seenIds = {};
-
-      final r1 = results[0];
-      if (r1.statusCode == 200) {
-        final data = await _parseJsonAsync(r1.body);
-        for (final f in List<dynamic>.from(data['data'] ?? [])) {
-          final id = f['id']?.toString() ?? f['file_id']?.toString() ?? '';
-          if (id.isNotEmpty && seenIds.add(id)) merged.add(f);
-        }
-      }
-
-      final r2 = results[1];
-      if (r2.statusCode == 200) {
-        final data = await _parseJsonAsync(r2.body);
-        if ((data['status']?.toString() ?? '') == 'Success') {
-          for (final f in List<dynamic>.from(data['data'] ?? [])) {
-            final deptId = f['category_id']?.toString() ?? '';
-            if (deptId.isNotEmpty && deptId != selectedCategoryId.toString()) {
-              continue;
-            }
-            final id = f['id']?.toString() ?? f['file_id']?.toString() ?? '';
-            if (id.isNotEmpty && seenIds.add(id)) merged.add(f);
-          }
-        }
-      }
-
-      final currentIds = _masterAvailableFiles.map((f) => f['id']?.toString()).join(',');
-      final freshIds = merged.map((f) => f['id']?.toString()).join(',');
+      final currentIds =
+          _displayedFiles.map((f) => (f['id'] ?? f['file_id'])?.toString()).join(',');
+      final freshIds =
+          fresh.map((f) => (f['id'] ?? f['file_id'])?.toString()).join(',');
       if (currentIds != freshIds) {
-        debugPrint('[BgSync] Available files updated: ${merged.length} total');
-        if (mounted) {
-          setState(() {
-            _masterAvailableFiles = merged;
-            _applyFileTypeFilter();
-          });
-        }
+        debugPrint(
+          '[BgSync] Available files updated: ${fresh.length} total for category_id=$categoryId',
+        );
+        if (mounted) setState(() => _displayedFiles = fresh);
       }
     } catch (e) {
       debugPrint('[BgSync] _silentRefreshAvailableFiles error: $e');
     }
   }
 
+  /// Sends a GET request to notify the digital signage TV device that the
+  /// play list has changed and it should re-sync within its 10-minute cycle.
+  ///
+  /// Uses [_baseUrl] (resolved dynamically via [getBaseUrl]) and [_deviceId]
+  /// so both values can be changed from a single place without hunting for
+  /// raw strings scattered across the file.
+  Future<void> _triggerSignageSync() async {
+    final syncUrl =
+        '$_baseUrl/mobile_app/viewdevice1.php?device_id=$_deviceId&sync_status=2';
+    print('\n[SIGNAGE_SYNC] ══════════════════════════════════════════');
+    print('[SIGNAGE_SYNC] ➤ Triggering digital signage device sync');
+    print('[SIGNAGE_SYNC]   baseUrl   : $_baseUrl');
+    print('[SIGNAGE_SYNC]   deviceId  : $_deviceId');
+    print('[SIGNAGE_SYNC]   Full URL  : $syncUrl');
+    try {
+      final response = await http
+          .get(Uri.parse(syncUrl))
+          .timeout(const Duration(seconds: 15));
+      debugPrint('[API_CALL] GET $syncUrl -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
+      final truncatedBody = response.body.length > 300
+          ? '${response.body.substring(0, 300)}…'
+          : response.body;
+      print('[SIGNAGE_SYNC] ✔ HTTP ${response.statusCode} — Body: $truncatedBody');
+      if (response.statusCode != 200) {
+        print('[SIGNAGE_SYNC] ⚠ Non-200 status. TV device may not have received the sync signal.');
+      } else {
+        print('[SIGNAGE_SYNC] ✅ Sync signal delivered successfully.');
+      }
+    } catch (e, st) {
+      print('[SIGNAGE_SYNC] ❌ Exception during sync: $e');
+      print('[SIGNAGE_SYNC]   StackTrace: $st');
+    }
+    print('[SIGNAGE_SYNC] ══════════════════════════════════════════\n');
+  }
+
   String _normalizeAbsoluteUrl(String path) {
-    if (path.isEmpty) return '';
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return path;
+    final String trimmed = path.trim();
+    if (trimmed.isEmpty) return '';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
     }
-    if (path.startsWith('/uploads/')) {
-      return 'https://display.sriher.com$path';
+    if (trimmed.startsWith('/')) {
+      return '$_baseUrl$trimmed';
     }
-    if (path.startsWith('uploads/')) {
-      return 'https://display.sriher.com/$path';
+    if (trimmed.startsWith('uploads/')) {
+      return '$_baseUrl/$trimmed';
     }
-    return 'https://display.sriher.com/uploads/${Uri.encodeFull(path)}';
+    return '$_baseUrl/uploads/${Uri.encodeFull(trimmed)}';
   }
 
   List<dynamic> _normalizeAssignedFiles(List<dynamic> rawList) {
@@ -441,10 +473,118 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }).toList();
   }
 
-  Future<void> _fetchAssignedFiles() async {
+  /// Normalises [file_url], [url720p] / [video_720p], and [video_1080p] fields
+  /// for the **available-files** list returned by
+  /// [selectTemplate_availableFilesview].  Mirrors [_normalizeAssignedFiles]
+  /// but handles the slightly different field names the available-files
+  /// endpoint may return (e.g. `file_url`, `url720p`).
+  List<dynamic> _normalizeAvailableFiles(List<dynamic> rawList) {
+    return rawList.map((file) {
+      if (file == null) return file;
+      final Map<String, dynamic> item = Map<String, dynamic>.from(file);
+
+      // Raw file path — the server can return this in several field names.
+      final String rawName = [
+        item['file_name'],
+        item['user_filename'],
+        item['name'],
+        item['file_url'],
+        item['url'],
+      ].firstWhere((v) => v != null && v.toString().isNotEmpty, orElse: () => '')?.toString() ?? '';
+
+      if ((item['user_filename'] == null || item['user_filename'].toString().isEmpty) &&
+          item['name'] != null && item['name'].toString().isNotEmpty) {
+        item['user_filename'] = item['name'];
+      }
+      if ((item['file_name'] == null || item['file_name'].toString().isEmpty) &&
+          item['name'] != null && item['name'].toString().isNotEmpty) {
+        item['file_name'] = item['name'];
+      }
+
+      // 720p / 1080p video rendition fields
+      final String raw720 = [
+        item['url720p'],
+        item['video_720p'],
+        item['url_720p'],
+      ].firstWhere((v) => v != null && v.toString().isNotEmpty, orElse: () => '')?.toString() ?? '';
+
+      final String raw1080 = [
+        item['url1080p'],
+        item['video_1080p'],
+        item['url_1080p'],
+      ].firstWhere((v) => v != null && v.toString().isNotEmpty, orElse: () => '')?.toString() ?? '';
+
+      final bool isVid = _isFileVideo(item);
+
+      final String fullUrl    = _normalizeAbsoluteUrl(rawName);
+      final String full720    = _normalizeAbsoluteUrl(raw720);
+      final String full1080   = _normalizeAbsoluteUrl(raw1080);
+
+      // Always expose a canonical file_url and url so _buildFilePreview works.
+      item['file_url'] = fullUrl;
+      item['url']      = fullUrl;
+
+      if (isVid) {
+        // For videos: populate all rendition fields and derive video_url.
+        // When the converted file is not yet ready (empty), fall back to the
+        // original upload URL so the preview still plays.
+        item['url720p']     = full720.isNotEmpty  ? full720  : fullUrl;
+        item['video_720p']  = full720.isNotEmpty  ? full720  : fullUrl;
+        item['url1080p']    = full1080.isNotEmpty ? full1080 : fullUrl;
+        item['video_1080p'] = full1080.isNotEmpty ? full1080 : fullUrl;
+        item['video_url']   = full720.isNotEmpty
+            ? full720
+            : full1080.isNotEmpty
+                ? full1080
+                : fullUrl;
+      } else {
+        if (full720.isNotEmpty)  item['video_720p']  = full720;
+        if (full1080.isNotEmpty) item['video_1080p'] = full1080;
+      }
+
+      return item;
+    }).toList()
+      // Sort newest uploads first (descending id) — guaranteed in both the
+      // full-fetch and background silent-refresh paths.
+      ..sort((a, b) {
+        final idA = int.tryParse(
+                a['id']?.toString() ?? a['file_id']?.toString() ?? '') ??
+            0;
+        final idB = int.tryParse(
+                b['id']?.toString() ?? b['file_id']?.toString() ?? '') ??
+            0;
+        return idB.compareTo(idA);
+      });
+  }
+
+  /// Helper to merge fresh server data with any optimistic items that have not yet been reflected in the server response.
+  List<dynamic> _mergeWithOptimisticAssignedFiles(List<dynamic> serverNormalized) {
+    final List<dynamic> merged = serverNormalized.where((n) {
+      final nId = int.tryParse((n['file_id'] ?? n['id'])?.toString() ?? '') ?? 0;
+      return nId <= 0 || !_removingFileIds.contains(nId);
+    }).toList();
+
+    for (var existing in assignedFiles) {
+      final exId = int.tryParse((existing['file_id'] ?? existing['id'])?.toString() ?? '') ?? 0;
+      if (exId > 0 && !_removingFileIds.contains(exId) && (_addingFileIds.contains(exId) || existing['_isOptimistic'] == true)) {
+        final inNormalized = merged.any((n) {
+          final nId = int.tryParse((n['file_id'] ?? n['id'])?.toString() ?? '') ?? 0;
+          return nId == exId;
+        });
+        if (!inNormalized) {
+          merged.add(existing);
+        }
+      }
+    }
+    return merged;
+  }
+
+  Future<void> _fetchAssignedFiles({bool forceImmediate = false, bool showLoading = false}) async {
     if (selectedTemplateId == null) return;
     if (!mounted) return;
-    setState(() => isLoadingAssignedFiles = true);
+    if (showLoading && assignedFiles.isEmpty) {
+      setState(() => isLoadingAssignedFiles = true);
+    }
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/selectTemplate_filesview'),
@@ -454,19 +594,25 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }),
         headers: {'Content-Type': 'application/json'},
       );
+      debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
       if (response.statusCode == 200) {
         final data = await _parseJsonAsync(response.body);
         debugPrint('[AssignedFiles] response: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
         if (mounted) {
           final List<dynamic> normalized = _normalizeAssignedFiles(data['data'] ?? []);
+          final List<dynamic> merged = _mergeWithOptimisticAssignedFiles(normalized);
+
           final bool isPlayerActive = _tvSlideTimer != null && _tvSlideTimer!.isActive && assignedFiles.isNotEmpty;
-          if (isPlayerActive && _tvSlideIndex > 0 && _tvSlideIndex < assignedFiles.length) {
-            _pendingAssignedFiles = normalized;
+          if (!forceImmediate && isPlayerActive && _tvSlideIndex > 0 && _tvSlideIndex < assignedFiles.length) {
+            _pendingAssignedFiles = merged;
             debugPrint('[AssignedFiles] Stored updated playlist in pending buffer for next cycle.');
           } else {
             setState(() {
-              assignedFiles = normalized;
+              assignedFiles = merged;
               _pendingAssignedFiles = null;
+              if (_tvSlideIndex >= assignedFiles.length) {
+                _tvSlideIndex = 0;
+              }
             });
             if (_tvSlideTimer == null || !_tvSlideTimer!.isActive) {
               _startTvPlayer();
@@ -489,36 +635,54 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   /// doesn't rebuild unnecessarily on every poll tick.
   Future<void> _silentRefreshAssignedFiles() async {
     if (selectedTemplateId == null || !mounted) return;
+    final endpoint = '$_baseUrl/selectTemplate_filesview';
+    print('[POLL] → GET assigned files: $endpoint  template=$selectedTemplateId');
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/selectTemplate_filesview'),
+        Uri.parse(endpoint),
         body: jsonEncode({
           "api_key": _apiKey,
           "template_id": selectedTemplateId,
         }),
         headers: {'Content-Type': 'application/json'},
       );
+      print('[POLL] ← HTTP ${response.statusCode} — body length: ${response.body.length}');
       if (response.statusCode == 200 && mounted) {
         final data = await _parseJsonAsync(response.body);
         final List<dynamic> fresh = _normalizeAssignedFiles(data['data'] ?? []);
-        final currentIds = assignedFiles.map((f) => f['id']?.toString()).join(',');
-        final freshIds = fresh.map((f) => f['id']?.toString()).join(',');
-        if (currentIds != freshIds) {
+        final List<dynamic> merged = _mergeWithOptimisticAssignedFiles(fresh);
+
+        final currentIds = assignedFiles
+            .map((f) => (f['file_id'] ?? f['id'])?.toString())
+            .join(',');
+        final mergedIds = merged
+            .map((f) => (f['file_id'] ?? f['id'])?.toString())
+            .join(',');
+
+        print('[POLL] current IDs: $currentIds');
+        print('[POLL]   merged IDs: $mergedIds');
+        if (currentIds != mergedIds) {
+          print('[POLL] ⚡ Change detected! Updating UI...');
           final bool isPlayerActive = _tvSlideTimer != null && _tvSlideTimer!.isActive && assignedFiles.isNotEmpty;
           if (isPlayerActive && _tvSlideIndex > 0 && _tvSlideIndex < assignedFiles.length) {
-            _pendingAssignedFiles = fresh;
+            _pendingAssignedFiles = merged;
+            print('[POLL] Stored fresh playlist in pending buffer for next loop cycle.');
             debugPrint('[Poll] Stored fresh playlist in pending buffer for next loop cycle.');
           } else {
             if (mounted) {
               setState(() {
-                assignedFiles = fresh;
+                assignedFiles = merged;
                 _pendingAssignedFiles = null;
               });
+              print('[POLL] ✔ setState() called — UI re-rendered with ${merged.length} items.');
             }
           }
+        } else {
+          print('[POLL] No change in file order — skipping setState.');
         }
       }
     } catch (e) {
+      print('[POLL] ❌ Error: $e');
       debugPrint('[Poll] _silentRefreshAssignedFiles error: $e');
     }
   }
@@ -596,7 +760,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     });
   }
 
-  Future<void> _assignFile(
+  Future<void> addFileToTemplate(
     int fileId,
     String formattedDuration,
     String fileName, {
@@ -615,6 +779,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
     if (isAlreadyAssigned) {
       if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("'$fileName' is already in the current selection list."),
@@ -630,14 +795,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       return;
     }
 
-    setState(() {
-      _addingFileIds.add(fileId);
-    });
-
-    // Check if file is a video
     final bool isVideo = _isFileVideo(fileRecord);
 
-    // Extract video-specific or configured duration
     int durationSecs =
         _rawFileDurations[fileId] ?? _parseFormattedDuration(formattedDuration);
     if (fileRecord != null) {
@@ -650,6 +809,14 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       }
     }
     if (durationSecs < 1) durationSecs = isVideo ? 15 : 10;
+
+    if (mounted) {
+      setState(() {
+        _addingFileIds.add(fileId);
+        isAddingLoading = true;
+        isLoading = true;
+      });
+    }
 
     final Map<String, dynamic> payload = {
       "api_key": _apiKey,
@@ -667,39 +834,48 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         headers: {'Content-Type': 'application/json'},
       );
 
-      // Terminal Diagnostic Logging
-      print('[ASSIGN VIDEO SUCCESS]: Status ${response.statusCode} - ${response.body}');
-      debugPrint('[ASSIGN VIDEO SUCCESS]: Status ${response.statusCode} - ${response.body}');
+      debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
 
       if (response.statusCode == 200) {
-        // Refetch current assigned files via selectTemplate_filesview
-        await _fetchAssignedFiles();
-
-        // Extract the updated array of assigned file_ids
-        final fileIds = assignedFiles
-            .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
-            .where((id) => id > 0)
-            .toList();
-
-        // Automatically update play order
-        if (fileIds.isNotEmpty) {
-          try {
-            await http.post(
-              Uri.parse('$_baseUrl/selectTemplate_updatePlayOrderview'),
-              body: jsonEncode({
-                "api_key": _apiKey,
-                "template_id": selectedTemplateId,
-                "file_ids": fileIds,
-              }),
-              headers: {'Content-Type': 'application/json'},
-            );
-            debugPrint('[Auto-Sync PlayOrder] Success for fileIds: $fileIds');
-          } catch (e) {
-            debugPrint('[Auto-Sync PlayOrder] Error: $e');
+        // Build normalized item model
+        dynamic newItem;
+        if (fileRecord != null) {
+          final tempMap = Map<String, dynamic>.from(fileRecord);
+          tempMap['id'] = fileId;
+          tempMap['file_id'] = fileId;
+          tempMap['user_filename'] = fileName;
+          tempMap['file_name'] = fileName;
+          tempMap['duration'] = durationSecs;
+          tempMap['file_duration'] = durationSecs;
+          if (tempMap['file_type'] == null || tempMap['file_type'].toString().isEmpty) {
+            tempMap['file_type'] = isVideo ? 'Video' : 'Image';
           }
+          newItem = _normalizeAssignedFiles([tempMap]).first;
+        } else {
+          newItem = {
+            'id': fileId,
+            'file_id': fileId,
+            'user_filename': fileName,
+            'file_name': fileName,
+            'file_type': isVideo ? 'Video' : 'Image',
+            'duration': durationSecs,
+            'file_duration': durationSecs,
+          };
         }
 
+        // Add to currentSelectionList (assignedFiles) locally after server confirmation
         if (mounted) {
+          setState(() {
+            final exists = assignedFiles.any((f) {
+              final id = int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0;
+              return id == fileId;
+            });
+            if (!exists && newItem != null) {
+              assignedFiles.add(newItem);
+            }
+          });
+
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: RichText(
@@ -715,7 +891,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                       ),
                     ),
                     TextSpan(
-                      text: " (${isVideo ? 'Video' : 'Image'}, ${durationSecs}s) has been added to the current selection list.",
+                      text: " (${isVideo ? 'Video' : 'Image'}, ${durationSecs}s) assigned to server successfully.",
                       style: const TextStyle(color: Colors.white),
                     ),
                   ],
@@ -730,21 +906,86 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             ),
           );
         }
+
+        // Re-fetch assigned files to stay 100% in sync with database
+        await _fetchAssignedFiles(forceImmediate: true, showLoading: false);
+        _triggerSignageSync();
+
+        final fileIds = assignedFiles
+            .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
+            .where((id) => id > 0)
+            .toList();
+
+        if (fileIds.isNotEmpty) {
+          try {
+            await http.post(
+              Uri.parse('$_baseUrl/selectTemplate_updatePlayOrderview'),
+              body: jsonEncode({
+                "api_key": _apiKey,
+                "template_id": selectedTemplateId,
+                "file_ids": fileIds,
+              }),
+              headers: {'Content-Type': 'application/json'},
+            );
+          } catch (e) {
+            debugPrint('[Auto-Sync PlayOrder] Error: $e');
+          }
+        }
       } else {
         debugPrint('[ASSIGN FILE ERROR]: HTTP ${response.statusCode}: ${response.body}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Failed to assign '$fileName' to backend server."),
+              backgroundColor: Colors.red.shade800,
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
-      debugPrint("_assignFile error: $e");
+      debugPrint("addFileToTemplate error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error assigning '$fileName': $e"),
+            backgroundColor: Colors.red.shade800,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
           _addingFileIds.remove(fileId);
+          isAddingLoading = false;
+          isLoading = false;
         });
       }
     }
   }
 
-  Future<void> _removeFile(int fileId, String fileName) async {
+
+
+  Future<void> deleteFileFromTemplate(int fileId, String fileName, {dynamic fileRecord}) async {
+    if (!mounted || fileId <= 0) return;
+
+    if (mounted) {
+      setState(() {
+        _removingFileIds.add(fileId);
+      });
+    }
+
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/selectTemplate_removeFileview'),
@@ -755,13 +996,27 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }),
         headers: {'Content-Type': 'application/json'},
       );
+      debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
+
       if (response.statusCode == 200) {
-        await _fetchAssignedFiles();
+        // Only remove from local state after server confirms success
         if (mounted) {
+          setState(() {
+            assignedFiles.removeWhere((f) {
+              if (fileRecord != null && f == fileRecord) return true;
+              final id = int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0;
+              return id > 0 && id == fileId;
+            });
+            if (_tvSlideIndex >= assignedFiles.length) {
+              _tvSlideIndex = 0;
+            }
+          });
+
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                "'$fileName' has been removed.",
+                "'$fileName' has been removed from server successfully.",
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -776,70 +1031,170 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             ),
           );
         }
+
+        // Auto-sync remaining play order to backend
+        final remainingFileIds = assignedFiles
+            .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
+            .where((id) => id > 0 && id != fileId)
+            .toList();
+
+        if (selectedTemplateId != null && remainingFileIds.isNotEmpty) {
+          try {
+            await http.post(
+              Uri.parse('$_baseUrl/selectTemplate_updatePlayOrderview'),
+              body: jsonEncode({
+                "api_key": _apiKey,
+                "template_id": selectedTemplateId,
+                "file_ids": remainingFileIds,
+              }),
+              headers: {'Content-Type': 'application/json'},
+            );
+          } catch (e) {
+            debugPrint('[Auto-Sync PlayOrder on Remove] Error: $e');
+          }
+        }
+
+        await _fetchAssignedFiles(forceImmediate: true, showLoading: false);
+        _triggerSignageSync();
+      } else {
+        debugPrint('[REMOVE FILE ERROR]: HTTP ${response.statusCode}: ${response.body}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Failed to remove '$fileName' from server. Please try again."),
+              backgroundColor: Colors.red.shade800,
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("deleteFileFromTemplate error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error deleting '$fileName': $e"),
+            backgroundColor: Colors.red.shade800,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _removingFileIds.remove(fileId);
+        });
+      }
     }
   }
 
-  /// Sends the reordered file_ids to the backend in the exact dragged sequence.
-  /// [orderedFiles] is the list in the new play order (must not be null/empty).
+
+
+  /// Sends the reordered [file_ids] to the backend in the exact dragged
+  /// sequence, then — only on a confirmed HTTP 200 — triggers the digital
+  /// signage sync so the TV device refreshes within its next sync cycle.
+  ///
+  /// [orderedFiles] is the list in the new play order. When omitted,
+  /// [assignedFiles] is used as a fallback.
   Future<void> _updatePlayOrder([List<dynamic>? orderedFiles]) async {
     if (selectedTemplateId == null) return;
     final files = orderedFiles ?? assignedFiles;
     if (files.isEmpty) return;
+
     try {
       final fileIds = files
-          .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
+          .map(
+            (f) =>
+                int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0,
+          )
           .where((id) => id > 0)
           .toList();
-      if (fileIds.isEmpty) return;
+      if (fileIds.isEmpty) {
+        print('[PLAY_ORDER] ⚠ No valid file IDs found — aborting update.');
+        return;
+      }
 
-      debugPrint('[PlayOrder] Sending file_ids: $fileIds for template $selectedTemplateId');
+      final playOrderUrl = '$_baseUrl/selectTemplate_updatePlayOrderview';
+      final playOrderPayload = {
+        'api_key': _apiKey,
+        'template_id': selectedTemplateId,
+        'file_ids': fileIds,
+      };
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/selectTemplate_updatePlayOrderview'),
-        body: jsonEncode({
-          "api_key": _apiKey,
-          "template_id": selectedTemplateId,
-          "file_ids": fileIds,
-        }),
-        headers: {'Content-Type': 'application/json'},
-      );
+      print('\n[PLAY_ORDER] ══════════════════════════════════════════');
+      print('[PLAY_ORDER] ➤ Sending play-order update');
+      print('[PLAY_ORDER]   URL        : $playOrderUrl');
+      print('[PLAY_ORDER]   templateId : $selectedTemplateId');
+      print('[PLAY_ORDER]   file_ids   : $fileIds');
+
+      final response = await http
+          .post(
+            Uri.parse(playOrderUrl),
+            body: jsonEncode(playOrderPayload),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 15));
+
+      debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
+      final truncatedBody = response.body.length > 300
+          ? '${response.body.substring(0, 300)}…'
+          : response.body;
+      print('[PLAY_ORDER]   HTTP ${response.statusCode} — Body: $truncatedBody');
+
       if (response.statusCode == 200) {
-        debugPrint('[PlayOrder] Success: ${response.body}');
+        print('[PLAY_ORDER] ✅ Play order updated successfully.');
+        print('[PLAY_ORDER] ══════════════════════════════════════════\n');
+
+        // ── Trigger signage sync ONLY after confirmed success ──────────────
+        // Awaited so that any sync errors are captured in the same try/catch.
+        await _triggerSignageSync();
+
+        // ── Update local state ─────────────────────────────────────────────
         if (orderedFiles != null) {
           final normalized = _normalizeAssignedFiles(orderedFiles);
-          final bool isPlayerActive = _tvSlideTimer != null && _tvSlideTimer!.isActive && assignedFiles.isNotEmpty;
-          if (isPlayerActive && _tvSlideIndex > 0 && _tvSlideIndex < assignedFiles.length) {
-            _pendingAssignedFiles = normalized;
-            debugPrint('[PlayOrder] Saved to backend; stored in pending buffer for loop restart.');
-          } else {
-            if (mounted) {
-              setState(() {
-                assignedFiles = normalized;
-                _pendingAssignedFiles = null;
-                if (_tvSlideIndex >= assignedFiles.length) {
-                  _tvSlideIndex = 0;
-                }
-              });
-            }
+          if (mounted) {
+            setState(() {
+              assignedFiles = normalized;
+              _pendingAssignedFiles = null;
+              if (_tvSlideIndex >= assignedFiles.length) {
+                _tvSlideIndex = 0;
+              }
+            });
           }
         }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("Play order updated successfully"),
+              content: Text('Play order updated successfully'),
               backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
             ),
           );
         }
       } else {
-        debugPrint('[PlayOrder] HTTP ${response.statusCode}: ${response.body}');
+        print(
+          '[PLAY_ORDER] ❌ HTTP ${response.statusCode} — play order update FAILED.',
+        );
+        print('[PLAY_ORDER]   Response body: $truncatedBody');
+        print(
+          '[PLAY_ORDER] ⚠ Signage sync NOT triggered (play-order POST failed).',
+        );
+        print('[PLAY_ORDER] ══════════════════════════════════════════\n');
       }
-    } catch (e) {
-      debugPrint('[PlayOrder] Error: $e');
+    } catch (e, st) {
+      print('[PLAY_ORDER] ❌ Exception: $e');
+      print('[PLAY_ORDER]   StackTrace: $st');
     }
   }
 
@@ -884,7 +1239,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               setState(() {
                 selectedTemplateId = v;
                 fileType = null;
-                _masterAvailableFiles.clear();
                 _displayedFiles.clear();
                 assignedFiles.clear();
                 _pendingAssignedFiles = null;
@@ -894,7 +1248,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                 }
               });
               if (v != null) {
-                _fetchAssignedFiles();
+                _fetchAssignedFiles(showLoading: true);
                 _fetchAvailableFiles();
                 // Restart background polling for the newly selected template
                 _startPollingTimer();
@@ -912,7 +1266,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               setState(() {
                 selectedCategoryId = v;
                 fileType = null;
-                _masterAvailableFiles.clear();
                 _displayedFiles.clear();
                 if (v != null) {
                   isLoadingAvailableFiles = true;
@@ -921,7 +1274,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               if (v != null) {
                 _fetchAvailableFiles();
                 if (selectedTemplateId != null) {
-                  _fetchAssignedFiles();
+                  _fetchAssignedFiles(showLoading: true);
                 }
               }
             },
@@ -949,10 +1302,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   activeColor: Colors.blue,
                   onChanged: (v) {
                     if (v == fileType) return;
-                    setState(() {
-                      fileType = v!;
-                      _applyFileTypeFilter();
-                    });
+                    setState(() => fileType = v!);
+                    // Re-fetch from server with category_id=1 (Images)
+                    _fetchAvailableFiles();
                   },
                 ),
                 const Text(
@@ -969,10 +1321,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   activeColor: Colors.blue,
                   onChanged: (v) {
                     if (v == fileType) return;
-                    setState(() {
-                      fileType = v!;
-                      _applyFileTypeFilter();
-                    });
+                    setState(() => fileType = v!);
+                    // Re-fetch from server with category_id=2 (Videos)
+                    _fetchAvailableFiles();
                   },
                 ),
                 const Text(
@@ -1431,16 +1782,35 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                       flex: 2,
                       child: Center(
                         child: ElevatedButton(
-                          onPressed: _addingFileIds.contains(fileId)
+                          onPressed: (_addingFileIds.contains(fileId) || isAddingLoading || isLoading)
                               ? null
-                              : () => _assignFile(
-                                    fileId,
-                                    controller.text,
-                                    file['user_filename'] ??
-                                        file['file_name'] ??
-                                        'File',
-                                    fileRecord: file,
-                                  ),
+                              : () async {
+                                  if (mounted) {
+                                    setState(() {
+                                      isAddingLoading = true;
+                                      isLoading = true;
+                                    });
+                                  }
+                                  try {
+                                    await addFileToTemplate(
+                                      fileId,
+                                      controller.text,
+                                      file['user_filename'] ??
+                                          file['file_name'] ??
+                                          'File',
+                                      fileRecord: file,
+                                    );
+                                  } catch (e) {
+                                    debugPrint('Add file error: $e');
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() {
+                                        isAddingLoading = false;
+                                        isLoading = false;
+                                      });
+                                    }
+                                  }
+                                },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue.shade600,
                             foregroundColor: Colors.white,
@@ -1452,7 +1822,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          child: _addingFileIds.contains(fileId)
+                          child: (_addingFileIds.contains(fileId) || isAddingLoading || isLoading)
                               ? const SizedBox(
                                   width: 14,
                                   height: 14,
@@ -1555,23 +1925,39 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     if (file == null) return false;
     final String fileName = (file['file_name'] ?? '').toString();
     final String userFileName = (file['user_filename'] ?? '').toString();
+    final String name = (file['name'] ?? '').toString();
+    final String fileUrl = (file['file_url'] ?? file['url'] ?? '').toString();
     final String fType = (file['file_type'] ?? '').toString().toLowerCase();
     final String fFormat = (file['file_format'] ?? '').toString().toLowerCase();
     final String mimeType = (file['mime_type'] ?? '').toString().toLowerCase();
+    final String fStatus = (file['file_status'] ?? file['status'] ?? '').toString();
+    // category_id == '2' is the server's file-format code for videos
+    final String catId = (file['category_id'] ?? '').toString().trim();
     final String lowerName = fileName.toLowerCase();
     final String lowerUser = userFileName.toLowerCase();
+    final String lowerN = name.toLowerCase();
+    final String lowerUrl = fileUrl.toLowerCase();
 
-    // 1. Check file extension in file_name / user_filename
+    // 0. Server file_status flag: 2 indicates video
+    if (fStatus == '2') return true;
+
+    // 0b. category_id == '2' is the file-format code for videos (set by upload)
+    if (catId == '2') return true;
+
+    // 1. Check file extension in file_name / user_filename / name / file_url
     const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.3gp', '.flv', '.wmv', '.ts', '.m2ts'];
     for (final ext in exts) {
-      if (lowerName.endsWith(ext) || lowerUser.endsWith(ext)) return true;
+      if (lowerName.endsWith(ext) || lowerUser.endsWith(ext) || lowerN.endsWith(ext) || lowerUrl.endsWith(ext) ||
+          lowerName.contains(ext) || lowerUser.contains(ext) || lowerN.contains(ext) || lowerUrl.contains(ext)) {
+        return true;
+      }
     }
 
-    // 2. file_type field — raw extension string or MIME-like
+    // 2. file_type field — raw extension string, MIME-like, or keyword
     if (fType == 'mp4' || fType == 'mov' || fType == 'avi' ||
         fType == 'mkv' || fType == 'webm' || fType == 'm4v' ||
         fType == '3gp' || fType == 'flv' || fType == 'wmv' ||
-        fType == 'ts' || fType == 'm2ts' ||
+        fType == 'ts' || fType == 'm2ts' || fType == 'video' ||
         fType == 'vinci' || fType == 'live' ||
         fType.contains('video') || fType.contains('vinci') ||
         fType.contains('live')) {
@@ -1594,23 +1980,31 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   String _getMediaUrl(dynamic file) {
     if (file == null) return '';
     final bool isVid = _isFileVideo(file);
-    String raw;
+    String raw = '';
     if (isVid) {
-      // For videos: prefer pre-converted URLs, fall back to original file_name
-      raw = (file['video_url'] ??
-              file['video_720p'] ??
-              file['video_1080p'] ??
-              file['file_url'] ??
-              file['url'] ??
-              file['file_name'] ??
-              file['user_filename'] ??
-              '').toString();
+      // For videos: prefer pre-converted URLs, fall back to original file_name or file_url
+      raw = [
+        file['video_url'],
+        file['video_720p'],
+        file['url720p'],
+        file['video_1080p'],
+        file['url1080p'],
+        file['file_url'],
+        file['url'],
+        file['file_name'],
+      ].firstWhere(
+        (v) => v != null && v.toString().trim().isNotEmpty,
+        orElse: () => '',
+      ).toString();
     } else {
-      raw = (file['file_url'] ??
-              file['url'] ??
-              file['file_name'] ??
-              file['user_filename'] ??
-              '').toString();
+      raw = [
+        file['file_url'],
+        file['url'],
+        file['file_name'],
+      ].firstWhere(
+        (v) => v != null && v.toString().trim().isNotEmpty,
+        orElse: () => '',
+      ).toString();
     }
     return _normalizeAbsoluteUrl(raw);
   }
@@ -1840,18 +2234,36 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                         Expanded(
                           flex: 2,
                           child: Center(
-                            child: IconButton( 
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.red,
-                                size: 20,
-                              ),
-                              onPressed: () => _removeFile(
-                                int.parse(file['id'].toString()),
-                                file['user_filename'] ??
-                                    file['file_name'] ??
-                                    'File',
-                              ),
+                            child: IconButton(
+                              icon: _removingFileIds.contains(fileId)
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.red,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                      size: 20,
+                                    ),
+                              onPressed: _removingFileIds.contains(fileId)
+                                  ? null
+                                  : () {
+                                      final int targetFileId = int.tryParse(
+                                            (file['file_id'] ?? file['id'])?.toString() ?? '',
+                                          ) ??
+                                          0;
+                                      deleteFileFromTemplate(
+                                        targetFileId,
+                                        file['user_filename'] ??
+                                            file['file_name'] ??
+                                            'File',
+                                        fileRecord: file,
+                                      );
+                                    },
                             ),
                           ),
                         ),
@@ -2008,7 +2420,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               setState(() {
                 selectedTemplateId = int.tryParse(newTemplate['id'].toString());
                 selectedCategoryId = null;
-                _masterAvailableFiles = [];
                 _displayedFiles = [];
                 assignedFiles = [];
               });
@@ -2496,7 +2907,7 @@ class _PlayOrderDialogContentState extends State<_PlayOrderDialogContent> {
                               child: Text(
                                 file['user_filename'] ??
                                     file['file_name'] ??
-                                    '-',
+                                    '',
                                 maxLines: 1,
                                 softWrap: false,
                                 style: const TextStyle(
