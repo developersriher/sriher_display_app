@@ -190,9 +190,12 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   }
 
   // 3. EDIT DEVICE (FETCH SINGLE DATA)
-  Future<void> loadDeviceToEdit(dynamic id, Map<String, dynamic> localData) async {
+  Future<void> loadDeviceToEdit(
+    dynamic id,
+    Map<String, dynamic> localData,
+  ) async {
     final intId = int.tryParse(id.toString());
-    
+
     // 1. Immediately pre-populate with local table data to ensure fields are never empty
     setState(() {
       editingId = intId ?? (id is int ? id : null);
@@ -200,11 +203,25 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       _deviceNameController.text = localData['device_name']?.toString() ?? "";
       _modelController.text = localData['device_model']?.toString() ?? "";
       _osController.text = localData['device_os']?.toString() ?? "";
-      _yearController.text = localData['device_yr_model']?.toString() ?? localData['year']?.toString() ?? "";
-      _warrantyController.text = localData['device_warranty']?.toString() ?? localData['warranty']?.toString() ?? "";
-      _serialNoController.text = localData['device_s_no']?.toString() ?? localData['serial_number']?.toString() ?? "";
-      _manufacturerController.text = localData['Manufacture']?.toString() ?? localData['manufacture']?.toString() ?? "";
-      selectedDeviceType = localData['type_of_device']?.toString() ?? localData['device_type']?.toString();
+      _yearController.text =
+          localData['device_yr_model']?.toString() ??
+          localData['year']?.toString() ??
+          "";
+      _warrantyController.text =
+          localData['device_warranty']?.toString() ??
+          localData['warranty']?.toString() ??
+          "";
+      _serialNoController.text =
+          localData['device_s_no']?.toString() ??
+          localData['serial_number']?.toString() ??
+          "";
+      _manufacturerController.text =
+          localData['Manufacture']?.toString() ??
+          localData['manufacture']?.toString() ??
+          "";
+      selectedDeviceType =
+          localData['type_of_device']?.toString() ??
+          localData['device_type']?.toString();
     });
 
     // Show dialog immediately with local data
@@ -238,15 +255,26 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
         if (!mounted) return;
         if (device != null && device is Map) {
           setState(() {
-            _deviceCodeController.text = device['device_code']?.toString() ?? _deviceCodeController.text;
-            _deviceNameController.text = device['device_name']?.toString() ?? _deviceNameController.text;
-            _modelController.text = device['device_model']?.toString() ?? _modelController.text;
-            _osController.text = device['device_os']?.toString() ?? _osController.text;
-            _yearController.text = device['device_yr_model']?.toString() ?? _yearController.text;
-            _warrantyController.text = device['device_warranty']?.toString() ?? _warrantyController.text;
-            _serialNoController.text = device['device_s_no']?.toString() ?? _serialNoController.text;
-            _manufacturerController.text = device['Manufacture']?.toString() ?? _manufacturerController.text;
-            selectedDeviceType = device['type_of_device']?.toString() ?? selectedDeviceType;
+            _deviceCodeController.text =
+                device['device_code']?.toString() ?? _deviceCodeController.text;
+            _deviceNameController.text =
+                device['device_name']?.toString() ?? _deviceNameController.text;
+            _modelController.text =
+                device['device_model']?.toString() ?? _modelController.text;
+            _osController.text =
+                device['device_os']?.toString() ?? _osController.text;
+            _yearController.text =
+                device['device_yr_model']?.toString() ?? _yearController.text;
+            _warrantyController.text =
+                device['device_warranty']?.toString() ??
+                _warrantyController.text;
+            _serialNoController.text =
+                device['device_s_no']?.toString() ?? _serialNoController.text;
+            _manufacturerController.text =
+                device['Manufacture']?.toString() ??
+                _manufacturerController.text;
+            selectedDeviceType =
+                device['type_of_device']?.toString() ?? selectedDeviceType;
           });
         }
       } else {
@@ -315,7 +343,11 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     StylishDialog.show(
       context: context,
       title: editingId == null ? "Create New Device" : "Edit Device Details",
-      titleStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+      titleStyle: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
       subtitle: "Configure system hardware and specifications",
       icon: editingId == null
           ? Icons.add_to_queue_rounded
@@ -333,262 +365,301 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildSectionHeader("DEVICE IDENTITY"),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildTextField(
-                      "Enter Device Name",
-                      _deviceNameController,
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Please enter the Device Name';
-                        final clean = v.trim().toLowerCase();
-                        final exists = deviceList.any((d) {
-                          final name = (d['device_name'] ?? d['deviceName'] ?? '').toString().trim().toLowerCase();
-                          final id = d['id'] ?? d['ID'];
-                          if (editingId != null && id?.toString() == editingId?.toString()) return false;
-                          return name == clean;
-                        });
-                        if (exists) return 'This device name already exists.';
-                        return null;
-                      },
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildTextField(
+                        "Enter Device Name",
+                        _deviceNameController,
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty)
+                            return 'Please enter the Device Name';
+                          final clean = v.trim().toLowerCase();
+                          final exists = deviceList.any((d) {
+                            final name =
+                                (d['device_name'] ?? d['deviceName'] ?? '')
+                                    .toString()
+                                    .trim()
+                                    .toLowerCase();
+                            final id = d['id'] ?? d['ID'];
+                            if (editingId != null &&
+                                id?.toString() == editingId?.toString())
+                              return false;
+                            return name == clean;
+                          });
+                          if (exists) return 'This device name already exists.';
+                          return null;
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildTextField(
-                      "Enter Device ID/Code",
-                      _deviceCodeController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Please enter the Device ID/Code';
-                        final clean = v.trim().toLowerCase();
-                        final exists = deviceList.any((d) {
-                          final code = (d['device_code'] ?? d['deviceCode'] ?? d['code'] ?? '').toString().trim().toLowerCase();
-                          final id = d['id'] ?? d['ID'];
-                          if (editingId != null && id?.toString() == editingId?.toString()) return false;
-                          return code == clean;
-                        });
-                        if (exists) return 'This device id already exists.';
-                        return null;
-                      },
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildTextField(
+                        "Enter Device ID/Code",
+                        _deviceCodeController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty)
+                            return 'Please enter the Device ID/Code';
+                          final clean = v.trim().toLowerCase();
+                          final exists = deviceList.any((d) {
+                            final code =
+                                (d['device_code'] ??
+                                        d['deviceCode'] ??
+                                        d['code'] ??
+                                        '')
+                                    .toString()
+                                    .trim()
+                                    .toLowerCase();
+                            final id = d['id'] ?? d['ID'];
+                            if (editingId != null &&
+                                id?.toString() == editingId?.toString())
+                              return false;
+                            return code == clean;
+                          });
+                          if (exists) return 'This device id already exists.';
+                          return null;
+                        },
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _buildDropdownField(
-                hint: "Select Device Type",
-                value: selectedDeviceType,
-                items: () {
-                  final List<String> defaultTypes = [
-                    "Android Smart TV",
-                    "LED Display",
-                    "Projector",
-                    "Linux Player",
-                  ];
-                  if (selectedDeviceType != null && selectedDeviceType!.isNotEmpty && !defaultTypes.contains(selectedDeviceType)) {
-                    defaultTypes.add(selectedDeviceType!);
-                  }
-                  return defaultTypes;
-                }(),
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'Please select the Device Type'
-                    : null,
-                onChanged: (val) {
-                  setDialogState(() => selectedDeviceType = val);
-                  setState(() => selectedDeviceType = val);
-                },
-              ),
-              const SizedBox(height: 32),
-              _buildSectionHeader("HARDWARE SPECIFICATIONS"),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildTextField(
-                      "Enter Model Number",
-                      _modelController,
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Please enter the Model Number'
-                          : null,
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildDropdownField(
+                  hint: "Select Device Type",
+                  value: selectedDeviceType,
+                  items: () {
+                    final List<String> defaultTypes = [
+                      "Android Smart TV",
+                      "LED Display",
+                      "Projector",
+                      "Linux Player",
+                    ];
+                    if (selectedDeviceType != null &&
+                        selectedDeviceType!.isNotEmpty &&
+                        !defaultTypes.contains(selectedDeviceType)) {
+                      defaultTypes.add(selectedDeviceType!);
+                    }
+                    return defaultTypes;
+                  }(),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Please select the Device Type'
+                      : null,
+                  onChanged: (val) {
+                    setDialogState(() => selectedDeviceType = val);
+                    setState(() => selectedDeviceType = val);
+                  },
+                ),
+                const SizedBox(height: 32),
+                _buildSectionHeader("HARDWARE SPECIFICATIONS"),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildTextField(
+                        "Enter Model Number",
+                        _modelController,
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Please enter the Model Number'
+                            : null,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildTextField(
-                      "Enter OS System",
-                      _osController,
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Please enter the OS System'
-                          : null,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildTextField(
+                        "Enter OS System",
+                        _osController,
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Please enter the OS System'
+                            : null,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildTextField(
-                      "Enter Year of Model",
-                      _yearController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(4),
-                      ],
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Please enter the Year of Model'
-                          : null,
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildTextField(
+                        "Enter Year of Model",
+                        _yearController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(4),
+                        ],
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Please enter the Year of Model'
+                            : null,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildTextField(
-                      "Enter Serial Number",
-                      _serialNoController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Please enter the Serial Number';
-                        final clean = v.trim().toLowerCase();
-                        final exists = deviceList.any((d) {
-                          final sno = (d['device_s_no'] ?? d['deviceSNo'] ?? d['serial_number'] ?? d['serial'] ?? '').toString().trim().toLowerCase();
-                          final id = d['id'] ?? d['ID'];
-                          if (editingId != null && id?.toString() == editingId?.toString()) return false;
-                          return sno == clean;
-                        });
-                        if (exists) return 'This serial number already exists.';
-                        return null;
-                      },
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildTextField(
+                        "Enter Serial Number",
+                        _serialNoController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty)
+                            return 'Please enter the Serial Number';
+                          final clean = v.trim().toLowerCase();
+                          final exists = deviceList.any((d) {
+                            final sno =
+                                (d['device_s_no'] ??
+                                        d['deviceSNo'] ??
+                                        d['serial_number'] ??
+                                        d['serial'] ??
+                                        '')
+                                    .toString()
+                                    .trim()
+                                    .toLowerCase();
+                            final id = d['id'] ?? d['ID'];
+                            if (editingId != null &&
+                                id?.toString() == editingId?.toString())
+                              return false;
+                            return sno == clean;
+                          });
+                          if (exists)
+                            return 'This serial number already exists.';
+                          return null;
+                        },
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              _buildSectionHeader("MANUFACTURING DETAILS"),
-              isDialogMobile
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildTextField(
-                          "Enter Manufacturer Name",
-                          _manufacturerController,
-                          validator: (v) => (v == null || v.isEmpty)
-                              ? 'Please enter the Manufacturer Name'
-                              : null,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildTextField(
-                          "Enter Warranty Status",
-                          _warrantyController,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
-                          ],
-                          validator: (v) => (v == null || v.isEmpty)
-                              ? 'Please enter the Warranty Status'
-                              : null,
-                        ),
-                      ],
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: _buildTextField(
+                  ],
+                ),
+                const SizedBox(height: 32),
+                _buildSectionHeader("MANUFACTURING DETAILS"),
+                isDialogMobile
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildTextField(
                             "Enter Manufacturer Name",
                             _manufacturerController,
                             validator: (v) => (v == null || v.isEmpty)
                                 ? 'Please enter the Manufacturer Name'
                                 : null,
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildTextField(
+                          const SizedBox(height: 16),
+                          _buildTextField(
                             "Enter Warranty Status",
                             _warrantyController,
                             inputFormatters: [
-                              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[a-zA-Z ]'),
+                              ),
                             ],
                             validator: (v) => (v == null || v.isEmpty)
                                 ? 'Please enter the Warranty Status'
                                 : null,
                           ),
-                        ),
-                      ],
-                    ),
-              const SizedBox(height: 32),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      _clearForm();
-                      Navigator.pop(context);
-                    },
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 20,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: const Text(
-                      "Cancel",
-                      style: TextStyle(
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: isSubmitting
-                        ? null
-                        : () async {
-                            if (dialogFormKey.currentState!.validate()) {
-                              if (Navigator.canPop(context))
-                                Navigator.pop(context);
-                              await handleFormSubmit();
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 32,
-                      ),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: isSubmitting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text(
-                            editingId == null ? "Submit" : "Update",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: _buildTextField(
+                              "Enter Manufacturer Name",
+                              _manufacturerController,
+                              validator: (v) => (v == null || v.isEmpty)
+                                  ? 'Please enter the Manufacturer Name'
+                                  : null,
                             ),
                           ),
-                  ),
-                ],
-              ),
-            ],
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildTextField(
+                              "Enter Warranty Status",
+                              _warrantyController,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[a-zA-Z ]'),
+                                ),
+                              ],
+                              validator: (v) => (v == null || v.isEmpty)
+                                  ? 'Please enter the Warranty Status'
+                                  : null,
+                            ),
+                          ),
+                        ],
+                      ),
+                const SizedBox(height: 32),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        _clearForm();
+                        Navigator.pop(context);
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 20,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              if (dialogFormKey.currentState!.validate()) {
+                                if (Navigator.canPop(context))
+                                  Navigator.pop(context);
+                                await handleFormSubmit();
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 32,
+                        ),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              editingId == null ? "Submit" : "Update",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-         ),
         );
       },
     );
@@ -602,7 +673,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
         style: TextStyle(
           color: Colors.blue.shade700,
           fontWeight: FontWeight.w900,
-          fontSize: 11,
+          fontSize: 12,
           letterSpacing: 1.2,
         ),
       ),
@@ -617,10 +688,6 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
-    final isTabletOrMobile = screenWidth < 950;
-    
-    final int currentItemCount = _filteredList.isEmpty ? 1 : _filteredList.length;
-    final double tableHeight = (isTabletOrMobile ? 180.0 : 250.0) + (currentItemCount * 45.0);
 
     final bodyContent = Padding(
       padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
@@ -650,7 +717,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                     style: TextStyle(
                       color: Colors.blue,
                       fontWeight: FontWeight.bold,
-                      fontSize: 22,
+                      fontSize: 16,
                     ),
                   );
 
@@ -669,14 +736,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 },
               ),
               const SizedBox(height: 20),
-              isMobile
-                  ? SizedBox(
-                      height: tableHeight,
-                      child: _buildTableCard(),
-                    )
-                  : Expanded(
-                      child: _buildTableCard(),
-                    ),
+              _buildTableCard(),
             ],
           ),
         ),
@@ -687,11 +747,10 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
       body: SelectionArea(
-        child: isMobile
-            ? SingleChildScrollView(
-                child: bodyContent,
-              )
-            : bodyContent,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: bodyContent,
+        ),
       ),
     );
   }
@@ -716,14 +775,15 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       },
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Flexible(
             child: Text(
-              label,
+              label.toUpperCase(),
               style: const TextStyle(
-                color: Colors.blue,
+                color: Color.fromRGBO(33, 150, 243, 1),
                 fontWeight: FontWeight.bold,
-                fontSize: 10,
+                fontSize: 16.0,
               ),
               textAlign: TextAlign.left,
               maxLines: 1,
@@ -764,365 +824,429 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
 
   Widget _buildHeaderCell(String label, {int colIndex = -1}) {
     if (colIndex < 0) {
-      return Center(
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.blue,
-            fontWeight: FontWeight.bold,
-            fontSize: 10,
+      return Align(
+        alignment: Alignment.center,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 12.0),
+          child: Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              color: Color.fromRGBO(33, 150, 243, 1),
+              fontWeight: FontWeight.bold,
+              fontSize: 16.0,
+            ),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
-          textAlign: TextAlign.center,
         ),
       );
     }
-    return _buildSortHeader(label, colIndex);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 12.0),
+        child: _buildSortHeader(label, colIndex),
+      ),
+    );
   }
 
   Widget _buildTableCard() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         _buildListHeaderControls(),
         const SizedBox(height: 16),
+        _buildDataTableContent(),
+        const SizedBox(height: 16),
+        _buildTableFooter(),
+      ],
+    );
+  }
 
-            // The Scrollable Table Container
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 1200;
+  Widget _buildDataTableContent() {
+    if (isLoading) {
+      return Container(
+        height: 250,
+        alignment: Alignment.center,
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 12),
+            Text(
+              "Loading devices...",
+              style: TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
-                  if (isNarrow) {
-                    final Map<int, TableColumnWidth> colWidths = const {
-                      0: FixedColumnWidth(125),
-                      1: FixedColumnWidth(95),
-                      2: FixedColumnWidth(110),
-                      3: FixedColumnWidth(90),
-                      4: FixedColumnWidth(70),
-                      5: FixedColumnWidth(70),
-                      6: FixedColumnWidth(95),
-                      7: FixedColumnWidth(105),
-                      8: FixedColumnWidth(110),
-                      9: FixedColumnWidth(45),
-                      10: FixedColumnWidth(50),
-                    };
+    final pagedList = _filteredList;
 
-                    final double tableWidth = constraints.maxWidth > 965 ? constraints.maxWidth : 965;
-                    final pagedList = _filteredList;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double minWidth = 1400;
+        final double tableWidth = constraints.maxWidth > minWidth
+            ? constraints.maxWidth
+            : minWidth;
 
-                    return SizedBox(
-                      width: double.infinity,
-                      height: constraints.maxHeight,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade200),
-                          ),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: tableWidth,
-                              height: constraints.maxHeight,
-                              child: Column(
-                                children: [
-                                  // Fixed Header Row — never scrolls vertically
-                                  Container(
-                                    height: 45,
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      border: Border(
-                                        bottom: BorderSide(color: Colors.grey.shade300, width: 1.0),
-                                      ),
-                                    ),
-                                    child: Table(
-                                      columnWidths: colWidths,
-                                      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                                      children: [
-                                        TableRow(
-                                          children: [
-                                            _buildHeaderCell("Type of Device", colIndex: 0),
-                                            _buildHeaderCell("Device ID", colIndex: 1),
-                                            _buildHeaderCell("Name", colIndex: 2),
-                                            _buildHeaderCell("Model", colIndex: 3),
-                                            _buildHeaderCell("OS", colIndex: 4),
-                                            _buildHeaderCell("Year", colIndex: 5),
-                                            _buildHeaderCell("Warranty", colIndex: 6),
-                                            _buildHeaderCell("Serial No", colIndex: 7),
-                                            _buildHeaderCell("Manufacture", colIndex: 8),
-                                            _buildHeaderCell("Edit"),
-                                            _buildHeaderCell("Action"),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  // Vertically scrollable body rows only
-                                  Expanded(
-                                    child: SingleChildScrollView(
-                                      scrollDirection: Axis.vertical,
-                                      child: Table(
-                                        columnWidths: colWidths,
-                                        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                                        children: pagedList.isEmpty
-                                            ? [
-                                                TableRow(
-                                                  children: [
-                                                    const SizedBox.shrink(),
-                                                    const SizedBox.shrink(),
-                                                    Padding(
-                                                      padding: const EdgeInsets.symmetric(vertical: 36.0),
-                                                      child: Column(
-                                                        mainAxisAlignment: MainAxisAlignment.center,
-                                                        children: [
-                                                          Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
-                                                          const SizedBox(height: 8),
-                                                          Text("No matching devices found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
-                                                          const SizedBox(height: 4),
-                                                          const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                    const SizedBox.shrink(),
-                                                    const SizedBox.shrink(),
-                                                    const SizedBox.shrink(),
-                                                    const SizedBox.shrink(),
-                                                    const SizedBox.shrink(),
-                                                    const SizedBox.shrink(),
-                                                    const SizedBox.shrink(),
-                                                    const SizedBox.shrink(),
-                                                  ],
-                                                )
-                                              ]
-                                            : pagedList.map((device) {
-                                          final Map<String, dynamic> data = (device is Map) ? Map<String, dynamic>.from(device) : {};
-                                          String val(List<String> keys) {
-                                            for (var k in keys) {
-                                              if (data.containsKey(k) && data[k] != null) return data[k].toString();
-                                            }
-                                            return "-";
-                                          }
+        final Map<int, TableColumnWidth> colWidths = const {
+          0: FlexColumnWidth(4.2), // TYPE OF DEVICE
+          1: FlexColumnWidth(2.5), // DEVICE ID
+          2: FlexColumnWidth(3.0), // NAME
+          3: FlexColumnWidth(2.5), // MODEL
+          4: FlexColumnWidth(1.8), // OS
+          5: FlexColumnWidth(3.5), // YEAR OF MODEL
+          6: FlexColumnWidth(2.5), // WARRANTY
+          7: FlexColumnWidth(2.5), // SERIAL NO
+          8: FlexColumnWidth(3.5), // MANUFACTURE
+          9: FlexColumnWidth(1.4), // EDIT
+          10: FlexColumnWidth(1.6), // ACTION
+        };
 
-                                          return TableRow(
-                                            decoration: BoxDecoration(
-                                              border: Border(
-                                                bottom: BorderSide(color: Colors.grey.shade100),
-                                              ),
-                                            ),
-                                            children: [
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                                child: Text(
-                                                  val(['type_of_device', 'typeOfDevice', 'device_type', 'type']),
-                                                  style: const TextStyle(fontSize: 11),
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                                child: Text(
-                                                  val(['device_code', 'deviceCode', 'code']),
-                                                  style: const TextStyle(fontSize: 11),
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                                child: Text(
-                                                  val(['device_name', 'deviceName', 'name']),
-                                                  style: const TextStyle(fontSize: 11),
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                                child: Text(
-                                                  val(['device_model', 'deviceModel', 'model']),
-                                                  style: const TextStyle(fontSize: 11),
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                                child: Text(
-                                                  val(['device_os', 'deviceOs', 'os']),
-                                                  style: const TextStyle(fontSize: 11),
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                                child: Text(
-                                                  val(['device_yr_model', 'deviceYrModel', 'year', 'year_of_model']),
-                                                  style: const TextStyle(fontSize: 11),
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                                child: Text(
-                                                  val(['device_warranty', 'deviceWarranty', 'warranty']),
-                                                  style: const TextStyle(fontSize: 11),
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                                child: Text(
-                                                  val(['device_s_no', 'deviceSNo', 'serial_number', 'serial']),
-                                                  style: const TextStyle(fontSize: 11),
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                                child: Text(
-                                                  val(['Manufacture', 'manufacture']),
-                                                  style: const TextStyle(fontSize: 11),
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Center(
-                                                child: IconButton(
-                                                  icon: const Icon(Icons.edit, color: Colors.blue, size: 16),
-                                                  padding: EdgeInsets.zero,
-                                                  constraints: const BoxConstraints(),
-                                                  onPressed: () {
-                                                    Map<String, dynamic> localData = data is Map<String, dynamic> ? data : Map<String, dynamic>.from(data);
-                                                    loadDeviceToEdit(data['id'] ?? data['ID'], localData);
-                                                  },
-                                                ),
-                                              ),
-                                              Center(
-                                                child: Transform.scale(
-                                                  scale: 0.65,
-                                                  child: Switch(
-                                                    value: data['active_status'] == 1 || data['status'] == 1 || data['status'] == "1",
-                                                    activeColor: Colors.green,
-                                                    onChanged: (v) {},
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          );
-                                        }).toList(),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+        return Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade200, width: 1.0),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: tableWidth,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Table Header Row
+                  Container(
+                    height: 48,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Colors.grey.shade200,
+                          width: 1.0,
                         ),
                       ),
-                    );
-                  }
-
-                  return Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white10),
-                      borderRadius: BorderRadius.circular(4),
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
+                    child: Table(
+                      columnWidths: colWidths,
+                      defaultVerticalAlignment:
+                          TableCellVerticalAlignment.middle,
                       children: [
-                        if (isLoading) 
-                          const LinearProgressIndicator(
-                            minHeight: 3,
-                            backgroundColor: Colors.transparent,
-                            color: Colors.white24,
-                          ),
-
-                        Expanded(
-                          child: SingleChildScrollView(
-                                  scrollDirection: Axis.vertical,
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        minWidth: constraints.maxWidth,
-                                      ),
-                                      child: DataTable(
-                                        columnSpacing: 20,
-                                        headingRowHeight: 45,
-                                        headingRowColor:
-                                            WidgetStateProperty.all(
-                                              Colors.blue.shade50,
-                                            ),
-                                        border: TableBorder.all(
-                                          color: Colors.white10,
-                                        ),
-                                        columns: _getColumns(),
-                                        rows: _filteredList.isEmpty
-                                            ? [
-                                                DataRow(
-                                                  cells: [
-                                                    const DataCell(SizedBox.shrink()),
-                                                    const DataCell(SizedBox.shrink()),
-                                                    DataCell(
-                                                      Padding(
-                                                        padding: const EdgeInsets.symmetric(vertical: 20.0),
-                                                        child: Column(
-                                                          mainAxisAlignment: MainAxisAlignment.center,
-                                                          children: [
-                                                            Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
-                                                            const SizedBox(height: 6),
-                                                            Text("No matching devices found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
-                                                            const SizedBox(height: 4),
-                                                            const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const DataCell(SizedBox.shrink()),
-                                                    const DataCell(SizedBox.shrink()),
-                                                    const DataCell(SizedBox.shrink()),
-                                                    const DataCell(SizedBox.shrink()),
-                                                    const DataCell(SizedBox.shrink()),
-                                                    const DataCell(SizedBox.shrink()),
-                                                    const DataCell(SizedBox.shrink()),
-                                                    const DataCell(SizedBox.shrink()),
-                                                  ],
-                                                ),
-                                              ]
-                                            : _filteredList
-                                            .map(
-                                              (device) => _getDataRow(device),
-                                            )
-                                            .toList(),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                        TableRow(
+                          children: [
+                            _buildHeaderCell("TYPE OF DEVICE", colIndex: 0),
+                            _buildHeaderCell("DEVICE ID", colIndex: 1),
+                            _buildHeaderCell("NAME", colIndex: 2),
+                            _buildHeaderCell("MODEL", colIndex: 3),
+                            _buildHeaderCell("OS", colIndex: 4),
+                            _buildHeaderCell("YEAR OF MODEL", colIndex: 5),
+                            _buildHeaderCell("WARRANTY", colIndex: 6),
+                            _buildHeaderCell("SERIAL NO", colIndex: 7),
+                            _buildHeaderCell("MANUFACTURE", colIndex: 8),
+                            _buildHeaderCell("EDIT"),
+                            _buildHeaderCell("ACTION"),
+                          ],
                         ),
                       ],
                     ),
-                  );
-                },
+                  ),
+
+                  // Data Rows or Empty State
+                  if (pagedList.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 36.0),
+                      alignment: Alignment.center,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 36,
+                            color: Colors.blue.shade200,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "No matching devices found",
+                            style: TextStyle(
+                              color: Colors.blue.shade900,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            "Try a different search term",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Table(
+                      columnWidths: colWidths,
+                      defaultVerticalAlignment:
+                          TableCellVerticalAlignment.middle,
+                      children: pagedList.map((device) {
+                        final Map<String, dynamic> data = (device is Map)
+                            ? Map<String, dynamic>.from(device)
+                            : {};
+                        String val(List<String> keys) {
+                          for (var k in keys) {
+                            if (data.containsKey(k) && data[k] != null) {
+                              return data[k].toString();
+                            }
+                          }
+                          return "-";
+                        }
+
+                        return TableRow(
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Colors.grey.shade200,
+                                width: 1.0,
+                              ),
+                            ),
+                          ),
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6.0,
+                                  vertical: 10.0,
+                                ),
+                                child: Text(
+                                  val([
+                                    'type_of_device',
+                                    'typeOfDevice',
+                                    'device_type',
+                                    'type',
+                                  ]),
+                                  style: const TextStyle(
+                                    fontSize: 12.0,
+                                    color: Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6.0,
+                                  vertical: 10.0,
+                                ),
+                                child: Text(
+                                  val(['device_code', 'deviceCode', 'code']),
+                                  style: const TextStyle(
+                                    fontSize: 12.0,
+                                    color: Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6.0,
+                                  vertical: 10.0,
+                                ),
+                                child: Text(
+                                  val(['device_name', 'deviceName', 'name']),
+                                  style: const TextStyle(
+                                    fontSize: 12.0,
+                                    color: Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6.0,
+                                  vertical: 10.0,
+                                ),
+                                child: Text(
+                                  val(['device_model', 'deviceModel', 'model']),
+                                  style: const TextStyle(
+                                    fontSize: 12.0,
+                                    color: Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6.0,
+                                  vertical: 10.0,
+                                ),
+                                child: Text(
+                                  val(['device_os', 'deviceOs', 'os']),
+                                  style: const TextStyle(
+                                    fontSize: 12.0,
+                                    color: Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6.0,
+                                  vertical: 10.0,
+                                ),
+                                child: Text(
+                                  val([
+                                    'device_yr_model',
+                                    'deviceYrModel',
+                                    'year',
+                                    'year_of_model',
+                                  ]),
+                                  style: const TextStyle(
+                                    fontSize: 12.0,
+                                    color: Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6.0,
+                                  vertical: 10.0,
+                                ),
+                                child: Text(
+                                  val([
+                                    'device_warranty',
+                                    'deviceWarranty',
+                                    'warranty',
+                                  ]),
+                                  style: const TextStyle(
+                                    fontSize: 12.0,
+                                    color: Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6.0,
+                                  vertical: 10.0,
+                                ),
+                                child: Text(
+                                  val([
+                                    'device_s_no',
+                                    'deviceSNo',
+                                    'serial_number',
+                                    'serial',
+                                  ]),
+                                  style: const TextStyle(
+                                    fontSize: 12.0,
+                                    color: Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6.0,
+                                  vertical: 10.0,
+                                ),
+                                child: Text(
+                                  val(['Manufacture', 'manufacture']),
+                                  style: const TextStyle(
+                                    fontSize: 12.0,
+                                    color: Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.center,
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.edit,
+                                  color: Colors.blue,
+                                  size: 18,
+                                ),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () {
+                                  Map<String, dynamic> localData =
+                                      Map<String, dynamic>.from(data);
+                                  loadDeviceToEdit(
+                                    data['id'] ?? data['ID'],
+                                    localData,
+                                  );
+                                },
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.center,
+                              child: Transform.scale(
+                                scale: 0.7,
+                                child: Switch(
+                                  value:
+                                      data['active_status'] == 1 ||
+                                      data['status'] == 1 ||
+                                      data['status'] == "1",
+                                  activeColor: Colors.green,
+                                  onChanged: (v) {},
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                ],
               ),
             ),
-            SizedBox(height: MediaQuery.of(context).size.width < 950 ? 4 : 20),
-            _buildTableFooter(),
-      ],
+          ),
+        );
+      },
     );
   }
 
@@ -1142,12 +1266,17 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
 
     if (_sortColumnIndex != null) {
       list.sort((a, b) {
-        final Map<String, dynamic> dataA = (a is Map) ? Map<String, dynamic>.from(a) : {};
-        final Map<String, dynamic> dataB = (b is Map) ? Map<String, dynamic>.from(b) : {};
+        final Map<String, dynamic> dataA = (a is Map)
+            ? Map<String, dynamic>.from(a)
+            : {};
+        final Map<String, dynamic> dataB = (b is Map)
+            ? Map<String, dynamic>.from(b)
+            : {};
 
         String val(Map<String, dynamic> data, List<String> keys) {
           for (var k in keys) {
-            if (data.containsKey(k) && data[k] != null) return data[k].toString();
+            if (data.containsKey(k) && data[k] != null)
+              return data[k].toString();
           }
           return "";
         }
@@ -1157,8 +1286,18 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
 
         switch (_sortColumnIndex) {
           case 0:
-            aVal = val(dataA, ['type_of_device', 'typeOfDevice', 'device_type', 'type']);
-            bVal = val(dataB, ['type_of_device', 'typeOfDevice', 'device_type', 'type']);
+            aVal = val(dataA, [
+              'type_of_device',
+              'typeOfDevice',
+              'device_type',
+              'type',
+            ]);
+            bVal = val(dataB, [
+              'type_of_device',
+              'typeOfDevice',
+              'device_type',
+              'type',
+            ]);
             break;
           case 1:
             aVal = val(dataA, ['device_code', 'deviceCode', 'code']);
@@ -1177,16 +1316,44 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             bVal = val(dataB, ['device_os', 'deviceOs', 'os']);
             break;
           case 5:
-            aVal = val(dataA, ['device_yr_model', 'deviceYrModel', 'year', 'year_of_model']);
-            bVal = val(dataB, ['device_yr_model', 'deviceYrModel', 'year', 'year_of_model']);
+            aVal = val(dataA, [
+              'device_yr_model',
+              'deviceYrModel',
+              'year',
+              'year_of_model',
+            ]);
+            bVal = val(dataB, [
+              'device_yr_model',
+              'deviceYrModel',
+              'year',
+              'year_of_model',
+            ]);
             break;
           case 6:
-            aVal = val(dataA, ['device_warranty', 'deviceWarranty', 'warranty']);
-            bVal = val(dataB, ['device_warranty', 'deviceWarranty', 'warranty']);
+            aVal = val(dataA, [
+              'device_warranty',
+              'deviceWarranty',
+              'warranty',
+            ]);
+            bVal = val(dataB, [
+              'device_warranty',
+              'deviceWarranty',
+              'warranty',
+            ]);
             break;
           case 7:
-            aVal = val(dataA, ['device_s_no', 'deviceSNo', 'serial_number', 'serial']);
-            bVal = val(dataB, ['device_s_no', 'deviceSNo', 'serial_number', 'serial']);
+            aVal = val(dataA, [
+              'device_s_no',
+              'deviceSNo',
+              'serial_number',
+              'serial',
+            ]);
+            bVal = val(dataB, [
+              'device_s_no',
+              'deviceSNo',
+              'serial_number',
+              'serial',
+            ]);
             break;
           case 8:
             aVal = val(dataA, ['Manufacture', 'manufacture']);
@@ -1213,26 +1380,26 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
 
   List<DataColumn> _getColumns() {
     return [
-          'Type of device',
-          'Device ID',
-          'Name',
-          'Model',
+          'TYPE OF DEVICE',
+          'DEVICE ID',
+          'NAME',
+          'MODEL',
           'OS',
-          'Year of Model',
-          'Warranty',
-          'Serial No',
-          'Manufacture',
-          'Edit',
-          'Action',
+          'YEAR OF MODEL',
+          'WARRANTY',
+          'SERIAL NO',
+          'MANUFACTURE',
+          'EDIT',
+          'ACTION',
         ]
         .map(
           (title) => DataColumn(
             label: Text(
               title,
-              style: TextStyle(
-                color: Colors.blue.shade800,
+              style:TextStyle(
+                color: Color.fromRGBO(33, 150, 243, 1),
                 fontWeight: FontWeight.bold,
-                fontSize: 11,
+                fontSize: 10,
               ),
             ),
           ),
@@ -1259,64 +1426,65 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
         DataCell(
           Text(
             val(['type_of_device', 'typeOfDevice', 'device_type', 'type']),
-            style: const TextStyle(color: Colors.black87),
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ),
         DataCell(
           Text(
             val(['device_code', 'deviceCode', 'code']),
-            style: const TextStyle(color: Colors.black87),
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ),
         DataCell(
           Text(
             val(['device_name', 'deviceName', 'name']),
-            style: const TextStyle(color: Colors.black87),
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ),
         DataCell(
           Text(
             val(['device_model', 'deviceModel', 'model']),
-            style: const TextStyle(color: Colors.black87),
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ),
         DataCell(
           Text(
             val(['device_os', 'deviceOs', 'os']),
-            style: const TextStyle(color: Colors.black87),
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ),
         DataCell(
           Text(
             val(['device_yr_model', 'deviceYrModel', 'year', 'year_of_model']),
-            style: const TextStyle(color: Colors.black87),
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ),
         DataCell(
           Text(
             val(['device_warranty', 'deviceWarranty', 'warranty']),
-            style: const TextStyle(color: Colors.black87),
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ),
         DataCell(
           Text(
             val(['device_s_no', 'deviceSNo', 'serial_number', 'serial']),
-            style: const TextStyle(color: Colors.black87),
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ),
         DataCell(
           Text(
             val(['Manufacture', 'manufacture']),
-            style: const TextStyle(color: Colors.black87),
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ),
         DataCell(
           IconButton(
             icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
             onPressed: () {
-               Map<String, dynamic> localData = data is Map<String, dynamic> ? data : Map<String, dynamic>.from(data);
-               loadDeviceToEdit(data['id'] ?? data['ID'], localData);
-            }
+              Map<String, dynamic> localData =
+                  Map<String, dynamic>.from(data);
+              loadDeviceToEdit(data['id'] ?? data['ID'], localData);
+            },
           ),
         ),
 
@@ -1388,23 +1556,38 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             fillColor: const Color(0xFFF8FAFC),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+              borderSide: const BorderSide(
+                color: Color(0xFFCBD5E1),
+                width: 1.2,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+              borderSide: const BorderSide(
+                color: Color(0xFF334155),
+                width: 1.6,
+              ),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+              borderSide: const BorderSide(
+                color: Color(0xFFCBD5E1),
+                width: 1.2,
+              ),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+              borderSide: const BorderSide(
+                color: Color(0xFF334155),
+                width: 1.6,
+              ),
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+              borderSide: const BorderSide(
+                color: Color(0xFFCBD5E1),
+                width: 1.2,
+              ),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
@@ -1449,10 +1632,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           onChanged: onChanged,
           items: items
               .map(
-                (item) => SearchableDropdownItem<String>(
-                  value: item,
-                  label: item,
-                ),
+                (item) =>
+                    SearchableDropdownItem<String>(value: item, label: item),
               )
               .toList(),
           validator: validator,
@@ -1574,7 +1755,11 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                   color: Color(0xFF94A3B8),
                   fontSize: 12,
                 ),
-                prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF94A3B8)),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 16,
+                  color: Color(0xFF94A3B8),
+                ),
                 isDense: true,
                 filled: true,
                 fillColor: const Color(0xFFF8FAFC),
@@ -1612,10 +1797,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  showEntries,
-                  searchBox,
-                ],
+                children: [showEntries, searchBox],
               );
       },
     );
@@ -1636,7 +1818,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           "Showing $start to $end of $total entries",
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 11,
+            fontSize: 12,
             color: Colors.black54,
           ),
         );
@@ -1671,10 +1853,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  paginationText,
-                  paginationControls,
-                ],
+                children: [paginationText, paginationControls],
               );
       },
     );

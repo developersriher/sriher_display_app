@@ -725,9 +725,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                   AnimatedHeading(
                     text: "Schedule Range Allocation",
                     style: TextStyle(
-                      color: Colors.blue.shade700,
+                      color: Color.fromARGB(255, 33, 150, 243),
                       fontWeight: FontWeight.bold,
-                      fontSize: 20,
+                      fontSize: 22,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -825,7 +825,14 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const AnimatedHeading(text: "Schedule Range Allocation"),
+          const AnimatedHeading(
+            text: "Schedule Range Allocation",
+            style: TextStyle(
+              color: Color.fromARGB(255, 33, 150, 243),
+              fontWeight: FontWeight.bold,
+              fontSize: 22,
+            ),
+          ),
           const SizedBox(height: 20),
           // Combined Header Card
           Container(

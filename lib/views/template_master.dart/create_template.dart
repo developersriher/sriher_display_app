@@ -452,7 +452,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
     final heading = const AnimatedHeading(
       text: "Templates List",
       style: TextStyle(
-        color: Colors.blue,
+        color: Color.fromARGB(255, 33, 150, 243),
         fontWeight: FontWeight.bold,
         fontSize: 22,
       ),
@@ -520,9 +520,10 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
                     height: 300,
                     child: Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade100),
+                        border: Border.all(color: Colors.grey.shade200, width: 1.0),
                         borderRadius: BorderRadius.circular(8),
                       ),
+                      clipBehavior: Clip.antiAlias,
                       child: isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : (templateList.isNotEmpty && _filteredList.isEmpty)
@@ -561,9 +562,10 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
                 : Expanded(
                     child: Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade100),
+                        border: Border.all(color: Colors.grey.shade200, width: 1.0),
                         borderRadius: BorderRadius.circular(8),
                       ),
+                      clipBehavior: Clip.antiAlias,
                       child: isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : (templateList.isNotEmpty && _filteredList.isEmpty)
@@ -631,7 +633,6 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
               child: DataTable(
                 headingRowHeight: 45,
                 headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
-                border: TableBorder.all(color: Colors.grey.shade100),
                 columns: [
                   _buildCol('TEMPLATE NAME', 0),
                   _buildCol('EDIT', -1),
@@ -643,7 +644,10 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
                       DataCell(
                         Text(
                           item['temp_name'] ?? "-",
-                          style: const TextStyle(fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12.0,
+                          ),
                         ),
                       ),
                       DataCell(
@@ -698,11 +702,11 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
           children: [
             Flexible(
               child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.blue.shade800,
+                label.toUpperCase(),
+                style: const TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: 16.0,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),

@@ -1,3 +1,4 @@
+import 'dart:js_interop';
 import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
@@ -18,7 +19,11 @@ Widget buildWebVideoThumbnail({required String url, required BoxFit fit}) {
       video.src = url;
       video.preload = 'metadata'; // loads just enough to get the first frame
       video.muted = true;        // required for autoplay policies
-      video.currentTime = 0.1;  // seek to 100ms to ensure first frame renders
+      video.onloadedmetadata = (web.Event e) {
+        try {
+          video.currentTime = 0.1;
+        } catch (_) {}
+      }.toJS;
       video.style.width = '100%';
       video.style.height = '100%';
       video.style.objectFit = _boxFitToCss(fit);

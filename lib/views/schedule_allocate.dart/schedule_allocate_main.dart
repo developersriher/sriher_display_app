@@ -610,7 +610,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                     Align(
                       alignment: Alignment.center,
                       child: Text(
-                        (widget.isExtend ? "EXTEND SCHEDULE" : "SCHEDULE"),
+                        (widget.isExtend ? "EXTEND SCHEDULE" : "SCHEDULE ALLOCATION"),
                         style: const TextStyle(
                           fontSize: 14.0,
                           fontWeight: FontWeight.w900,
@@ -1088,10 +1088,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                       Colors.blue.shade50,
                     ),
                     columns: [
-                      _buildSortableColumn('Play order'),
-                      _buildSortableColumn('File'),
-                      _buildSortableColumn('File Name'),
-                      _buildSortableColumn('Duration'),
+                      _buildSortableColumn('PLAY ORDER'),
+                      _buildSortableColumn('FILE'),
+                      _buildSortableColumn('FILE NAME'),
+                      _buildSortableColumn('DURATION'),
                     ],
                     rows: _pagedTemplateFiles.map((file) {
                       final index =
@@ -1166,7 +1166,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               );
             },
           ),
-          const Divider(height: 1),
+           
           _buildPagination(),
         ],
       ),
@@ -1558,10 +1558,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     return DataColumn(
       label: Text(
         label,
-        style: TextStyle(
-          color: Colors.blue.shade900,
+        style: const TextStyle(
+          color: Color.fromARGB(255, 33, 150, 243),
           fontWeight: FontWeight.bold,
-          fontSize: 13.0,
+          fontSize: 14.0,
         ),
       ),
     );

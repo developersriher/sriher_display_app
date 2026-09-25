@@ -1647,7 +1647,7 @@ class _FileUploadViewState extends State<FileUploadView> {
     final heading = const AnimatedHeading(
       text: "Uploaded Files List",
       style: TextStyle(
-        color: Colors.blue,
+        color: Color.fromARGB(255, 33, 150, 243),
         fontWeight: FontWeight.bold,
         fontSize: 22,
       ),
@@ -1699,17 +1699,10 @@ class _FileUploadViewState extends State<FileUploadView> {
                 child: heading,
               ),
               const SizedBox(height: 16),
-              isMobile
-                  ? _buildTableCard(
-                      isMobile: isMobile,
-                      uploadBtn: uploadBtn,
-                    )
-                  : Expanded(
-                      child: _buildTableCard(
-                        isMobile: isMobile,
-                        uploadBtn: uploadBtn,
-                      ),
-                    ),
+              _buildTableCard(
+                isMobile: isMobile,
+                uploadBtn: uploadBtn,
+              ),
             ],
           ),
         ),
@@ -1722,11 +1715,10 @@ class _FileUploadViewState extends State<FileUploadView> {
         backgroundColor: Colors.white,
         resizeToAvoidBottomInset: true,
         body: SelectionArea(
-          child: isMobile
-              ? SingleChildScrollView(
-                  child: bodyContent,
-                )
-              : bodyContent,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: bodyContent,
+          ),
         ),
       ),
     );
@@ -1735,34 +1727,24 @@ class _FileUploadViewState extends State<FileUploadView> {
   Widget _buildTableCard({bool isMobile = false, Widget? uploadBtn}) {
     final paged = _pagedList;
     return Column(
-      mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
+      mainAxisSize: MainAxisSize.min,
       children: [
         _buildTableHeader(isMobile: isMobile, uploadBtn: uploadBtn),
         const SizedBox(height: 16),
-        isMobile
-            ? SizedBox(
-                height: 300,
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade100),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _buildDataTable(paged),
-                ),
-              )
-            : Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade100),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _buildDataTable(paged),
-                ),
-              ),
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade200, width: 1.0),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: isLoading
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : _buildDataTable(paged),
+        ),
         const SizedBox(height: 16),
         _buildTableFooter(paged, isMobile: isMobile),
       ],
@@ -1802,31 +1784,31 @@ class _FileUploadViewState extends State<FileUploadView> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
+        final double minWidth = constraints.maxWidth > 1200
+            ? constraints.maxWidth
+            : 1200;
         return SelectionArea(
           child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                child: DataTable(
-                  headingRowHeight: 45,
-                  dataRowMaxHeight: 75,
-                  headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
-                  border: TableBorder.all(color: Colors.grey.shade100),
-                  columns: [
-                    _buildCol('ID', 0),
-                    _buildCol('IMG/VID', -1),
-                    _buildCol('FILE NAME', 2),
-                    _buildCol('DESCRIPTION', 3),
-                    _buildCol('TYPE', 4),
-                    _buildCol('VALID FROM', 5),
-                    _buildCol('VALID UPTO', 6),
-                    _buildCol('STATUS', -1),
-                    _buildCol('DELETE', -1),
-                  ],
-                  rows: data.map((item) => _getRow(item)).toList(),
-                ),
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: minWidth),
+              child: DataTable(
+                headingRowHeight: 45,
+                dataRowMaxHeight: 116,
+                headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
+                dividerThickness: 0.0,
+                columns: [
+                  _buildCol('ID', 0),
+                  _buildCol('PREVIEW', -1),
+                  _buildCol('FILE NAME', 2),
+                  _buildCol('DESCRIPTION', 3),
+                  _buildCol('TYPE', 4),
+                  _buildCol('VALID FROM', 5),
+                  _buildCol('VALID UPTO', 6),
+                  _buildCol('STATUS', -1),
+                  _buildCol('DELETE', -1),
+                ],
+                rows: data.map((item) => _getRow(item)).toList(),
               ),
             ),
           ),
@@ -2058,16 +2040,20 @@ class _FileUploadViewState extends State<FileUploadView> {
           Align(
             alignment: Alignment.centerLeft,
             child: Container(
-              width: 100,
-              height: 60,
+              // Videos get a landscape rectangle; images stay compact
+              width: isVideo ? 160 : 100,
+              height: isVideo ? 100 : 65,
               margin: const EdgeInsets.symmetric(vertical: 6),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey.shade200),
                 color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(6),
               ),
+              clipBehavior: Clip.antiAlias,
               child: fileName != null && fileName.isNotEmpty
                   ? isVideo
-                        // ── Video: show first-frame thumbnail ──
+                        // ── Video: inline player via VideoThumbnail
+                        // (shows play icon at rest; tap plays inline)
                         ? VideoThumbnail(
                             url: imageUrl,
                             title:
@@ -2075,7 +2061,7 @@ class _FileUploadViewState extends State<FileUploadView> {
                                 item['file_name'] ??
                                 'Video Preview',
                           )
-                        // ── Image: load thumbnail via WebCompatImage (CORS-safe for Chrome) ──
+                        // ── Image: CORS-safe thumbnail
                         : WebCompatImage(url: imageUrl, fit: BoxFit.cover)
                   : const Icon(
                       Icons.image_not_supported_rounded,
@@ -2395,11 +2381,11 @@ class _FileUploadViewState extends State<FileUploadView> {
           children: [
             Flexible(
               child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.blue.shade800,
+                label.toUpperCase(),
+                style: const TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
                   fontWeight: FontWeight.bold,
-                  fontSize: 11,
+                  fontSize: 16.0,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),

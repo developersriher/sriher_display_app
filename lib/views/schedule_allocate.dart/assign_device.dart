@@ -214,7 +214,14 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const AnimatedHeading(text: "Assign Schedule for Device"),
+                      const AnimatedHeading(
+                        text: "Assign Schedule for Device",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Color.fromARGB(255, 33, 150, 243),
+                        ),
+                      ),
                       const SizedBox(height: 32),
                       _buildDropdown(
                         label: "Device Name",

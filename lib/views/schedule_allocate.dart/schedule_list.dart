@@ -383,6 +383,11 @@ class _ScheduleListViewState extends State<ScheduleListView> {
       text: showActive
           ? "Active Schedule List"
           : "Inactive Schedule List",
+      style: const TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.bold,
+        color: Color.fromARGB(255, 33, 150, 243),
+      ),
     );
 
     final actionBtn = showActive
@@ -536,13 +541,13 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                   ),
                   const SizedBox(height: 16),
                   _buildListHeader(isMobile: isMobile, actionBtn: actionBtn),
-                  const Divider(height: 1),
+                  
                   Expanded(
                     child: isLoading
                         ? const Center(child: CircularProgressIndicator())
                         : _buildTableContainer(),
                   ),
-                  const Divider(height: 1),
+                  
                   _buildFooter(isMobile: isMobile),
                 ],
               ),
@@ -557,78 +562,86 @@ class _ScheduleListViewState extends State<ScheduleListView> {
 
   Widget _buildTableContainer() {
     final rows = _pageData;
-    return LayoutBuilder(builder: (context, constraints) {
-      return SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints:
-                    BoxConstraints(minWidth: constraints.maxWidth),
-                child: DataTable(
-                  headingRowColor:
-                      WidgetStateProperty.all(Colors.blue.shade50),
-                  headingRowHeight: 48,
-                  dataRowMaxHeight: 64,
-                  horizontalMargin: 20,
-                  columnSpacing: 20,
-                  columns: [
-                    _col('S.NO', -1),
-                    _col('SCHEDULE NAME', 1),
-                    _col('TEMPLATE NAME', 2),
-                    _col('FROM TIME – TO TIME', -1),
-                    _col('FROM DATE', -1),
-                    _col('TO DATE', -1),
-                    _col('STATUS', -1),
-                    _col('CHANGES', -1),
-                  ],
-                  rows: rows.asMap().entries.map((e) {
-                    final sno =
-                        (_currentPage - 1) * _perPage + e.key + 1;
-                    return _buildRow(e.value, sno);
-                  }).toList(),
-                ),
-              ),
-            ),
-            if (rows.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 60),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.search_off_rounded,
-                        size: 48,
-                        color: Colors.blue.shade200,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        "No matching schedules found",
-                        style: TextStyle(
-                          color: Colors.blue.shade900,
-                          fontSize: 16.0,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        "Try a different search term",
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 13.0,
-                        ),
-                      ),
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade200, width: 1.0),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: LayoutBuilder(builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints:
+                      BoxConstraints(minWidth: constraints.maxWidth),
+                  child: DataTable(
+                    headingRowColor:
+                        WidgetStateProperty.all(Colors.blue.shade50),
+                    headingRowHeight: 48,
+                    dataRowMaxHeight: 64,
+                    horizontalMargin: 20,
+                    columnSpacing: 20,
+                    columns: [
+                      _col('S.NO', -1),
+                      _col('SCHEDULE NAME', 1),
+                      _col('TEMPLATE NAME', 2),
+                      _col('FROM TIME – TO TIME', -1),
+                      _col('FROM DATE', -1),
+                      _col('TO DATE', -1),
+                      _col('STATUS', -1),
+                      _col('CHANGES', -1),
                     ],
+                    rows: rows.asMap().entries.map((e) {
+                      final sno =
+                          (_currentPage - 1) * _perPage + e.key + 1;
+                      return _buildRow(e.value, sno);
+                    }).toList(),
                   ),
                 ),
               ),
-          ],
-        ),
-      );
-    });
+              if (rows.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 60),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: 48,
+                          color: Colors.blue.shade200,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "No matching schedules found",
+                          style: TextStyle(
+                            color: Colors.blue.shade900,
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          "Try a different search term",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 13.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      }),
+    );
   }
 
   DataRow _buildRow(dynamic item, int sno) {
@@ -638,12 +651,12 @@ class _ScheduleListViewState extends State<ScheduleListView> {
     return DataRow(cells: [
       DataCell(Text(sno.toString(),
           style:
-              const TextStyle(color: Colors.black54, fontSize: 13))),
+              const TextStyle(color: Colors.black54, fontSize: 12))),
       DataCell(Text(item['schedule_name'] ?? '-',
           style: const TextStyle(
-              fontWeight: FontWeight.bold, color: Colors.black87))),
+              fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 12))),
       DataCell(Text(item['temp_name'] ?? '-',
-          style: const TextStyle(color: Colors.black87))),
+          style: const TextStyle(color: Colors.black87, fontSize: 12))),
       DataCell(Container(
         padding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -660,9 +673,9 @@ class _ScheduleListViewState extends State<ScheduleListView> {
         ),
       )),
       DataCell(Text(item['from_date'] ?? '-',
-          style: const TextStyle(color: Colors.black87))),
+          style: const TextStyle(color: Colors.black87, fontSize: 12))),
       DataCell(Text(item['to_date'] ?? '-',
-          style: const TextStyle(color: Colors.black87))),
+          style: const TextStyle(color: Colors.black87, fontSize: 12))),
       DataCell(Transform.scale(
         scale: 0.8,
         child: Switch(
@@ -758,11 +771,11 @@ class _ScheduleListViewState extends State<ScheduleListView> {
           children: [
             Flexible(
               child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.blue.shade800,
+                label.toUpperCase(),
+                style: const TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: 16.0,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),

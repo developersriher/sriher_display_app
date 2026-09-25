@@ -31,9 +31,41 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   final String _apiKey =
       "933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2";
 
-  /// Device ID sent to the signage sync endpoint.
-  /// Change this value if the target TV device changes.
-  final String _deviceId = '1111';
+  /// Resolves the device_id string for the currently selected template by
+  /// checking multiple possible field names in the template record:
+  ///   device_id → device_ids → Device_id → access_code
+  ///
+  /// Returns `null` only when no template is selected or when none of the
+  /// known fields carry a usable value.  Works generically for ANY device
+  /// code (1001, 1004, 1006, 1008, 1009, or any arbitrary future code)
+  /// without hardcoded restrictions.
+  String? _resolveActiveDeviceId() {
+    if (selectedTemplateId == null) return null;
+    try {
+      final t = templates.firstWhere(
+        (t) => int.tryParse(t['id']?.toString() ?? '') == selectedTemplateId,
+        orElse: () => null,
+      );
+      if (t == null) return null;
+
+      // Try every known field name the backend may use for the device identifier.
+      final candidates = [
+        t['device_id'],
+        t['device_ids'],
+        t['Device_id'],
+        t['access_code'],
+        t['device_code'],
+      ];
+      for (final raw in candidates) {
+        if (raw == null) continue;
+        final val = raw.toString().trim();
+        if (val.isNotEmpty && val != 'null') return val;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   List<dynamic> templates = [];
   List<dynamic> categories = [];
@@ -47,6 +79,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
   bool isLoading = false;
   bool isAddingLoading = false;
+  bool isUpdatingOrder = false;
   bool isLoadingTemplates = false;
   bool isLoadingCategories = false;
   bool isLoadingAvailableFiles = false;
@@ -295,16 +328,34 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       debugPrint('[AvailableFiles] master fileview fetch error: $e');
     }
 
-    // Filter master files by requested file type (videos vs images/docs)
-    final filteredMaster = masterFiles.where((f) {
+    // Filter categoryFiles and masterFiles by requested file type (videos vs images/docs)
+    final filteredCategory = categoryFiles.where((f) {
       if (f == null) return false;
-      final bool isVid = _isFileVideo(f);
-      return wantVideos ? isVid : !isVid;
+      if (wantVideos) {
+        // Videos tab: exclude any explicit images, accept videos or category 2 files
+        if (_hasImageExtension(f)) return false;
+        return true;
+      } else {
+        // Images tab: exclude any explicit videos, accept images or category 1 files
+        if (_hasVideoExtension(f)) return false;
+        return true;
+      }
     }).toList();
 
-    // 3. Merge categoryFiles and filteredMaster by ID
+    final filteredMaster = masterFiles.where((f) {
+      if (f == null) return false;
+      if (wantVideos) {
+        if (_hasImageExtension(f)) return false;
+        return _isFileVideo(f);
+      } else {
+        if (_hasVideoExtension(f)) return false;
+        return !_isFileVideo(f);
+      }
+    }).toList();
+
+    // 3. Merge filteredCategory and filteredMaster by ID
     final Map<String, dynamic> mergedMap = {};
-    for (var f in categoryFiles) {
+    for (var f in filteredCategory) {
       if (f == null) continue;
       final idStr = (f['id'] ?? f['file_id'])?.toString();
       if (idStr != null && idStr.isNotEmpty) {
@@ -328,12 +379,22 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   /// Results are sorted descending by [id] — newest uploads appear first.
   /// Merges all uploaded videos from master file repository.
   Future<void> _fetchAvailableFiles() async {
-    if (selectedTemplateId == null) return;
+    if (selectedTemplateId == null || fileType == null) {
+      if (mounted) {
+        setState(() {
+          isLoadingAvailableFiles = false;
+          _displayedFiles = [];
+        });
+      }
+      return;
+    }
     if (!mounted) return;
     setState(() {
       isLoadingAvailableFiles = true;
       _displayedFiles = [];
-      for (var c in _availableFileControllers.values) c.dispose();
+      for (var c in _availableFileControllers.values) {
+        c.dispose();
+      }
       _availableFileControllers.clear();
     });
 
@@ -389,16 +450,15 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   /// Sends a GET request to notify the digital signage TV device that the
   /// play list has changed and it should re-sync within its 10-minute cycle.
   ///
-  /// Uses [_baseUrl] (resolved dynamically via [getBaseUrl]) and [_deviceId]
-  /// so both values can be changed from a single place without hunting for
-  /// raw strings scattered across the file.
-  Future<void> _triggerSignageSync() async {
+  /// [deviceId] is resolved dynamically from the selected template's device_id
+  /// field so any screen (1001, 1002, 1003, 1004 …) is notified correctly.
+  Future<void> _triggerSignageSync(String deviceId) async {
     final syncUrl =
-        '$_baseUrl/mobile_app/viewdevice1.php?device_id=$_deviceId&sync_status=2';
+        '$_baseUrl/mobile_app/viewdevice1.php?device_id=$deviceId&sync_status=2';
     print('\n[SIGNAGE_SYNC] ══════════════════════════════════════════');
     print('[SIGNAGE_SYNC] ➤ Triggering digital signage device sync');
     print('[SIGNAGE_SYNC]   baseUrl   : $_baseUrl');
-    print('[SIGNAGE_SYNC]   deviceId  : $_deviceId');
+    print('[SIGNAGE_SYNC]   deviceId  : $deviceId');
     print('[SIGNAGE_SYNC]   Full URL  : $syncUrl');
     try {
       final response = await http
@@ -537,9 +597,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             : full1080.isNotEmpty
                 ? full1080
                 : fullUrl;
-      } else {
-        if (full720.isNotEmpty)  item['video_720p']  = full720;
-        if (full1080.isNotEmpty) item['video_1080p'] = full1080;
       }
 
       return item;
@@ -778,20 +835,35 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     });
 
     if (isAlreadyAssigned) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("'$fileName' is already in the current selection list."),
-            backgroundColor: Colors.orange.shade800,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(24),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.info_outline, color: Colors.white, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "'$fileName' is already in the Current Selection List.",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
           ),
-        );
-      }
+          backgroundColor: const Color(0xFFF57C00),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          margin: const EdgeInsets.all(24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      );
       return;
     }
 
@@ -818,6 +890,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       });
     }
 
+    // ── Cache the messenger BEFORE any await so we can use it safely
+    // ── even if the widget is deactivated before the callback fires.
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
     final Map<String, dynamic> payload = {
       "api_key": _apiKey,
       "template_id": selectedTemplateId,
@@ -837,21 +913,64 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
 
       if (response.statusCode == 200) {
+        // Show success banner IMMEDIATELY on HTTP 200 before any further async work
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "'$fileName' has been successfully added to the Current Selection List.",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1B8A3D),
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        );
+
         // Build normalized item model
         dynamic newItem;
-        if (fileRecord != null) {
-          final tempMap = Map<String, dynamic>.from(fileRecord);
-          tempMap['id'] = fileId;
-          tempMap['file_id'] = fileId;
-          tempMap['user_filename'] = fileName;
-          tempMap['file_name'] = fileName;
-          tempMap['duration'] = durationSecs;
-          tempMap['file_duration'] = durationSecs;
-          if (tempMap['file_type'] == null || tempMap['file_type'].toString().isEmpty) {
-            tempMap['file_type'] = isVideo ? 'Video' : 'Image';
+        try {
+          if (fileRecord != null) {
+            final tempMap = Map<String, dynamic>.from(fileRecord);
+            tempMap['id'] = fileId;
+            tempMap['file_id'] = fileId;
+            tempMap['user_filename'] = fileName;
+            tempMap['file_name'] = fileName;
+            tempMap['duration'] = durationSecs;
+            tempMap['file_duration'] = durationSecs;
+            if (tempMap['file_type'] == null || tempMap['file_type'].toString().isEmpty) {
+              tempMap['file_type'] = isVideo ? 'Video' : 'Image';
+            }
+            newItem = _normalizeAssignedFiles([tempMap]).first;
+          } else {
+            newItem = {
+              'id': fileId,
+              'file_id': fileId,
+              'user_filename': fileName,
+              'file_name': fileName,
+              'file_type': isVideo ? 'Video' : 'Image',
+              'duration': durationSecs,
+              'file_duration': durationSecs,
+            };
           }
-          newItem = _normalizeAssignedFiles([tempMap]).first;
-        } else {
+        } catch (normalizeErr) {
+          debugPrint('[addFileToTemplate] normalization error (non-fatal): $normalizeErr');
           newItem = {
             'id': fileId,
             'file_id': fileId,
@@ -874,50 +993,18 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               assignedFiles.add(newItem);
             }
           });
-
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: RichText(
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: fileName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        decoration: TextDecoration.underline,
-                        decorationColor: Colors.white,
-                      ),
-                    ),
-                    TextSpan(
-                      text: " (${isVideo ? 'Video' : 'Image'}, ${durationSecs}s) assigned to server successfully.",
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
-              backgroundColor: Colors.green.shade600,
-              behavior: SnackBarBehavior.floating,
-              margin: const EdgeInsets.all(24),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
         }
 
-        // Re-fetch assigned files to stay 100% in sync with database
-        await _fetchAssignedFiles(forceImmediate: true, showLoading: false);
-        _triggerSignageSync();
+        // Re-fetch assigned files to stay 100% in sync with database (wrapped in non-fatal catch)
+        try {
+          await _fetchAssignedFiles(forceImmediate: true, showLoading: false);
 
-        final fileIds = assignedFiles
-            .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
-            .where((id) => id > 0)
-            .toList();
+          final fileIds = assignedFiles
+              .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
+              .where((id) => id > 0)
+              .toList();
 
-        if (fileIds.isNotEmpty) {
-          try {
+          if (fileIds.isNotEmpty) {
             await http.post(
               Uri.parse('$_baseUrl/selectTemplate_updatePlayOrderview'),
               body: jsonEncode({
@@ -927,43 +1014,79 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               }),
               headers: {'Content-Type': 'application/json'},
             );
-          } catch (e) {
-            debugPrint('[Auto-Sync PlayOrder] Error: $e');
+            // Notify the TV device to re-sync using the dynamically resolved device_id.
+            // Always trigger sync on HTTP 200 — never skip.
+            final String? deviceId = _resolveActiveDeviceId();
+            if (deviceId != null && deviceId.isNotEmpty) {
+              _triggerSignageSync(deviceId);
+            } else {
+              debugPrint('[addFileToTemplate] ⚠ Could not resolve device_id for template $selectedTemplateId — signage sync skipped.');
+            }
           }
+        } catch (postSyncErr) {
+          debugPrint('[addFileToTemplate] Post-assignment sync error (non-fatal): $postSyncErr');
         }
       } else {
         debugPrint('[ASSIGN FILE ERROR]: HTTP ${response.statusCode}: ${response.body}');
-        if (mounted) {
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Failed to assign '$fileName' to backend server."),
-              backgroundColor: Colors.red.shade800,
-              behavior: SnackBarBehavior.floating,
-              margin: const EdgeInsets.all(24),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint("addFileToTemplate error: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
           SnackBar(
-            content: Text("Error assigning '$fileName': $e"),
-            backgroundColor: Colors.red.shade800,
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "Failed to add '$fileName'. Please try again.",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFD32F2F),
+            duration: const Duration(seconds: 4),
             behavior: SnackBarBehavior.floating,
             margin: const EdgeInsets.all(24),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
             ),
           ),
         );
       }
+    } catch (e) {
+      debugPrint("addFileToTemplate error: $e");
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Something went wrong while adding '$fileName'. Please try again.",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFFD32F2F),
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -975,16 +1098,18 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
   }
 
-
-
   Future<void> deleteFileFromTemplate(int fileId, String fileName, {dynamic fileRecord}) async {
-    if (!mounted || fileId <= 0) return;
+    if (fileId <= 0) return;
 
     if (mounted) {
       setState(() {
         _removingFileIds.add(fileId);
       });
     }
+
+    // ── Cache the messenger BEFORE any await so we can use it safely
+    // ── even if the widget is deactivated before the callback fires.
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
     try {
       final response = await http.post(
@@ -999,6 +1124,36 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
 
       if (response.statusCode == 200) {
+        // Show success banner IMMEDIATELY on HTTP 200 — before any further async work
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "'$fileName' has been successfully removed from the Current Selection List.",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1B8A3D),
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        );
+
         // Only remove from local state after server confirms success
         if (mounted) {
           setState(() {
@@ -1011,35 +1166,16 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               _tvSlideIndex = 0;
             }
           });
-
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                "'$fileName' has been removed from server successfully.",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              backgroundColor: Colors.red.shade600,
-              behavior: SnackBarBehavior.floating,
-              margin: const EdgeInsets.all(24),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
         }
 
-        // Auto-sync remaining play order to backend
-        final remainingFileIds = assignedFiles
-            .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
-            .where((id) => id > 0 && id != fileId)
-            .toList();
+        // Auto-sync remaining play order to backend (wrapped in non-fatal catch)
+        try {
+          final remainingFileIds = assignedFiles
+              .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
+              .where((id) => id > 0 && id != fileId)
+              .toList();
 
-        if (selectedTemplateId != null && remainingFileIds.isNotEmpty) {
-          try {
+          if (selectedTemplateId != null && remainingFileIds.isNotEmpty) {
             await http.post(
               Uri.parse('$_baseUrl/selectTemplate_updatePlayOrderview'),
               body: jsonEncode({
@@ -1049,46 +1185,81 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               }),
               headers: {'Content-Type': 'application/json'},
             );
-          } catch (e) {
-            debugPrint('[Auto-Sync PlayOrder on Remove] Error: $e');
+            // Notify the TV device to re-sync using the dynamically resolved device_id.
+            // Always trigger sync on HTTP 200 — never skip.
+            final String? deviceId = _resolveActiveDeviceId();
+            if (deviceId != null && deviceId.isNotEmpty) {
+              _triggerSignageSync(deviceId);
+            } else {
+              debugPrint('[deleteFileFromTemplate] ⚠ Could not resolve device_id for template $selectedTemplateId — signage sync skipped.');
+            }
           }
-        }
 
-        await _fetchAssignedFiles(forceImmediate: true, showLoading: false);
-        _triggerSignageSync();
+          await _fetchAssignedFiles(forceImmediate: true, showLoading: false);
+        } catch (postSyncErr) {
+          debugPrint('[deleteFileFromTemplate] Post-removal sync error (non-fatal): $postSyncErr');
+        }
       } else {
         debugPrint('[REMOVE FILE ERROR]: HTTP ${response.statusCode}: ${response.body}');
-        if (mounted) {
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Failed to remove '$fileName' from server. Please try again."),
-              backgroundColor: Colors.red.shade800,
-              behavior: SnackBarBehavior.floating,
-              margin: const EdgeInsets.all(24),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint("deleteFileFromTemplate error: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
           SnackBar(
-            content: Text("Error deleting '$fileName': $e"),
-            backgroundColor: Colors.red.shade800,
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "Failed to remove '$fileName'. Please try again.",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFD32F2F),
+            duration: const Duration(seconds: 4),
             behavior: SnackBarBehavior.floating,
             margin: const EdgeInsets.all(24),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
             ),
           ),
         );
       }
+    } catch (e) {
+      debugPrint("deleteFileFromTemplate error: $e");
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Something went wrong while removing '$fileName'. Please try again.",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFFD32F2F),
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -1104,97 +1275,184 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   /// sequence, then — only on a confirmed HTTP 200 — triggers the digital
   /// signage sync so the TV device refreshes within its next sync cycle.
   ///
+  /// Sends the reordered [file_ids] to the backend in the exact dragged
+  /// sequence, then — only on a confirmed HTTP 200 — triggers the digital
+  /// signage sync so the TV device refreshes within its next sync cycle.
+  ///
   /// [orderedFiles] is the list in the new play order. When omitted,
   /// [assignedFiles] is used as a fallback.
   Future<void> _updatePlayOrder([List<dynamic>? orderedFiles]) async {
     if (selectedTemplateId == null) return;
-    final files = orderedFiles ?? assignedFiles;
-    if (files.isEmpty) return;
+
+    final filesToProcess = orderedFiles ?? assignedFiles;
+    if (filesToProcess.isEmpty) return;
+
+    if (isUpdatingOrder) return;
+
+    // Immediately update local state so the UI reflects the reordering without delay
+    if (orderedFiles != null) {
+      final normalized = _normalizeAssignedFiles(orderedFiles);
+      if (mounted) {
+        setState(() {
+          assignedFiles = normalized;
+          _pendingAssignedFiles = null;
+          if (_tvSlideIndex >= assignedFiles.length) {
+            _tvSlideIndex = 0;
+          }
+        });
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        isUpdatingOrder = true;
+      });
+    }
+
+    // ── Cache the messenger BEFORE any await so we can use it safely
+    // ── even if the widget is deactivated before the callback fires.
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
     try {
-      final fileIds = files
-          .map(
-            (f) =>
-                int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0,
-          )
+      final List<int> orderedFileIds = filesToProcess
+          .map((item) => int.tryParse((item['file_id'] ?? item['id'] ?? item['file_master_id'])?.toString() ?? '') ?? 0)
           .where((id) => id > 0)
           .toList();
-      if (fileIds.isEmpty) {
-        print('[PLAY_ORDER] ⚠ No valid file IDs found — aborting update.');
+
+      if (orderedFileIds.isEmpty) {
+        debugPrint('[PLAY_ORDER] ⚠ No valid file IDs found — aborting update.');
         return;
       }
 
       final playOrderUrl = '$_baseUrl/selectTemplate_updatePlayOrderview';
       final playOrderPayload = {
-        'api_key': _apiKey,
-        'template_id': selectedTemplateId,
-        'file_ids': fileIds,
+        "api_key": _apiKey,
+        "template_id": selectedTemplateId,
+        "file_ids": orderedFileIds,
       };
 
-      print('\n[PLAY_ORDER] ══════════════════════════════════════════');
-      print('[PLAY_ORDER] ➤ Sending play-order update');
-      print('[PLAY_ORDER]   URL        : $playOrderUrl');
-      print('[PLAY_ORDER]   templateId : $selectedTemplateId');
-      print('[PLAY_ORDER]   file_ids   : $fileIds');
+      debugPrint('[PLAY_ORDER] Sending play-order update: $playOrderPayload');
 
       final response = await http
           .post(
             Uri.parse(playOrderUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
             body: jsonEncode(playOrderPayload),
-            headers: {'Content-Type': 'application/json'},
           )
           .timeout(const Duration(seconds: 15));
 
-      debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
-      final truncatedBody = response.body.length > 300
-          ? '${response.body.substring(0, 300)}…'
-          : response.body;
-      print('[PLAY_ORDER]   HTTP ${response.statusCode} — Body: $truncatedBody');
+      debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        print('[PLAY_ORDER] ✅ Play order updated successfully.');
-        print('[PLAY_ORDER] ══════════════════════════════════════════\n');
-
-        // ── Trigger signage sync ONLY after confirmed success ──────────────
-        // Awaited so that any sync errors are captured in the same try/catch.
-        await _triggerSignageSync();
-
-        // ── Update local state ─────────────────────────────────────────────
-        if (orderedFiles != null) {
-          final normalized = _normalizeAssignedFiles(orderedFiles);
-          if (mounted) {
-            setState(() {
-              assignedFiles = normalized;
-              _pendingAssignedFiles = null;
-              if (_tvSlideIndex >= assignedFiles.length) {
-                _tvSlideIndex = 0;
-              }
-            });
-          }
+        // ── Always trigger signage sync for the active template's device on
+        // ── HTTP 200 — never skip. Resolve the device ID dynamically from
+        // ── the selected template's known fields.
+        final String? activeDeviceId = _resolveActiveDeviceId();
+        if (activeDeviceId != null && activeDeviceId.isNotEmpty) {
+          debugPrint('[PLAY_ORDER] Triggering signage sync for device: $activeDeviceId');
+          _triggerSignageSync(activeDeviceId);
+        } else {
+          debugPrint('[PLAY_ORDER] ⚠ Could not resolve device_id for template $selectedTemplateId — signage sync could not be triggered.');
         }
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Play order updated successfully'),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
+        // Show success SnackBar using the pre-cached messenger
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.check_circle, color: Colors.white, size: 22),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "Play order updated successfully",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          );
-        }
+            backgroundColor: const Color(0xFF1B8A3D),
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        );
       } else {
-        print(
-          '[PLAY_ORDER] ❌ HTTP ${response.statusCode} — play order update FAILED.',
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.error_outline, color: Colors.white, size: 22),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "Failed to update play order on server. Please try again.",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFD32F2F),
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
         );
-        print('[PLAY_ORDER]   Response body: $truncatedBody');
-        print(
-          '[PLAY_ORDER] ⚠ Signage sync NOT triggered (play-order POST failed).',
-        );
-        print('[PLAY_ORDER] ══════════════════════════════════════════\n');
       }
-    } catch (e, st) {
-      print('[PLAY_ORDER] ❌ Exception: $e');
-      print('[PLAY_ORDER]   StackTrace: $st');
+    } catch (e) {
+      debugPrint('[PLAY_ORDER] ❌ Exception: $e');
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(Icons.error_outline, color: Colors.white, size: 22),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Something went wrong while updating the play order. Please try again.",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFFD32F2F),
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isUpdatingOrder = false;
+        });
+      }
     }
   }
 
@@ -1227,6 +1485,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         children: [
           const AnimatedHeading(
             text: "TEMPLATE CONFIGURATION",
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Color.fromARGB(255, 33, 150, 243),
+            ),
           ),
           const SizedBox(height: 32),
           _buildFormRow(
@@ -1473,7 +1736,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               const SizedBox(width: 32),
               // RIGHT PANEL: Content Area (Current Selection List)
               Expanded(
-                flex: 5,
+                flex: 6,
                 child: selectedTemplateId != null
                     ? SingleChildScrollView(
                         child: rightCard,
@@ -1508,7 +1771,12 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   }
 
   Widget _buildAvailableFilesTable() {
-    final filteredFiles = _displayedFiles;
+    final bool wantVideos = fileType == 'videos';
+    final filteredFiles = _displayedFiles.where((f) {
+      if (f == null) return false;
+      final bool isVid = _isFileVideo(f);
+      return wantVideos ? isVid : !isVid;
+    }).toList();
     final screenWidth = MediaQuery.of(context).size.width;
     final bool isDesktop = screenWidth >= 600;
 
@@ -1620,7 +1888,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.blue.shade50,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
         border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
       ),
       child: Row(
@@ -1687,7 +1955,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           }
           final file = paginatedFiles[i];
           if (file == null) return const SizedBox.shrink();
-          final fileId = int.tryParse(file['id']?.toString() ?? '0') ?? 0;
+          // Resolve ID from either 'id' or 'file_id' — both field names
+          // are used depending on which endpoint returned this file.
+          final fileId = int.tryParse(
+                (file['id'] ?? file['file_id'])?.toString() ?? '0',
+              ) ?? 0;
           final bool isVideo = _isFileVideo(file);
 
           // Lazily initialise the duration controller for this row
@@ -1904,10 +2176,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           decoration: BoxDecoration(
             color: Colors.white,
             border: Border.all(color: Colors.grey.shade200),
-            borderRadius: const BorderRadius.vertical(
-              bottom: Radius.circular(12),
-            ),
+            borderRadius: BorderRadius.circular(12),
           ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1921,57 +2192,63 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     );
   }
 
-  bool _isFileVideo(dynamic file) {
+  bool _hasImageExtension(dynamic file) {
     if (file == null) return false;
-    final String fileName = (file['file_name'] ?? '').toString();
-    final String userFileName = (file['user_filename'] ?? '').toString();
-    final String name = (file['name'] ?? '').toString();
-    final String fileUrl = (file['file_url'] ?? file['url'] ?? '').toString();
-    final String fType = (file['file_type'] ?? '').toString().toLowerCase();
-    final String fFormat = (file['file_format'] ?? '').toString().toLowerCase();
-    final String mimeType = (file['mime_type'] ?? '').toString().toLowerCase();
-    final String fStatus = (file['file_status'] ?? file['status'] ?? '').toString();
-    // category_id == '2' is the server's file-format code for videos
-    final String catId = (file['category_id'] ?? '').toString().trim();
-    final String lowerName = fileName.toLowerCase();
-    final String lowerUser = userFileName.toLowerCase();
-    final String lowerN = name.toLowerCase();
-    final String lowerUrl = fileUrl.toLowerCase();
+    final String fn = (file['file_name'] ?? file['user_filename'] ?? file['name'] ?? file['file_url'] ?? file['url'] ?? '').toString().toLowerCase();
+    final String ft = (file['file_type'] ?? '').toString().toLowerCase();
+    final String mime = (file['mime_type'] ?? '').toString().toLowerCase();
 
-    // 0. Server file_status flag: 2 indicates video
-    if (fStatus == '2') return true;
+    if (ft == 'jpg' || ft == 'jpeg' || ft == 'png' || ft == 'gif' || ft == 'webp' || ft == 'bmp' || ft == 'svg' || ft == 'image') {
+      return true;
+    }
+    if (mime.startsWith('image/')) return true;
 
-    // 0b. category_id == '2' is the file-format code for videos (set by upload)
-    if (catId == '2') return true;
-
-    // 1. Check file extension in file_name / user_filename / name / file_url
-    const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.3gp', '.flv', '.wmv', '.ts', '.m2ts'];
-    for (final ext in exts) {
-      if (lowerName.endsWith(ext) || lowerUser.endsWith(ext) || lowerN.endsWith(ext) || lowerUrl.endsWith(ext) ||
-          lowerName.contains(ext) || lowerUser.contains(ext) || lowerN.contains(ext) || lowerUrl.contains(ext)) {
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.jfif', '.heic'];
+    for (final ext in imageExts) {
+      if (fn.endsWith(ext) || fn.contains('$ext?') || fn.contains('$ext#')) {
         return true;
       }
     }
+    return false;
+  }
 
-    // 2. file_type field — raw extension string, MIME-like, or keyword
-    if (fType == 'mp4' || fType == 'mov' || fType == 'avi' ||
-        fType == 'mkv' || fType == 'webm' || fType == 'm4v' ||
-        fType == '3gp' || fType == 'flv' || fType == 'wmv' ||
-        fType == 'ts' || fType == 'm2ts' || fType == 'video' ||
-        fType == 'vinci' || fType == 'live' ||
-        fType.contains('video') || fType.contains('vinci') ||
-        fType.contains('live')) {
+  bool _hasVideoExtension(dynamic file) {
+    if (file == null) return false;
+    final String fn = (file['file_name'] ?? file['user_filename'] ?? file['name'] ?? file['file_url'] ?? file['url'] ?? '').toString().toLowerCase();
+    final String ft = (file['file_type'] ?? '').toString().toLowerCase();
+    final String mime = (file['mime_type'] ?? '').toString().toLowerCase();
+
+    if (ft == 'mp4' || ft == 'mov' || ft == 'avi' || ft == 'mkv' || ft == 'webm' || ft == 'm4v' || ft == '3gp' || ft == 'flv' || ft == 'wmv' || ft == 'ts' || ft == 'video') {
+      return true;
+    }
+    if (mime.startsWith('video/')) return true;
+
+    const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.3gp', '.flv', '.wmv', '.ts'];
+    for (final ext in videoExts) {
+      if (fn.endsWith(ext) || fn.contains('$ext?') || fn.contains('$ext#')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _isFileVideo(dynamic file) {
+    if (file == null) return false;
+    if (_hasImageExtension(file)) return false;
+    if (_hasVideoExtension(file)) return true;
+
+    final String fType = (file['file_type'] ?? '').toString().toLowerCase();
+    final String fFormat = (file['file_format'] ?? '').toString().toLowerCase();
+    final String mimeType = (file['mime_type'] ?? '').toString().toLowerCase();
+
+    if (fType.contains('video') || fType.contains('vinci') || fType.contains('live') ||
+        fFormat.contains('video') || mimeType.contains('video')) {
       return true;
     }
 
-    // 3. file_format or mime_type contains 'video'
-    if (fFormat.contains('video') || mimeType.contains('video')) return true;
-
-    // 4. Presence of video_720p or video_1080p field with a non-empty value
-    //    — server sets these only for video files.
-    final String v720 = (file['video_720p'] ?? '').toString().trim();
-    final String v1080 = (file['video_1080p'] ?? '').toString().trim();
-    final String vUrl = (file['video_url'] ?? '').toString().trim();
+    final String v720 = (file['video_720p'] ?? '').toString().trim().toLowerCase();
+    final String v1080 = (file['video_1080p'] ?? '').toString().trim().toLowerCase();
+    final String vUrl = (file['video_url'] ?? '').toString().trim().toLowerCase();
     if (v720.isNotEmpty || v1080.isNotEmpty || vUrl.isNotEmpty) return true;
 
     return false;
@@ -2066,217 +2343,245 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         ),
       );
     }
-    return Column(
-      children: [
-        _buildListHeader(),
-        const SizedBox(height: 8),
-        assignedFiles.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.all(48.0),
-                child: Text(
-                  "No files selected",
-                  style: TextStyle(color: Colors.grey),
-                ),
-              )
-            : ListView.separated(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: assignedFiles.length,
-                separatorBuilder: (c, i) {
-                  if (i < 0 || i >= assignedFiles.length - 1) {
-                    return const SizedBox.shrink();
-                  }
-                  return const Divider(height: 1);
-                },
-                itemBuilder: (c, i) {
-                  if (i < 0 || i >= assignedFiles.length) {
-                    return const SizedBox.shrink();
-                  }
-                  final file = assignedFiles[i];
-                  if (file == null) return const SizedBox.shrink();
-                  final bool isMobile = MediaQuery.of(context).size.width < 600;
-                  final String fType = (file['file_type'] ?? '').toString().toLowerCase();
-                  final int fileId = int.tryParse(file['id']?.toString() ?? '') ?? 0;
-                  final availableFile = _displayedFiles.firstWhere(
-                    (f) => (int.tryParse(f['id']?.toString() ?? '') ?? 0) == fileId,
-                    orElse: () => null,
-                  );
-                  final String availFType = (availableFile?['file_type'] ?? '').toString().toLowerCase();
-                  final String availFStatus = (availableFile?['file_status'] ?? availableFile?['status'] ?? '0').toString();
-                  final bool isLive = (file['file_status']?.toString() ??
-                          file['status']?.toString() ??
-                          '0') ==
-                      '1' ||
-                      fType == 'vinci' ||
-                      fType == 'live' ||
-                      fType.contains('vinci') ||
-                      fType.contains('live') ||
-                      file['_isLive'] == true ||
-                      file['is_live'] == true ||
-                      availFStatus == '1' ||
-                      availFType == 'vinci' ||
-                      availFType == 'live' ||
-                      availFType.contains('vinci') ||
-                      availFType.contains('live') ||
-                      availableFile?['_isLive'] == true ||
-                      availableFile?['is_live'] == true;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
+    final bool isMobile = MediaQuery.of(context).size.width < 600;
+    final double minTableWidth = isMobile ? 550.0 : 650.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double tableWidth = constraints.maxWidth > minTableWidth
+            ? constraints.maxWidth
+            : minTableWidth;
+
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: tableWidth,
+            child: Column(
+              children: [
+                _buildListHeader(),
+                const SizedBox(height: 8),
+                assignedFiles.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(48.0),
+                        child: Text(
+                          "No files selected",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: assignedFiles.length,
+                        separatorBuilder: (c, i) {
+                          if (i < 0 || i >= assignedFiles.length - 1) {
+                            return const SizedBox.shrink();
+                          }
+                          return const Divider(height: 1);
+                        },
+                        itemBuilder: (c, i) {
+                          if (i < 0 || i >= assignedFiles.length) {
+                            return const SizedBox.shrink();
+                          }
+                          final file = assignedFiles[i];
+                          if (file == null) return const SizedBox.shrink();
+                          final String fType = (file['file_type'] ?? '').toString().toLowerCase();
+                          final int fileId = int.tryParse(file['id']?.toString() ?? '') ?? 0;
+                          final availableFile = _displayedFiles.firstWhere(
+                            (f) => (int.tryParse(f['id']?.toString() ?? '') ?? 0) == fileId,
+                            orElse: () => null,
+                          );
+                          final String availFType = (availableFile?['file_type'] ?? '').toString().toLowerCase();
+                          final String availFStatus = (availableFile?['file_status'] ?? availableFile?['status'] ?? '0').toString();
+                          final bool isLive = (file['file_status']?.toString() ??
+                                  file['status']?.toString() ??
+                                  '0') ==
+                              '1' ||
+                              fType == 'vinci' ||
+                              fType == 'live' ||
+                              fType.contains('vinci') ||
+                              fType.contains('live') ||
+                              file['_isLive'] == true ||
+                              file['is_live'] == true ||
+                              availFStatus == '1' ||
+                              availFType == 'vinci' ||
+                              availFType == 'live' ||
+                              availFType.contains('vinci') ||
+                              availFType.contains('live') ||
+                              availableFile?['_isLive'] == true ||
+                              availableFile?['is_live'] == true;
+                          // ── Wider thumbnail for videos, square for images ──
+                          final bool isVidItem = _isFileVideo(file);
+                          // Fixed column width — MUST match the header SizedBox width
+                          // so File Name / File Type / Action always align correctly.
+                          final double thumbW = isMobile ? 120.0 : 160.0;
+                          final double thumbH = isVidItem
+                              ? (isMobile ? 75.0  : 100.0)
+                              : (isMobile ? 65.0  : 80.0);
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 16,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                // LIVE badge: only show for videos, not images
-                                if (isLive && _isFileVideo(file)) ...[
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.shade600,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.wifi_tethering,
-                                          color: Colors.white,
-                                          size: 10,
-                                        ),
-                                        SizedBox(width: 3),
-                                        Text(
-                                          'LIVE',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: 0.5,
+                                // ── Preview column — FIXED WIDTH matching header ──
+                                SizedBox(
+                                  width: thumbW,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // LIVE badge: only for live-stream videos
+                                      if (isLive && _isFileVideo(file)) ...[
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade600,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.wifi_tethering,
+                                                color: Colors.white,
+                                                size: 10,
+                                              ),
+                                              SizedBox(width: 3),
+                                              Text(
+                                                'LIVE',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w900,
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
+                                        const SizedBox(height: 4),
                                       ],
+                                      // Thumbnail — height varies, width fills the fixed column
+                                      SizedBox(
+                                        width: thumbW,
+                                        height: thumbH,
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(6),
+                                          child: _buildFilePreview(file),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // ── File name column — expanded & scrollable ──
+                                Expanded(
+                                  flex: 5,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        "${file['user_filename'] ?? file['file_name'] ?? '-'}",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 2,
+                                  child: Align(
+                                    alignment: Alignment.center,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade50,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        file['file_type']?.toString() ?? '-',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                ],
-                                Container(
-                                  width: isMobile ? (_isFileVideo(file) ? 85 : 65) : (_isFileVideo(file) ? 110 : 80),
-                                  height: isMobile ? 65 : 80,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.grey.shade200),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 2,
+                                  child: Center(
+                                    child: IconButton(
+                                      icon: _removingFileIds.contains(fileId)
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.red,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.delete_outline,
+                                              color: Colors.red,
+                                              size: 20,
+                                            ),
+                                      onPressed: _removingFileIds.contains(fileId)
+                                          ? null
+                                          : () {
+                                              final int targetFileId = int.tryParse(
+                                                    (file['file_id'] ?? file['id'])?.toString() ?? '',
+                                                  ) ??
+                                                  0;
+                                              deleteFileFromTemplate(
+                                                targetFileId,
+                                                file['user_filename'] ??
+                                                    file['file_name'] ??
+                                                    'File',
+                                                fileRecord: file,
+                                              );
+                                            },
+                                    ),
                                   ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: _buildFilePreview(file),
                                 ),
                               ],
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 4,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const SizedBox(height: 4),
-                              Text(
-                                "${file['user_filename'] ?? file['file_name'] ?? '-'}",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
-                          child: Align(
-                            alignment: Alignment.center,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                file['file_type']?.toString() ?? '-',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
-                          child: Center(
-                            child: IconButton(
-                              icon: _removingFileIds.contains(fileId)
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.red,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.delete_outline,
-                                      color: Colors.red,
-                                      size: 20,
-                                    ),
-                              onPressed: _removingFileIds.contains(fileId)
-                                  ? null
-                                  : () {
-                                      final int targetFileId = int.tryParse(
-                                            (file['file_id'] ?? file['id'])?.toString() ?? '',
-                                          ) ??
-                                          0;
-                                      deleteFileFromTemplate(
-                                        targetFileId,
-                                        file['user_filename'] ??
-                                            file['file_name'] ??
-                                            'File',
-                                        fileRecord: file,
-                                      );
-                                    },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-      ],
+                          );
+                        },
+                      ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildListHeader() {
+    // This width MUST match the fixed thumbW used in the row builder above.
+    final bool isMobile = MediaQuery.of(context).size.width < 600;
+    final double previewColW = isMobile ? 120.0 : 160.0;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
       decoration: BoxDecoration(
@@ -2284,17 +2589,19 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
-            flex: 2,
+          // Preview header — SAME fixed width as the thumbnail SizedBox in the row
+          SizedBox(
+            width: previewColW,
             child: Text(
-              "File",
+              "Preview",
               style: _headerStyle(),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            flex: 4,
+            flex: 5,
             child: Text(
               "File Name",
               style: _headerStyle(),
@@ -2305,9 +2612,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             flex: 2,
             child: FittedBox(
               fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
               child: Text(
                 "File Type",
-                textAlign: TextAlign.center,
                 style: _headerStyle(),
                 maxLines: 1,
                 softWrap: false,
@@ -2317,10 +2624,16 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           const SizedBox(width: 8),
           Expanded(
             flex: 2,
-            child: Text(
-              "Action",
-              textAlign: TextAlign.center,
-              style: _headerStyle(),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: Text(
+                "Action",
+                textAlign: TextAlign.center,
+                style: _headerStyle(),
+                maxLines: 1,
+                softWrap: false,
+              ),
             ),
           ),
         ],
@@ -2764,6 +3077,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           displayedFiles: _displayedFiles,
           isFileVideo: _isFileVideo,
           buildFilePreview: _buildFilePreview,
+          isUpdatingOrder: isUpdatingOrder,
           onSave: (orderedList) async {
             // Let _updatePlayOrder handle all state changes (pending-buffer
             // logic defers the update to end-of-loop when the slideshow is
@@ -2781,6 +3095,7 @@ class _PlayOrderDialogContent extends StatefulWidget {
   final List<dynamic> displayedFiles;
   final bool Function(dynamic file) isFileVideo;
   final Widget Function(dynamic file, {bool staticOnly}) buildFilePreview;
+  final bool isUpdatingOrder;
   final Function(List<dynamic> orderedFiles) onSave;
 
   const _PlayOrderDialogContent({
@@ -2788,6 +3103,7 @@ class _PlayOrderDialogContent extends StatefulWidget {
     required this.displayedFiles,
     required this.isFileVideo,
     required this.buildFilePreview,
+    this.isUpdatingOrder = false,
     required this.onSave,
   });
 
@@ -3051,11 +3367,13 @@ class _PlayOrderDialogContentState extends State<_PlayOrderDialogContent> {
               ),
               const SizedBox(width: 12),
               ElevatedButton(
-                onPressed: () {
-                  final orderedList = List<dynamic>.from(_dialogFiles);
-                  Navigator.pop(context);
-                  widget.onSave(orderedList);
-                },
+                onPressed: widget.isUpdatingOrder
+                    ? null
+                    : () {
+                        final orderedList = List<dynamic>.from(_dialogFiles);
+                        Navigator.pop(context);
+                        widget.onSave(orderedList);
+                      },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0F172A),
                   foregroundColor: Colors.white,
@@ -3068,13 +3386,22 @@ class _PlayOrderDialogContentState extends State<_PlayOrderDialogContent> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text(
-                  "Update Play Order",
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                  ),
-                ),
+                child: widget.isUpdatingOrder
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        "Update Play Order",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                        ),
+                      ),
               ),
             ],
           ),

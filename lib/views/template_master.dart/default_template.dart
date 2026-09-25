@@ -95,15 +95,19 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           if (devParsed is Map) {
             _deviceDropdownList =
                 devParsed['DeviceMasters'] ?? devParsed.values.first ?? [];
+          } else if (devParsed is List) {
+            _deviceDropdownList = devParsed;
           } else {
-            _deviceDropdownList = devParsed ?? [];
+            _deviceDropdownList = [];
           }
 
           final tempParsed = jsonDecode(resTemplate.body)['data'];
           if (tempParsed is Map) {
             _templateDropdownList = tempParsed.values.first ?? [];
+          } else if (tempParsed is List) {
+            _templateDropdownList = tempParsed;
           } else {
-            _templateDropdownList = tempParsed ?? [];
+            _templateDropdownList = [];
           }
         });
       }
@@ -112,30 +116,137 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     }
   }
 
+  List<dynamic> _enrichTableData(List<dynamic> templates, List<dynamic> devices) {
+    if (templates.isEmpty && devices.isEmpty) return [];
+
+    final List<Map<String, dynamic>> enriched = [];
+    final Set<String> processedDeviceIds = {};
+
+    // 1. Process templates first and match with devices
+    for (int i = 0; i < templates.length; i++) {
+      final t = Map<String, dynamic>.from(templates[i] is Map ? templates[i] : {});
+      final tId = t['id']?.toString() ?? '';
+      final tName = (t['temp_name'] ?? t['template_name'] ?? '').toString().trim();
+
+      String? devId = (t['device_id'] ?? t['device_ids'] ?? t['Device_id'])?.toString();
+      Map<String, dynamic>? matchedDev;
+
+      if (devId != null && devId.isNotEmpty) {
+        matchedDev = devices.firstWhere(
+          (d) => d['id']?.toString() == devId,
+          orElse: () => null,
+        );
+      }
+
+      if (matchedDev == null && tId.isNotEmpty) {
+        matchedDev = devices.firstWhere(
+          (d) => d['id']?.toString() == tId,
+          orElse: () => null,
+        );
+      }
+
+      if (matchedDev == null && tName.isNotEmpty) {
+        matchedDev = devices.firstWhere(
+          (d) {
+            final dName = (d['device_name'] ?? d['device_code'] ?? d['type_of_device'] ?? '').toString().trim().toLowerCase();
+            final tn = tName.toLowerCase();
+            return dName.isNotEmpty && (dName == tn || dName.contains(tn) || tn.contains(dName));
+          },
+          orElse: () => null,
+        );
+      }
+
+      if (matchedDev == null && i < devices.length) {
+        matchedDev = devices[i] is Map ? devices[i] : null;
+      }
+
+      if (matchedDev != null) {
+        t['device_id'] = matchedDev['id']?.toString();
+        t['device_name'] = matchedDev['device_name'] ?? matchedDev['type_of_device'] ?? matchedDev['device_code'];
+        t['type_of_device'] = matchedDev['type_of_device'] ?? matchedDev['device_name'];
+        processedDeviceIds.add(matchedDev['id'].toString());
+      }
+
+      t['temp_id'] = tId;
+      enriched.add(t);
+    }
+
+    // 2. Process any remaining unmatched devices
+    for (int i = 0; i < devices.length; i++) {
+      final d = Map<String, dynamic>.from(devices[i] is Map ? devices[i] : {});
+      final dId = d['id']?.toString() ?? '';
+      if (processedDeviceIds.contains(dId)) continue;
+
+      final dName = (d['device_name'] ?? d['type_of_device'] ?? d['device_code'] ?? '').toString().trim();
+
+      Map<String, dynamic>? matchedTemp = templates.firstWhere(
+        (t) {
+          final tName = (t['temp_name'] ?? t['template_name'] ?? '').toString().trim().toLowerCase();
+          final dn = dName.toLowerCase();
+          return tName.isNotEmpty && dn.isNotEmpty && (tName == dn || tName.contains(dn) || dn.contains(tName));
+        },
+        orElse: () => null,
+      );
+
+      if (matchedTemp != null) {
+        d['temp_id'] = matchedTemp['id']?.toString();
+        d['temp_name'] = matchedTemp['temp_name'] ?? matchedTemp['template_name'];
+      } else if (i < templates.length) {
+        final t = templates[i];
+        d['temp_id'] = t['id']?.toString();
+        d['temp_name'] = t['temp_name'] ?? t['template_name'];
+      }
+
+      d['device_id'] = dId;
+      enriched.add(d);
+    }
+
+    return enriched;
+  }
+
   Future<void> _fetchTableData({bool showLoading = true}) async {
     if (showLoading) {
       setState(() => _isLoading = true);
     }
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/new_templateview'), // Reusing this for the list
+      final resDevice = await http.post(
+        Uri.parse('$_baseUrl/deviceview'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"api_key": _apiKey}),
       );
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        final dataField = decoded['data'];
-        if (mounted) {
-          setState(() {
-            if (dataField is List) {
-              _templateList = dataField;
-            } else if (dataField is Map) {
-              _templateList = dataField.values.first ?? [];
-            } else {
-              _templateList = [];
-            }
-          });
+      final resTemplate = await http.post(
+        Uri.parse('$_baseUrl/new_templateview'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"api_key": _apiKey}),
+      );
+
+      if (mounted) {
+        List<dynamic> devList = [];
+        List<dynamic> tempList = [];
+
+        if (resDevice.statusCode == 200) {
+          final devParsed = jsonDecode(resDevice.body)['data'];
+          if (devParsed is Map) {
+            devList = devParsed['DeviceMasters'] ?? devParsed.values.first ?? [];
+          } else if (devParsed is List) {
+            devList = devParsed;
+          }
         }
+
+        if (resTemplate.statusCode == 200) {
+          final tempParsed = jsonDecode(resTemplate.body)['data'];
+          if (tempParsed is List) {
+            tempList = tempParsed;
+          } else if (tempParsed is Map) {
+            tempList = tempParsed.values.first ?? [];
+          }
+        }
+
+        setState(() {
+          _deviceDropdownList = devList;
+          _templateDropdownList = tempList;
+          _templateList = _enrichTableData(tempList, devList);
+        });
       }
     } catch (e) {
       _showSnackBar("Sync Error: $e");
@@ -150,15 +261,21 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSubmitting = true);
-    // DISMISS NOW HANDLED IN BUTTON PRESS
 
     try {
+      // Convert selected device ID to a list of ints for the API
+      final List<int> deviceIdInts = [];
+      if (_selectedDeviceId != null && _selectedDeviceId!.isNotEmpty) {
+        final parsed = int.tryParse(_selectedDeviceId!);
+        if (parsed != null) deviceIdInts.add(parsed);
+      }
+
       final response = await http.post(
         Uri.parse('$_baseUrl/api/insert_default'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "api_key": _apiKey,
-          "device_id": _selectedDeviceId,
+          "device_id": deviceIdInts,
           "temp_id": _selectedCategoryId,
         }),
       );
@@ -209,70 +326,116 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     }
   }
 
+  /// Parses device_id from a table row item into a list of string IDs.
+  /// Handles: List [1,2,3], comma-separated "1,2,3", single int/string.
+  List<String> _parseDeviceIds(dynamic raw) {
+    if (raw == null) return [];
+    if (raw is List) {
+      return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    final str = raw.toString().trim();
+    if (str.isEmpty) return [];
+    // Handle "[1, 2, 3]" string format
+    final cleaned = str.replaceAll('[', '').replaceAll(']', '');
+    return cleaned.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+  }
+
+  /// Resolves a list of device IDs to their display names from _deviceDropdownList.
+  String _resolveDeviceNames(List<String> ids) {
+    if (ids.isEmpty) return "-";
+    final names = <String>[];
+    for (final id in ids) {
+      final dev = _deviceDropdownList.firstWhere(
+        (d) => d['id']?.toString() == id,
+        orElse: () => null,
+      );
+      if (dev != null) {
+        names.add((dev['device_name'] ?? dev['type_of_device'] ?? dev['device_code'] ?? dev['Device_name'] ?? id).toString());
+      } else {
+        names.add(id);
+      }
+    }
+    return names.isNotEmpty ? names.join(', ') : "-";
+  }
+
   void _editItem(dynamic item) {
     debugPrint("=== EDIT ITEM DEBUG ===");
     debugPrint("Item keys: ${item.keys.toList()}");
     debugPrint("Item data: $item");
 
-    // Try to get device_id from the item (may not be present in new_templateview response)
-    final String? itemDeviceId = item['device_id']?.toString();
-    // Also try to get device name for fallback matching
-    final String itemDeviceName = (item['device_name'] ?? item['Device_name'] ?? item['device_code'] ?? '').toString().trim();
+    String? matchedDeviceId;
 
-    debugPrint("Device ID from item: '$itemDeviceId', Device Name: '$itemDeviceName'");
-
-    // Find matching device: first by ID, then fallback by device_name
-    String? deviceId;
-    for (var d in _deviceDropdownList) {
-      final dId = d['id']?.toString();
-      final dName = (d['device_name'] ?? d['device_code'] ?? '').toString().trim();
-
-      // Match by ID if available
-      if (itemDeviceId != null && itemDeviceId.isNotEmpty && dId == itemDeviceId) {
-        deviceId = dId;
-        debugPrint("MATCHED device by ID: dId='$dId', dName='$dName'");
-        break;
-      }
-      // Fallback: match by device name
-      if (deviceId == null && itemDeviceName.isNotEmpty &&
-          dName.toLowerCase() == itemDeviceName.toLowerCase()) {
-        deviceId = dId;
-        debugPrint("MATCHED device by name: dId='$dId', dName='$dName'");
+    // 1. Direct device_id in item
+    final rawDeviceId = (item['device_id'] ?? item['device_ids'] ?? item['Device_id'])?.toString().trim();
+    if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
+      final parsed = _parseDeviceIds(rawDeviceId);
+      for (final id in parsed) {
+        if (_deviceDropdownList.any((d) => d['id']?.toString() == id)) {
+          matchedDeviceId = id;
+          break;
+        }
       }
     }
 
-    // Resolve the template name from the item
-    final String itemTempName =
-        (item['temp_name'] ?? item['template_name'] ?? '').toString().trim();
-    final String? itemTemplateId = (item['template_id'] ?? item['temp_id'] ?? item['id'])?.toString();
-
-    debugPrint("Resolved template name from item: '$itemTempName'");
-    debugPrint("Template ID from item: '$itemTemplateId'");
-
-    // Find matching template from dropdown list
-    String? templateId;
-    for (var t in _templateDropdownList) {
-      final tName = (t['temp_name'] ?? '').toString().trim();
-      final tId = t['id']?.toString();
-
-      if ((itemTemplateId != null &&
-              itemTemplateId.isNotEmpty &&
-              tId == itemTemplateId) ||
-          (itemTempName.isNotEmpty &&
-              tName.toLowerCase() == itemTempName.toLowerCase())) {
-        templateId = tId;
-        debugPrint("MATCHED template: tName='$tName', tId='$tId'");
-        break;
+    // 2. Direct device ID match (when item['id'] is device id)
+    if (matchedDeviceId == null && item['id'] != null) {
+      final idStr = item['id'].toString();
+      if (_deviceDropdownList.any((d) => d['id']?.toString() == idStr)) {
+        matchedDeviceId = idStr;
       }
     }
 
-    debugPrint("Final deviceId: $deviceId, templateId: $templateId");
+    // 3. Match by device_name / type_of_device
+    if (matchedDeviceId == null) {
+      final itemDeviceName = (item['device_name'] ?? item['Device_name'] ?? item['device_code'] ?? item['type_of_device'] ?? item['device_type'] ?? '').toString().trim();
+      if (itemDeviceName.isNotEmpty) {
+        for (var d in _deviceDropdownList) {
+          final dName = (d['device_name'] ?? d['device_code'] ?? d['type_of_device'] ?? d['Device_name'] ?? '').toString().trim();
+          if (dName.isNotEmpty && dName.toLowerCase() == itemDeviceName.toLowerCase()) {
+            matchedDeviceId = d['id'].toString();
+            break;
+          }
+        }
+      }
+    }
+
+    // Resolve template ID
+    String? matchedTemplateId;
+    final rawTempId = (item['temp_id'] ?? item['template_id'])?.toString().trim();
+    if (rawTempId != null && rawTempId.isNotEmpty) {
+      if (_templateDropdownList.any((t) => t['id']?.toString() == rawTempId)) {
+        matchedTemplateId = rawTempId;
+      }
+    }
+
+    if (matchedTemplateId == null && item['id'] != null) {
+      final idStr = item['id'].toString();
+      if (_templateDropdownList.any((t) => t['id']?.toString() == idStr)) {
+        matchedTemplateId = idStr;
+      }
+    }
+
+    if (matchedTemplateId == null) {
+      final String itemTempName = (item['temp_name'] ?? item['template_name'] ?? '').toString().trim();
+      if (itemTempName.isNotEmpty) {
+        for (var t in _templateDropdownList) {
+          final tName = (t['temp_name'] ?? t['template_name'] ?? '').toString().trim();
+          if (tName.isNotEmpty && tName.toLowerCase() == itemTempName.toLowerCase()) {
+            matchedTemplateId = t['id']?.toString();
+            break;
+          }
+        }
+      }
+    }
+
+    debugPrint("Parsed deviceId: $matchedDeviceId, templateId: $matchedTemplateId");
 
     setState(() {
       _editingId = int.tryParse(item['id'].toString());
-      _selectedDeviceId = deviceId;
-      _selectedCategoryId = templateId;
+      _selectedDeviceId = matchedDeviceId;
+      _selectedCategoryId = matchedTemplateId;
     });
+
     _showDefaultTemplateDialog();
   }
 
@@ -313,16 +476,19 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       subtitleStyle: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
       maxWidth: 480,
       builder: (dialogContext, setDialogState) {
-        // Ensure validValue logic inside the dropdown builder uses
-        // current local dialog state, not stale widget state.
-        String? safeDeviceId = _deviceDropdownList.any(
-                (i) => i['id']?.toString() == dialogDeviceId)
-            ? dialogDeviceId
-            : null;
-        String? safeTemplateId = _templateDropdownList.any(
-                (i) => i['id']?.toString() == dialogCategoryId)
-            ? dialogCategoryId
-            : null;
+        String? safeDeviceId;
+        if (dialogDeviceId != null && dialogDeviceId!.isNotEmpty) {
+          if (_deviceDropdownList.any((i) => i['id']?.toString() == dialogDeviceId)) {
+            safeDeviceId = dialogDeviceId;
+          }
+        }
+
+        String? safeTemplateId;
+        if (dialogCategoryId != null && dialogCategoryId!.isNotEmpty) {
+          if (_templateDropdownList.any((i) => i['id']?.toString() == dialogCategoryId)) {
+            safeTemplateId = dialogCategoryId;
+          }
+        }
 
         return Form(
           key: _formKey,
@@ -491,9 +657,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                     onPressed: _isSubmitting
                         ? null
                         : () async {
-                            // Trigger validation before proceeding
                             if (_formKey.currentState!.validate()) {
-                              // Double-check selections are not null/empty
                               if (_selectedDeviceId == null ||
                                   _selectedDeviceId!.isEmpty ||
                                   _selectedCategoryId == null ||
@@ -562,7 +726,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     final heading = const AnimatedHeading(
       text: "Default Templates",
       style: TextStyle(
-        color: Colors.blue,
+        color: Color.fromARGB(255, 33, 150, 243),
         fontWeight: FontWeight.bold,
         fontSize: 22,
       ),
@@ -648,8 +812,10 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     }
 
     List<dynamic> filtered = _templateList.where((item) {
-      final name = (item['temp_name'] ?? "").toString().toLowerCase();
-      return name.contains(_searchQuery.toLowerCase());
+      final devName = (item['device_name'] ?? item['type_of_device'] ?? item['device_code'] ?? "").toString().toLowerCase();
+      final tempName = (item['temp_name'] ?? item['template_name'] ?? "").toString().toLowerCase();
+      final q = _searchQuery.toLowerCase();
+      return devName.contains(q) || tempName.contains(q);
     }).toList();
 
     filtered.sort((a, b) {
@@ -658,48 +824,20 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
       switch (_sortColumnIndex) {
         case 0:
-          final devIdA = a['device_id']?.toString() ?? a['id']?.toString();
-          String? nameA;
-          if (devIdA != null) {
-            final dev = _deviceDropdownList.firstWhere(
-              (d) =>
-                  d['id'].toString() == devIdA ||
-                  d['device_id']?.toString() == devIdA,
-              orElse: () => null,
-            );
-            if (dev != null) nameA = dev['device_name'] ?? dev['device_code'];
-          }
-          aVal = (nameA ??
-                  a['device_name'] ??
-                  a['Device_name'] ??
-                  a['device_code'] ??
-                  "")
-              .toString()
-              .toLowerCase();
+          final idsA = _parseDeviceIds(a['device_id']);
+          aVal = idsA.isNotEmpty
+              ? _resolveDeviceNames(idsA).toLowerCase()
+              : (a['device_name'] ?? a['type_of_device'] ?? a['Device_name'] ?? a['device_code'] ?? "").toString().toLowerCase();
 
-          final devIdB = b['device_id']?.toString() ?? b['id']?.toString();
-          String? nameB;
-          if (devIdB != null) {
-            final dev = _deviceDropdownList.firstWhere(
-              (d) =>
-                  d['id'].toString() == devIdB ||
-                  d['device_id']?.toString() == devIdB,
-              orElse: () => null,
-            );
-            if (dev != null) nameB = dev['device_name'] ?? dev['device_code'];
-          }
-          bVal = (nameB ??
-                  b['device_name'] ??
-                  b['Device_name'] ??
-                  b['device_code'] ??
-                  "")
-              .toString()
-              .toLowerCase();
+          final idsB = _parseDeviceIds(b['device_id']);
+          bVal = idsB.isNotEmpty
+              ? _resolveDeviceNames(idsB).toLowerCase()
+              : (b['device_name'] ?? b['type_of_device'] ?? b['Device_name'] ?? b['device_code'] ?? "").toString().toLowerCase();
           break;
 
         case 1:
-          aVal = (a['temp_name'] ?? "").toString().toLowerCase();
-          bVal = (b['temp_name'] ?? "").toString().toLowerCase();
+          aVal = (a['temp_name'] ?? a['template_name'] ?? "").toString().toLowerCase();
+          bVal = (b['temp_name'] ?? b['template_name'] ?? "").toString().toLowerCase();
           break;
       }
 
@@ -725,40 +863,55 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                 headingRowColor: WidgetStateProperty.all(
                   Colors.blue.shade50,
                 ),
-                border: TableBorder.all(
-                  color: Colors.grey.shade100,
-                ),
                 columns: [
                   _buildTableCol('Device Name', 0),
                   _buildTableCol('Template Name', 1),
                   _buildTableCol('Edit', -1),
                 ],
                 rows: paginated.map((item) {
-                  final devId =
-                      item['device_id']?.toString() ?? item['id']?.toString();
-                  String? resolvedName;
+                  // Resolve device name
+                  final deviceIds = _parseDeviceIds(item['device_id']);
+                  String resolvedName;
+                  if (deviceIds.isNotEmpty) {
+                    resolvedName = _resolveDeviceNames(deviceIds);
+                  } else {
+                    resolvedName = (item['device_name'] ??
+                            item['type_of_device'] ??
+                            item['Device_name'] ??
+                            item['device_code'] ??
+                            "-")
+                        .toString();
+                  }
 
-                  if (devId != null) {
-                    final dev = _deviceDropdownList.firstWhere(
-                      (d) =>
-                          d['id'].toString() == devId ||
-                          d['device_id']?.toString() == devId,
-                      orElse: () => null,
-                    );
-                    if (dev != null) {
-                      resolvedName = dev['device_name'] ?? dev['device_code'];
+                  // Resolve template name
+                  String resolvedTempName = (item['temp_name'] ?? item['template_name'] ?? "-").toString();
+                  if (resolvedTempName == "-") {
+                    final tempId = (item['temp_id'] ?? item['template_id'])?.toString();
+                    if (tempId != null) {
+                      final matchedTemp = _templateDropdownList.firstWhere(
+                        (t) => t['id']?.toString() == tempId,
+                        orElse: () => null,
+                      );
+                      if (matchedTemp != null) {
+                        resolvedTempName = (matchedTemp['temp_name'] ?? matchedTemp['template_name'] ?? "-").toString();
+                      }
                     }
                   }
 
-                  resolvedName ??= item['device_name'] ??
-                      item['Device_name'] ??
-                      item['device_code'] ??
-                      "-";
-
                   return DataRow(
                     cells: [
-                      DataCell(Text(resolvedName ?? "-")),
-                      DataCell(Text(item['temp_name'] ?? "-")),
+                      DataCell(
+                        Text(
+                          resolvedName,
+                          style: const TextStyle(fontSize: 12.0),
+                        ),
+                      ),
+                      DataCell(
+                        Text(
+                          resolvedTempName,
+                          style: const TextStyle(fontSize: 12.0),
+                        ),
+                      ),
                       DataCell(
                         IconButton(
                           icon: const Icon(
@@ -1096,11 +1249,11 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           children: [
             Flexible(
               child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.blue.shade800,
+                label.toUpperCase(),
+                style: const TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: 16.0,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),

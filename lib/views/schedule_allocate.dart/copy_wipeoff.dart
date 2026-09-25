@@ -383,7 +383,15 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (!isNarrow) const AnimatedHeading(text: "Copy Schedule - Devices"),
+            if (!isNarrow)
+              const AnimatedHeading(
+                text: "Copy Schedule - Devices",
+                style: TextStyle(
+                  fontSize:16,
+                  fontWeight: FontWeight.bold,
+                  color: Color.fromARGB(255, 33, 150, 243),
+                ),
+              ),
             if (!isNarrow) const SizedBox(height: 24),
             Container(
               padding: EdgeInsets.all(isNarrow ? 16 : 32),
@@ -750,7 +758,15 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
             SizedBox(height: isNarrow ? 24 : 48),
 
             // ── WIPE OFF SECTION ──────────────────────────────────────────────
-            if (!isNarrow) const AnimatedHeading(text: "Wipe Off Devices"),
+            if (!isNarrow)
+              const AnimatedHeading(
+                text: "Wipe Off Devices",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color.fromARGB(255, 33, 150, 243),
+                ),
+              ),
             if (!isNarrow) const SizedBox(height: 24),
             Container(
               padding: EdgeInsets.all(isNarrow ? 16 : 32),

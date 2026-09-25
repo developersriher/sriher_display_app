@@ -392,12 +392,22 @@ class _DepartmentViewState extends State<DepartmentView> {
                     FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
                   ],
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Please enter the Department Name';
+                    if (v == null || v.trim().isEmpty)
+                      return 'Please enter the Department Name';
                     final clean = v.trim().toLowerCase();
                     final exists = categoryList.any((c) {
-                      final name = (c['category_name'] ?? c['categoryName'] ?? c['name'] ?? '').toString().trim().toLowerCase();
+                      final name =
+                          (c['category_name'] ??
+                                  c['categoryName'] ??
+                                  c['name'] ??
+                                  '')
+                              .toString()
+                              .trim()
+                              .toLowerCase();
                       final id = c['id'] ?? c['ID'];
-                      if (editingId != null && id?.toString() == editingId?.toString()) return false;
+                      if (editingId != null &&
+                          id?.toString() == editingId?.toString())
+                        return false;
                       return name == clean;
                     });
                     if (exists) return 'This department already exists.';
@@ -535,7 +545,7 @@ class _DepartmentViewState extends State<DepartmentView> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
     final isTabletOrMobile = screenWidth < 950;
-    
+
     final int rowsPerPage = int.tryParse(entriesValue) ?? 10;
     final int totalRows = filteredList.length;
     final int totalPages = (totalRows / rowsPerPage).ceil().clamp(1, 9999);
@@ -543,7 +553,8 @@ class _DepartmentViewState extends State<DepartmentView> {
     final int start = safePage * rowsPerPage;
     final int end = (start + rowsPerPage).clamp(0, totalRows);
     final int currentItemCount = totalRows == 0 ? 1 : (end - start);
-    final double tableHeight = (isTabletOrMobile ? 180.0 : 250.0) + (currentItemCount * 48.0);
+    final double tableHeight =
+        (isTabletOrMobile ? 180.0 : 250.0) + (currentItemCount * 48.0);
 
     final bodyContent = Padding(
       padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
@@ -573,7 +584,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                     style: TextStyle(
                       color: Colors.blue,
                       fontWeight: FontWeight.bold,
-                      fontSize: 22,
+                      fontSize: 16,
                     ),
                   );
 
@@ -593,13 +604,8 @@ class _DepartmentViewState extends State<DepartmentView> {
               ),
               const SizedBox(height: 20),
               isMobile
-                  ? SizedBox(
-                      height: tableHeight,
-                      child: _buildTableCard(),
-                    )
-                  : Expanded(
-                      child: _buildTableCard(),
-                    ),
+                  ? SizedBox(height: tableHeight, child: _buildTableCard())
+                  : Expanded(child: _buildTableCard()),
             ],
           ),
         ),
@@ -611,9 +617,7 @@ class _DepartmentViewState extends State<DepartmentView> {
       resizeToAvoidBottomInset: true,
       body: SelectionArea(
         child: isMobile
-            ? SingleChildScrollView(
-                child: bodyContent,
-              )
+            ? SingleChildScrollView(child: bodyContent)
             : bodyContent,
       ),
     );
@@ -681,424 +685,304 @@ class _DepartmentViewState extends State<DepartmentView> {
     final int safePage = currentPage.clamp(0, totalPages - 1);
     final int start = safePage * rowsPerPage;
     final int end = (start + rowsPerPage).clamp(0, totalRows);
+    final pagedData = filteredList.sublist(start, end);
 
     return Column(
       children: [
         _buildListHeader(),
         const SizedBox(height: 16),
         Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade200),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            clipBehavior: Clip.antiAlias,
-          child: Column(
-                    children: [
-                      if (isLoading)
-                        const LinearProgressIndicator(
-                          backgroundColor: Colors.transparent,
-                          color: Colors.blue,
-                        ),
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isNarrow = constraints.maxWidth < 1200;
-                            final pagedData = filteredList.sublist(start, end);
-
-                            if (isNarrow) {
-                              final Map<int, TableColumnWidth> colWidths = const {
-                                0: MaxColumnWidth(FlexColumnWidth(), FixedColumnWidth(120)),
-                                1: FixedColumnWidth(50),
-                                2: FixedColumnWidth(50),
-                                3: FixedColumnWidth(55),
-                              };
-
-                              final double tableWidth = constraints.maxWidth > 275 ? constraints.maxWidth : 275;
-
-                              return SizedBox(
-                                width: double.infinity,
-                                height: constraints.maxHeight,
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey.shade200),
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade200, width: 1.0),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Table Header Row
+                        Container(
+                          height: 45,
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Colors.grey.shade200,
+                                width: 1.0,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 5,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12.0,
                                     ),
-                                    child: SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: SizedBox(
-                                        width: tableWidth,
-                                        height: constraints.maxHeight,
-                                        child: Column(
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text(
+                                          "DEPARTMENT",
+                                          style: TextStyle(
+                                            color: Color.fromRGBO(
+                                              33,
+                                              150,
+                                              243,
+                                              1,
+                                            ),
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            // Fixed Header Row — never scrolls vertically
-                                            Container(
-                                              height: 45,
-                                              alignment: Alignment.center,
-                                              decoration: BoxDecoration(
-                                                color: Colors.blue.shade50,
-                                                border: Border(
-                                                  bottom: BorderSide(color: Colors.grey.shade300, width: 1.0),
+                                            GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  _sortColumnIndex = 0;
+                                                  _sortAscending = true;
+                                                  _applySort();
+                                                });
+                                              },
+                                              child: Align(
+                                                heightFactor: 0.4,
+                                                child: Icon(
+                                                  Icons.arrow_drop_up,
+                                                  size: 18,
+                                                  color: _sortColumnIndex == 0 &&
+                                                          _sortAscending
+                                                      ? Colors.blue
+                                                      : const Color(0xFF94A3B8),
                                                 ),
                                               ),
-                                              child: Table(
-                                                columnWidths: colWidths,
-                                                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                                                children: [
-                                                  TableRow(
-                                                    children: [
-                                                      Padding(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                                        child: Row(
-                                                          children: [
-                                                            const Text(
-                                                              "Department",
-                                                              style: TextStyle(
-                                                                color: Colors.blue,
-                                                                fontWeight: FontWeight.bold,
-                                                                fontSize: 11,
-                                                              ),
-                                                            ),
-                                                            const SizedBox(width: 4),
-                                                            Column(
-                                                              mainAxisAlignment: MainAxisAlignment.center,
-                                                              children: [
-                                                                GestureDetector(
-                                                                  onTap: () {
-                                                                    setState(() {
-                                                                      _sortColumnIndex = 0;
-                                                                      _sortAscending = true;
-                                                                    });
-                                                                  },
-                                                                  child: Align(
-                                                                    heightFactor: 0.5,
-                                                                    child: Icon(
-                                                                      Icons.arrow_drop_up,
-                                                                      size: 14,
-                                                                      color: _sortColumnIndex == 0 && _sortAscending
-                                                                          ? Colors.blue
-                                                                          : const Color(0xFF94A3B8),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                GestureDetector(
-                                                                  onTap: () {
-                                                                    setState(() {
-                                                                      _sortColumnIndex = 0;
-                                                                      _sortAscending = false;
-                                                                    });
-                                                                  },
-                                                                  child: Align(
-                                                                    heightFactor: 0.5,
-                                                                    child: Icon(
-                                                                      Icons.arrow_drop_down,
-                                                                      size: 14,
-                                                                      color: _sortColumnIndex == 0 && !_sortAscending
-                                                                          ? Colors.blue
-                                                                          : const Color(0xFF94A3B8),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                      const Center(
-                                                        child: Text(
-                                                          "Edit",
-                                                          style: TextStyle(
-                                                            color: Colors.blue,
-                                                            fontWeight: FontWeight.bold,
-                                                            fontSize: 11,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const Center(
-                                                        child: Text(
-                                                          "Action",
-                                                          style: TextStyle(
-                                                            color: Colors.blue,
-                                                            fontWeight: FontWeight.bold,
-                                                            fontSize: 11,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const Center(
-                                                        child: Text(
-                                                          "Delete",
-                                                          style: TextStyle(
-                                                            color: Colors.blue,
-                                                            fontWeight: FontWeight.bold,
-                                                            fontSize: 11,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              ),
                                             ),
-                                            // Vertically scrollable body rows only
-                                            Expanded(
-                                              child: SingleChildScrollView(
-                                                scrollDirection: Axis.vertical,
-                                                child: Table(
-                                                  columnWidths: colWidths,
-                                                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                                                  children: pagedData.isEmpty
-                                                      ? [
-                                                          TableRow(
-                                                            children: [
-                                                              Padding(
-                                                                padding: const EdgeInsets.symmetric(vertical: 36.0),
-                                                                child: Column(
-                                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                                  children: [
-                                                                    Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
-                                                                    const SizedBox(height: 8),
-                                                                    Text("No matching departments found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
-                                                                    const SizedBox(height: 4),
-                                                                    const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                              const SizedBox.shrink(),
-                                                              const SizedBox.shrink(),
-                                                              const SizedBox.shrink(),
-                                                            ],
-                                                          )
-                                                        ]
-                                                      : pagedData.map((item) {
-                                                    return TableRow(
-                                                      decoration: BoxDecoration(
-                                                        border: Border(
-                                                          bottom: BorderSide(color: Colors.grey.shade100),
-                                                        ),
-                                                      ),
-                                                      children: [
-                                                        Padding(
-                                                          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-                                                          child: Text(
-                                                            item['category_name']?.toString() ?? "-",
-                                                            style: const TextStyle(fontSize: 13),
-                                                          ),
-                                                        ),
-                                                        Center(
-                                                          child: IconButton(
-                                                            icon: const Icon(Icons.edit, color: Colors.blueAccent, size: 18),
-                                                            onPressed: () => loadForEdit(item['id']),
-                                                          ),
-                                                        ),
-                                                        Center(
-                                                          child: Transform.scale(
-                                                            scale: 0.7,
-                                                            child: Switch(
-                                                              value: item['status'] == 1 || item['status'] == "1",
-                                                              activeColor: Colors.greenAccent,
-                                                              onChanged: (v) => toggleStatus(item['id'], item['status']),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        Center(
-                                                          child: IconButton(
-                                                            icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                                                            onPressed: () => deleteCategory(item['id']),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    );
-                                                  }).toList(),
+                                            GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  _sortColumnIndex = 0;
+                                                  _sortAscending = false;
+                                                  _applySort();
+                                                });
+                                              },
+                                              child: Align(
+                                                heightFactor: 0.4,
+                                                child: Icon(
+                                                  Icons.arrow_drop_down,
+                                                  size: 18,
+                                                  color: _sortColumnIndex == 0 &&
+                                                          !_sortAscending
+                                                      ? Colors.blue
+                                                      : const Color(0xFF94A3B8),
                                                 ),
                                               ),
                                             ),
                                           ],
                                         ),
-                                      ),
+                                      ],
                                     ),
-                                  ),
-                                ),
-                              );
-                            }
-
-                            return SingleChildScrollView(
-                              scrollDirection: Axis.vertical,
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    minWidth: constraints.maxWidth,
-                                  ),
-                                  child: DataTable(
-                                    headingRowHeight: 45,
-                                    headingRowColor: WidgetStateProperty.all(
-                                      Colors.blue.shade50,
-                                    ),
-                                    border: TableBorder.all(
-                                      color: Colors.grey.shade100,
-                                    ),
-                                    columns: _getColumns(),
-                                    rows: filteredList.isEmpty
-                                        ? [
-                                            DataRow(
-                                              cells: [
-                                                DataCell(
-                                                  Padding(
-                                                    padding: const EdgeInsets.symmetric(vertical: 20.0),
-                                                    child: Column(
-                                                      mainAxisAlignment: MainAxisAlignment.center,
-                                                      children: [
-                                                        Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
-                                                        const SizedBox(height: 6),
-                                                        Text("No matching departments found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
-                                                        const SizedBox(height: 4),
-                                                        const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                                const DataCell(SizedBox.shrink()),
-                                                const DataCell(SizedBox.shrink()),
-                                                const DataCell(SizedBox.shrink()),
-                                              ],
-                                            ),
-                                          ]
-                                        : pagedData.map((item) => _getRow(item)).toList(),
                                   ),
                                 ),
                               ),
-                            );
-                          },
+                              Expanded(
+                                flex: 2,
+                                child: Align(
+                                  alignment: Alignment.center,
+                                  child: const Text(
+                                    "EDIT",
+                                    style: TextStyle(
+                                      color: Color.fromRGBO(33, 150, 243, 1),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Align(
+                                  alignment: Alignment.center,
+                                  child: const Text(
+                                    "ACTION",
+                                    style: TextStyle(
+                                      color: Color.fromRGBO(33, 150, 243, 1),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Align(
+                                  alignment: Alignment.center,
+                                  child: const Text(
+                                    "DELETE",
+                                    style: TextStyle(
+                                      color: Color.fromRGBO(33, 150, 243, 1),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        if (pagedData.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 36.0,
+                            ),
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.search_off_rounded,
+                                  size: 36,
+                                  color: Colors.blue.shade200,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  "No matching departments found",
+                                  style: TextStyle(
+                                    color: Colors.blue.shade900,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  "Try a different search term",
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          ...pagedData.map((item) {
+                            return Container(
+                              height: 48,
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: Colors.grey.shade200,
+                                    width: 1.0,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    flex: 5,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12.0,
+                                        ),
+                                        child: Text(
+                                          item['category_name']?.toString() ?? "-",
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.black87,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.center,
+                                      child: IconButton(
+                                        icon: const Icon(
+                                          Icons.edit,
+                                          color: Colors.blueAccent,
+                                          size: 18,
+                                        ),
+                                        onPressed: () => loadForEdit(item['id']),
+                                        hoverColor: Colors.blueAccent.withOpacity(
+                                          0.1,
+                                        ),
+                                        tooltip: "Edit",
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.center,
+                                      child: Transform.scale(
+                                        scale: 0.7,
+                                        child: Switch(
+                                          value:
+                                              item['status'] == 1 ||
+                                              item['status'] == "1",
+                                          activeColor: Colors.greenAccent,
+                                          onChanged: (v) => toggleStatus(
+                                            item['id'],
+                                            item['status'],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.center,
+                                      child: IconButton(
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: Colors.red,
+                                          size: 18,
+                                        ),
+                                        onPressed: () =>
+                                            deleteCategory(item['id']),
+                                        tooltip: "Delete",
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                      ],
+                    ),
                   ),
-          ),
+                ),
         ),
         SizedBox(height: MediaQuery.of(context).size.width < 950 ? 4 : 16),
         _buildTableFooter(),
-      ],
-    );
-  }
-
-  List<DataColumn> _getColumns() {
-    final titles = ['Department', 'Edit', 'Action', 'Delete'];
-    return List.generate(titles.length, (index) {
-      final isSortable = index == 0;
-      return DataColumn(
-        label: Expanded(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  titles[index],
-                  style: TextStyle(
-                    color: Colors.blue.shade800,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (isSortable) ...[
-                const SizedBox(width: 4),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _sortColumnIndex = index;
-                          _sortAscending = true;
-                          _applySort();
-                        });
-                      },
-                      child: Align(
-                        heightFactor: 0.4,
-                        child: Icon(
-                          Icons.arrow_drop_up,
-                          size: 18,
-                          color: _sortColumnIndex == index && _sortAscending
-                              ? Colors.blue
-                              : const Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _sortColumnIndex = index;
-                          _sortAscending = false;
-                          _applySort();
-                        });
-                      },
-                      child: Align(
-                        heightFactor: 0.4,
-                        child: Icon(
-                          Icons.arrow_drop_down,
-                          size: 18,
-                          color: _sortColumnIndex == index && !_sortAscending
-                              ? Colors.blue
-                              : const Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    });
-  }
-
-  List<DataRow> _getCurrentPageRows() {
-    final int rowsPerPage = int.tryParse(entriesValue) ?? 10;
-    final int totalPages = (filteredList.length / rowsPerPage).ceil().clamp(1, 9999);
-    final int safePage = currentPage.clamp(0, totalPages - 1);
-    final int start = safePage * rowsPerPage;
-    final int end = (start + rowsPerPage).clamp(0, filteredList.length);
-    return filteredList.sublist(start, end).map((item) => _getRow(item)).toList();
-  }
-
-  DataRow _getRow(dynamic item) {
-    return DataRow(
-      cells: [
-        DataCell(
-          Text(
-            item['category_name']?.toString() ?? "-",
-            style: const TextStyle(color: Colors.black87),
-          ),
-        ),
-        DataCell(
-          IconButton(
-            icon: const Icon(Icons.edit, color: Colors.blueAccent, size: 18),
-            onPressed: () => loadForEdit(item['id']),
-            hoverColor: Colors.blueAccent.withOpacity(0.1),
-          ),
-        ),
-        DataCell(
-          Transform.scale(
-            scale: 0.7,
-            child: Switch(
-              value: item['status'] == 1 || item['status'] == "1",
-              activeColor: Colors.greenAccent,
-              onChanged: (v) => toggleStatus(item['id'], item['status']),
-            ),
-          ),
-        ),
-        DataCell(
-          IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-            onPressed: () => deleteCategory(item['id']),
-            tooltip: "Delete",
-          ),
-        ),
       ],
     );
   }
@@ -1259,10 +1143,7 @@ class _DepartmentViewState extends State<DepartmentView> {
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  showEntries,
-                  searchBox,
-                ],
+                children: [showEntries, searchBox],
               );
       },
     );
@@ -1283,7 +1164,7 @@ class _DepartmentViewState extends State<DepartmentView> {
           "Showing $start to $end of $total entries",
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 11,
+            fontSize: 12,
             color: Colors.black54,
           ),
         );
@@ -1318,10 +1199,7 @@ class _DepartmentViewState extends State<DepartmentView> {
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  paginationText,
-                  paginationControls,
-                ],
+                children: [paginationText, paginationControls],
               );
       },
     );

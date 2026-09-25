@@ -333,8 +333,8 @@ class _MappingViewState extends State<MappingView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              "Are you sure you want to delete this mapping? All associated data will be removed.",
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
+              "ARE YOU SURE YOU WANT TO DELETE THIS MAPPING? ALL ASSOCIATED DATA WILL BE REMOVED.",
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
             ),
             const SizedBox(height: 32),
             Row(
@@ -356,7 +356,7 @@ class _MappingViewState extends State<MappingView> {
                     style: TextStyle(
                       color: Color(0xFF64748B),
                       fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                      fontSize: 12,
                     ),
                   ),
                 ),
@@ -377,7 +377,7 @@ class _MappingViewState extends State<MappingView> {
                   ),
                   child: const Text(
                     "Delete",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
               ],
@@ -415,11 +415,9 @@ class _MappingViewState extends State<MappingView> {
     final isMobile = MediaQuery.of(context).size.width < 800;
     StylishDialog.show(
       context: context,
-      title: _editingId == null
-          ? "Create Mapping"
-          : "Edit Mapping ",
+      title: _editingId == null ? "Create Mapping" : "Edit Mapping ",
       titleStyle: TextStyle(
-        fontSize: isMobile ? 17 : 20,
+        fontSize: 16,
         fontWeight: FontWeight.bold,
         color: Colors.white,
       ),
@@ -434,74 +432,24 @@ class _MappingViewState extends State<MappingView> {
         return Form(
           key: _formKey,
           autovalidateMode: AutovalidateMode.disabled,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader("DEVICE INFORMATION"),
-              isMobile
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _dropsLoading
-                            ? const Center(
-                                child: SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              )
-                            : _buildDropdownField(
-                                hint: "Select Device Code",
-                                value: _selDeviceId,
-                                items: _deviceList
-                                    .map(
-                                      (d) => SearchableDropdownItem<String>(
-                                        value: d['id'].toString(),
-                                        label:
-                                            d['device_code']?.toString() ??
-                                            d['id'].toString(),
-                                      ),
-                                    )
-                                    .toList(),
-                                validator: (v) => (v == null || v.isEmpty)
-                                    ? 'Please select the Device Code'
-                                    : null,
-                                onChanged: (v) {
-                                  final dev = _deviceList.firstWhere(
-                                    (d) => d['id'].toString() == v,
-                                    orElse: () => <String, dynamic>{},
-                                  );
-                                  if ((dev as Map).isNotEmpty) {
-                                    _devNameCtrl.text =
-                                        dev['device_name']?.toString() ?? '';
-                                    _devModelCtrl.text =
-                                        dev['device_model']?.toString() ?? '';
-                                  }
-                                  setDialogState(() => _selDeviceId = v);
-                                  setState(() => _selDeviceId = v);
-                                },
-                              ),
-                        const SizedBox(height: 16),
-                        _buildTextField(
-                          "Device Name",
-                          _devNameCtrl,
-                          readOnly: false,
-                          validator: (v) => (v == null || v.isEmpty)
-                              ? 'Please enter the Device Name'
-                              : null,
-                        ),
-                      ],
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: _dropsLoading
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSectionHeader("DEVICE INFORMATION"),
+                isMobile
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _dropsLoading
                               ? const Center(
                                   child: SizedBox(
                                     height: 20,
                                     width: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   ),
                                 )
                               : _buildDropdownField(
@@ -535,10 +483,8 @@ class _MappingViewState extends State<MappingView> {
                                     setState(() => _selDeviceId = v);
                                   },
                                 ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildTextField(
+                          const SizedBox(height: 16),
+                          _buildTextField(
                             "Device Name",
                             _devNameCtrl,
                             readOnly: false,
@@ -546,122 +492,182 @@ class _MappingViewState extends State<MappingView> {
                                 ? 'Please enter the Device Name'
                                 : null,
                           ),
-                        ),
-                      ],
-                    ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                "Device Model",
-                _devModelCtrl,
-                readOnly: false,
-                validator: (v) => (v == null || v.isEmpty)
-                    ? 'Please enter the Device Model'
-                    : null,
-              ),
-              const SizedBox(height: 32),
-              _buildSectionHeader("LOCATION ASSIGNMENT"),
-              _dropsLoading
-                  ? const Center(
-                      child: SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : _buildDropdownField(
-                      hint: "Select Location Name",
-                      value: _selLocationId,
-                      items: _locationList
-                          .map(
-                            (l) => SearchableDropdownItem<String>(
-                              value: l['id'].toString(),
-                              label:
-                                  l['location_name']?.toString() ??
-                                  l['id'].toString(),
-                            ),
-                          )
-                          .toList(),
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Please select the Location Name'
-                          : null,
-                      onChanged: (v) {
-                        setDialogState(() => _selLocationId = v);
-                        setState(() => _selLocationId = v);
-                      },
-                    ),
-              const SizedBox(height: 32),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      _clearForm();
-                      Navigator.pop(context);
-                    },
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 20,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    child: const Text(
-                      "Cancel",
-                      style: TextStyle(
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _submitting
-                        ? null
-                        : () async {
-                            if (_formKey.currentState!.validate()) {
-                              Navigator.pop(context);
-                              if (_editingId == null) {
-                                await _insert();
-                              } else {
-                                await _update();
-                              }
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 32,
-                      ),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    child: _submitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text(
-                            _editingId == null ? "Submit" : "Update",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: _dropsLoading
+                                ? const Center(
+                                    child: SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  )
+                                : _buildDropdownField(
+                                    hint: "Select Device Code",
+                                    value: _selDeviceId,
+                                    items: _deviceList
+                                        .map(
+                                          (d) => SearchableDropdownItem<String>(
+                                            value: d['id'].toString(),
+                                            label:
+                                                d['device_code']?.toString() ??
+                                                d['id'].toString(),
+                                          ),
+                                        )
+                                        .toList(),
+                                    validator: (v) => (v == null || v.isEmpty)
+                                        ? 'Please select the Device Code'
+                                        : null,
+                                    onChanged: (v) {
+                                      final dev = _deviceList.firstWhere(
+                                        (d) => d['id'].toString() == v,
+                                        orElse: () => <String, dynamic>{},
+                                      );
+                                      if ((dev as Map).isNotEmpty) {
+                                        _devNameCtrl.text =
+                                            dev['device_name']?.toString() ??
+                                            '';
+                                        _devModelCtrl.text =
+                                            dev['device_model']?.toString() ??
+                                            '';
+                                      }
+                                      setDialogState(() => _selDeviceId = v);
+                                      setState(() => _selDeviceId = v);
+                                    },
+                                  ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildTextField(
+                              "Device Name",
+                              _devNameCtrl,
+                              readOnly: false,
+                              validator: (v) => (v == null || v.isEmpty)
+                                  ? 'Please enter the Device Name'
+                                  : null,
                             ),
                           ),
-                  ),
-                ],
-              ),
-            ],
+                        ],
+                      ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  "Device Model",
+                  _devModelCtrl,
+                  readOnly: false,
+                  validator: (v) => (v == null || v.isEmpty)
+                      ? 'Please enter the Device Model'
+                      : null,
+                ),
+                const SizedBox(height: 32),
+                _buildSectionHeader("LOCATION ASSIGNMENT"),
+                _dropsLoading
+                    ? const Center(
+                        child: SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : _buildDropdownField(
+                        hint: "Select Location Name",
+                        value: _selLocationId,
+                        items: _locationList
+                            .map(
+                              (l) => SearchableDropdownItem<String>(
+                                value: l['id'].toString(),
+                                label:
+                                    l['location_name']?.toString() ??
+                                    l['id'].toString(),
+                              ),
+                            )
+                            .toList(),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Please select the Location Name'
+                            : null,
+                        onChanged: (v) {
+                          setDialogState(() => _selLocationId = v);
+                          setState(() => _selLocationId = v);
+                        },
+                      ),
+                const SizedBox(height: 32),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        _clearForm();
+                        Navigator.pop(context);
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 20,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: _submitting
+                          ? null
+                          : () async {
+                              if (_formKey.currentState!.validate()) {
+                                Navigator.pop(context);
+                                if (_editingId == null) {
+                                  await _insert();
+                                } else {
+                                  await _update();
+                                }
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 32,
+                        ),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      child: _submitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              _editingId == null ? "Submit" : "Update",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 12,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -800,10 +806,6 @@ class _MappingViewState extends State<MappingView> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
-    final isTabletOrMobile = screenWidth < 950;
-    
-    final int currentItemCount = _paged.isEmpty ? 1 : _paged.length;
-    final double tableHeight = (isTabletOrMobile ? 180.0 : 250.0) + (currentItemCount * 42.0);
 
     final bodyContent = Padding(
       padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
@@ -833,7 +835,7 @@ class _MappingViewState extends State<MappingView> {
                     style: TextStyle(
                       color: Colors.blue,
                       fontWeight: FontWeight.bold,
-                      fontSize: 22,
+                      fontSize: 16,
                     ),
                   );
 
@@ -852,14 +854,7 @@ class _MappingViewState extends State<MappingView> {
                 },
               ),
               const SizedBox(height: 20),
-              isMobile
-                  ? SizedBox(
-                      height: tableHeight,
-                      child: _buildTableCard(),
-                    )
-                  : Expanded(
-                      child: _buildTableCard(),
-                    ),
+              _buildTableCard(),
             ],
           ),
         ),
@@ -870,11 +865,10 @@ class _MappingViewState extends State<MappingView> {
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
       body: SelectionArea(
-        child: isMobile
-            ? SingleChildScrollView(
-                child: bodyContent,
-              )
-            : bodyContent,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: bodyContent,
+        ),
       ),
     );
   }
@@ -883,7 +877,7 @@ class _MappingViewState extends State<MappingView> {
     t,
     style: const TextStyle(
       color: Colors.white,
-      fontSize: 20,
+      fontSize: 12,
       fontWeight: FontWeight.bold,
     ),
   );
@@ -1032,7 +1026,7 @@ class _MappingViewState extends State<MappingView> {
                               _editingId == null ? 'Submit' : 'Update',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
-                                fontSize: 14,
+                                fontSize: 12,
                               ),
                             ),
                     ),
@@ -1095,7 +1089,7 @@ class _MappingViewState extends State<MappingView> {
           readOnly: readOnly,
           validator: validator,
           autovalidateMode: AutovalidateMode.onUserInteraction,
-          style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+          style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
@@ -1192,7 +1186,7 @@ class _MappingViewState extends State<MappingView> {
         style: TextStyle(
           color: Colors.blue.shade700,
           fontWeight: FontWeight.w900,
-          fontSize: 11,
+          fontSize: 12,
           letterSpacing: 1.2,
         ),
       ),
@@ -1244,9 +1238,9 @@ class _MappingViewState extends State<MappingView> {
             child: Text(
               label,
               style: const TextStyle(
-                color: Colors.blue,
+                color: Color.fromRGBO(33, 150, 243, 1),
                 fontWeight: FontWeight.bold,
-                fontSize: 10,
+                fontSize: 14,
               ),
               textAlign: TextAlign.left,
               maxLines: 1,
@@ -1264,7 +1258,7 @@ class _MappingViewState extends State<MappingView> {
                   Icons.arrow_drop_up,
                   size: 14,
                   color: _sortColumnIndex == colIndex && _sortAscending
-                      ? Colors.blue
+                      ? const Color.fromRGBO(33, 150, 243, 1)
                       : const Color(0xFF94A3B8),
                 ),
               ),
@@ -1274,7 +1268,7 @@ class _MappingViewState extends State<MappingView> {
                   Icons.arrow_drop_down,
                   size: 14,
                   color: _sortColumnIndex == colIndex && !_sortAscending
-                      ? Colors.blue
+                      ? const Color.fromRGBO(33, 150, 243, 1)
                       : const Color(0xFF94A3B8),
                 ),
               ),
@@ -1291,9 +1285,9 @@ class _MappingViewState extends State<MappingView> {
         child: Text(
           label,
           style: const TextStyle(
-            color: Colors.blue,
+            color: Color.fromRGBO(33, 150, 243, 1),
             fontWeight: FontWeight.bold,
-            fontSize: 10,
+            fontSize: 16,
           ),
           textAlign: TextAlign.center,
         ),
@@ -1311,9 +1305,9 @@ class _MappingViewState extends State<MappingView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Show ',
+              'SHOW ',
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF334155),
               ),
@@ -1325,10 +1319,7 @@ class _MappingViewState extends State<MappingView> {
               child: DropdownButtonFormField<String>(
                 value: _entries,
                 dropdownColor: Colors.white,
-                style: const TextStyle(
-                  color: Colors.black87,
-                  fontSize: 13,
-                ),
+                style: const TextStyle(color: Colors.black87, fontSize: 12),
                 decoration: InputDecoration(
                   isDense: true,
                   filled: true,
@@ -1351,9 +1342,7 @@ class _MappingViewState extends State<MappingView> {
                   ),
                 ),
                 items: ["10", "25", "50", "100"]
-                    .map(
-                      (v) => DropdownMenuItem(value: v, child: Text(v)),
-                    )
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
                     .toList(),
                 onChanged: (v) {
                   if (v != null) {
@@ -1370,7 +1359,7 @@ class _MappingViewState extends State<MappingView> {
               const Text(
                 ' entries',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 12,
                   color: Color(0xFF334155),
                   fontWeight: FontWeight.bold,
                 ),
@@ -1385,17 +1374,18 @@ class _MappingViewState extends State<MappingView> {
             height: 38,
             child: TextField(
               controller: _searchCtrl,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.black87,
-              ),
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
               decoration: InputDecoration(
                 hintText: 'Search mappings...',
                 hintStyle: const TextStyle(
                   fontSize: 12,
                   color: Color(0xFF94A3B8),
                 ),
-                prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF94A3B8)),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 16,
+                  color: Color(0xFF94A3B8),
+                ),
                 isDense: true,
                 filled: true,
                 fillColor: const Color(0xFFF8FAFC),
@@ -1410,7 +1400,7 @@ class _MappingViewState extends State<MappingView> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade200), 
+                  borderSide: BorderSide(color: Colors.grey.shade200),
                 ),
               ),
             ),
@@ -1425,27 +1415,30 @@ class _MappingViewState extends State<MappingView> {
         final showingText = Text(
           "Showing $start to $end of $total entries",
           style: const TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.bold,
             color: Colors.black54,
           ),
         );
 
-        final paginationRow = Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _pageBtn(
-              'Previous',
-              enabled: _page > 1,
-              onTap: () => setState(() => _page--),
-            ),
-            ..._buildPageNumberButtons(_totalPages),
-            _pageBtn(
-              'Next',
-              enabled: _page < _totalPages,
-              onTap: () => setState(() => _page++),
-            ),
-          ],
+        final paginationRow = SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _pageBtn(
+                'Previous',
+                enabled: _page > 1,
+                onTap: () => setState(() => _page--),
+              ),
+              ..._buildPageNumberButtons(_totalPages),
+              _pageBtn(
+                'Next',
+                enabled: _page < _totalPages,
+                onTap: () => setState(() => _page++),
+              ),
+            ],
+          ),
         );
 
         return Padding(
@@ -1469,20 +1462,20 @@ class _MappingViewState extends State<MappingView> {
                     )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        showEntries,
-                        searchBox,
-                      ],
+                      children: [showEntries, searchBox],
                     ),
               const SizedBox(height: 16),
 
-              Expanded(
-                child: _tableLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _buildTable(),
-              ),
+              _tableLoading
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : _buildTable(),
 
-              SizedBox(height: MediaQuery.of(context).size.width < 950 ? 4 : 16),
+              SizedBox(
+                height: MediaQuery.of(context).size.width < 950 ? 4 : 16,
+              ),
 
               // Footer Pagination
               isNarrow
@@ -1499,10 +1492,7 @@ class _MappingViewState extends State<MappingView> {
                     )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        showingText,
-                        paginationRow,
-                      ],
+                      children: [showingText, paginationRow],
                     ),
             ],
           ),
@@ -1513,299 +1503,410 @@ class _MappingViewState extends State<MappingView> {
 
   Widget _buildTable() {
     final rows = _paged;
+
     return LayoutBuilder(
-      builder: (ctx, constraints) {
-        final isNarrow = constraints.maxWidth < 1200;
+      builder: (context, constraints) {
+        final double minTableWidth = constraints.maxWidth > 1250
+            ? constraints.maxWidth
+            : 1250;
 
-        if (isNarrow) {
-          final Map<int, TableColumnWidth> colWidths = const {
-            0: FixedColumnWidth(35),
-            1: FixedColumnWidth(95),
-            2: FixedColumnWidth(130),
-            3: FixedColumnWidth(90),
-            4: FixedColumnWidth(115),
-            5: FixedColumnWidth(75),
-            6: FixedColumnWidth(115),
-            7: FixedColumnWidth(40),
-            8: FixedColumnWidth(40),
-          };
-
-          final double tableWidth = constraints.maxWidth > 735 ? constraints.maxWidth : 735;
-
-          return SizedBox(
-            width: double.infinity,
-            height: constraints.maxHeight,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: tableWidth,
-                    height: constraints.maxHeight,
-                    child: Column(
-                      children: [
-                        // Fixed Header Row — never scrolls vertically
-                        Container(
-                          height: 45,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            border: Border(
-                              bottom: BorderSide(color: Colors.grey.shade300, width: 1.0),
-                            ),
-                          ),
-                          child: Table(
-                            columnWidths: colWidths,
-                            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                            children: [
-                              TableRow(
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                    child: _buildHeaderCell('S.No'),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                    child: _buildHeaderCell('Device Code', colIndex: 1),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                    child: _buildHeaderCell('Device Name', colIndex: 2),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                    child: _buildHeaderCell('Model', colIndex: 3),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                    child: _buildHeaderCell('Location', colIndex: 4),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                    child: _buildHeaderCell('Floor', colIndex: 5),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                    child: _buildHeaderCell('Sub Location', colIndex: 6),
-                                  ),
-                                  const Center(child: Text('Edit', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 10))),
-                                  const Center(child: Text('Delete', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 10))),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Vertically scrollable body rows only
-                        Expanded(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.vertical,
-                            child: Table(
-                              columnWidths: colWidths,
-                              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                              children: rows.isEmpty
-                                  ? [
-                                      TableRow(
-                                        children: [
-                                          const SizedBox.shrink(),
-                                          const SizedBox.shrink(),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(vertical: 36.0),
-                                            child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
-                                                const SizedBox(height: 8),
-                                                Text("No matching mappings found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
-                                                const SizedBox(height: 4),
-                                                const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox.shrink(),
-                                          const SizedBox.shrink(),
-                                          const SizedBox.shrink(),
-                                          const SizedBox.shrink(),
-                                          const SizedBox.shrink(),
-                                          const SizedBox.shrink(),
-                                        ],
-                                      )
-                                    ]
-                                  : List.generate(rows.length, (i) {
-                                final item = rows[i];
-                                final sno = (_page - 1) * (int.tryParse(_entries) ?? 10) + i + 1;
-                                return TableRow(
-                                  decoration: BoxDecoration(
-                                    color: i.isEven ? Colors.grey.shade50 : Colors.white,
-                                    border: Border(
-                                      bottom: BorderSide(color: Colors.grey.shade100),
-                                    ),
-                                  ),
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                      child: Text('$sno', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                      child: Text(item['device_code']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                      child: Text(item['device_name']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                      child: Text(item['device_model']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                      child: Text(item['location_name']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                      child: Text(item['floor']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                                      child: Text(item['sublocation']?.toString() ?? '-', style: const TextStyle(fontSize: 11), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
-                                    ),
-                                    Center(
-                                      child: IconButton(
-                                        icon: const Icon(Icons.edit, color: Colors.blue, size: 16),
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(),
-                                        onPressed: () => _loadForEdit(item['id']),
-                                      ),
-                                    ),
-                                    Center(
-                                      child: IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red, size: 16),
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(),
-                                        onPressed: () => _delete(item['id']),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-
-        return SingleChildScrollView(
-          scrollDirection: Axis.vertical,
+        return Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade200, width: 1.0),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-              child: DataTable(
-                columnSpacing: 20,
-                horizontalMargin: 16,
-                headingRowHeight: 46,
-                dataRowMinHeight: 40,
-                dataRowMaxHeight: 48,
-                headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
-                border: TableBorder.all(color: Colors.grey.shade100, width: 1),
-                columns: [
-                  _col('S.No', 0),
-                  _col('Device Code', 1),
-                  _col('Device Name', 2),
-                  _col('Device Model', 3),
-                  _col('Location', 4),
-                  _col('Floor', 5),
-                  _col('Sub Location', 6),
-                  _col('Edit', -1),
-                  _col('Delete', -1),
-                ],
-                rows: rows.isEmpty
-                    ? [
-                        DataRow(
-                          cells: [
-                            const DataCell(SizedBox.shrink()),
-                            const DataCell(SizedBox.shrink()),
-                            DataCell(
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 20.0),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
-                                    const SizedBox(height: 6),
-                                    Text("No matching mappings found", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 13)),
-                                    const SizedBox(height: 4),
-                                    const Text("Try a different search term", style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                  ],
+            child: SizedBox(
+              width: minTableWidth,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                    // Table Header Row
+                    Container(
+                      height: 45,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Colors.grey.shade200,
+                            width: 1.0,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8.0,
+                                ),
+                                child: _buildHeaderCell('S.NO', colIndex: 0),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4.0,
+                                ),
+                                child: _buildHeaderCell(
+                                  'DEVICE CODE',
+                                  colIndex: 1,
                                 ),
                               ),
                             ),
-                            const DataCell(SizedBox.shrink()),
-                            const DataCell(SizedBox.shrink()),
-                            const DataCell(SizedBox.shrink()),
-                            const DataCell(SizedBox.shrink()),
-                            const DataCell(SizedBox.shrink()),
-                            const DataCell(SizedBox.shrink()),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4.0,
+                                ),
+                                child: _buildHeaderCell(
+                                  'DEVICE NAME',
+                                  colIndex: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4.0,
+                                ),
+                                child: _buildHeaderCell(
+                                  'DEVICE MODEL',
+                                  colIndex: 3,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4.0,
+                                ),
+                                child: _buildHeaderCell(
+                                  'LOCATION',
+                                  colIndex: 4,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4.0,
+                                ),
+                                child: _buildHeaderCell('FLOOR', colIndex: 5),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4.0,
+                                ),
+                                child: _buildHeaderCell(
+                                  'SUB LOCATION',
+                                  colIndex: 6,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Center(
+                              child: const Text(
+                                'EDIT',
+                                style: TextStyle(
+                                  color: Color.fromRGBO(33, 150, 243, 1),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Center(
+                              child: const Text(
+                                'DELETE',
+                                style: TextStyle(
+                                  color: Color.fromRGBO(33, 150, 243, 1),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Data Rows
+                    if (rows.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 36.0),
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.search_off_rounded,
+                              size: 36,
+                              color: Colors.blue.shade200,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              "NO MATCHING MAPPINGS FOUND",
+                              style: TextStyle(
+                                color: Colors.blue.shade900,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              "Try a different search term",
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
                           ],
                         ),
-                      ]
-                    : List.generate(rows.length, (i) {
+                      )
+                    else
+                      ...List.generate(rows.length, (i) {
                         final item = rows[i];
-                        final sno = (_page - 1) * (int.tryParse(_entries) ?? 10) + i + 1;
-                        return DataRow(
-                          color: WidgetStateProperty.resolveWith(
-                            (s) => i.isEven ? Colors.grey.shade50 : Colors.white,
+                        final sno =
+                            (_page - 1) * (int.tryParse(_entries) ?? 10) +
+                            i +
+                            1;
+                        return Container(
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Colors.grey.shade200,
+                                width: 1.0,
+                              ),
+                            ),
                           ),
-                          cells: [
-                            DataCell(_cellText('$sno', 40)),
-                            DataCell(_cellText(item['device_code']?.toString() ?? '-', 80)),
-                            DataCell(_cellText(item['device_name']?.toString() ?? '-', 120)),
-                            DataCell(_cellText(item['device_model']?.toString() ?? '-', 120)),
-                            DataCell(_cellText(item['location_name']?.toString() ?? '-', 120)),
-                            DataCell(_cellText(item['floor']?.toString() ?? '-', 60)),
-                            DataCell(_cellText(item['sublocation']?.toString() ?? '-', 100)),
-                            DataCell(
-                              IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
-                                onPressed: () => _loadForEdit(item['id']),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8.0,
+                                    ),
+                                    child: Text(
+                                      '$sno',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                            DataCell(
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                                onPressed: () => _delete(item['id']),
+                              Expanded(
+                                flex: 4,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: Text(
+                                      item['device_code']?.toString() ?? '-',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                              Expanded(
+                                flex: 4,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: Text(
+                                      item['device_name']?.toString() ?? '-',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 3,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: Text(
+                                      item['device_model']?.toString() ?? '-',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 4,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: Text(
+                                      item['location_name']?.toString() ?? '-',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: Text(
+                                      item['floor']?.toString() ?? '-',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 4,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: Text(
+                                      item['sublocation']?.toString() ?? '-',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Center(
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.blue,
+                                      size: 18,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () => _loadForEdit(item['id']),
+                                    tooltip: 'Edit',
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Center(
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                      size: 18,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () => _delete(item['id']),
+                                    tooltip: 'Delete',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         );
                       }),
+                  ],
+                ),
               ),
             ),
-          ),
         );
       },
-    );
-  }
-
-  Widget _cellText(String text, double width) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: width),
-      child: Text(
-        text,
-        style: const TextStyle(color: Colors.black87),
-        overflow: TextOverflow.ellipsis,
-      ),
     );
   }
 
@@ -1830,10 +1931,10 @@ class _MappingViewState extends State<MappingView> {
           Flexible(
             child: Text(
               label,
-              style: TextStyle(
-                color: Colors.blue.shade800,
+              style: const TextStyle(
+                color: Color.fromRGBO(33, 150, 243, 1),
                 fontWeight: FontWeight.bold,
-                fontSize: 11,
+                fontSize: 14,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -1850,7 +1951,7 @@ class _MappingViewState extends State<MappingView> {
                     Icons.arrow_drop_up,
                     size: 18,
                     color: _sortColumnIndex == colIndex && _sortAscending
-                        ? Colors.blue
+                        ? const Color.fromRGBO(33, 150, 243, 1)
                         : Colors.grey.withOpacity(0.5),
                   ),
                 ),
@@ -1860,7 +1961,7 @@ class _MappingViewState extends State<MappingView> {
                     Icons.arrow_drop_down,
                     size: 18,
                     color: _sortColumnIndex == colIndex && !_sortAscending
-                        ? Colors.blue
+                        ? const Color.fromRGBO(33, 150, 243, 1)
                         : Colors.grey.withOpacity(0.5),
                   ),
                 ),

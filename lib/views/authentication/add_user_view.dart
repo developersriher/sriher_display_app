@@ -473,7 +473,7 @@ class _AddUserViewState extends State<AddUserView> {
     final heading = const AnimatedHeading(
       text: "User List",
       style: TextStyle(
-        color: Color.fromARGB(255, 64, 164, 246),
+        color: Color.fromARGB(255, 33, 150, 243),
         fontWeight: FontWeight.bold,
         fontSize: 22,
       ),
@@ -587,6 +587,7 @@ class _AddUserViewState extends State<AddUserView> {
       resizeToAvoidBottomInset: true,
       body: SelectionArea(
         child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           child: bodyContent,
         ),
       ),
@@ -600,8 +601,9 @@ class _AddUserViewState extends State<AddUserView> {
       width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade100),
+        border: Border.all(color: Colors.grey.shade200, width: 1.0),
       ),
+      clipBehavior: Clip.antiAlias,
       child: isLoading
           ? const SizedBox(
               height: 400,
@@ -639,10 +641,13 @@ class _AddUserViewState extends State<AddUserView> {
             )
           : LayoutBuilder(
               builder: (context, constraints) {
+                final double minWidth = constraints.maxWidth > 700
+                    ? constraints.maxWidth
+                    : 700;
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    constraints: BoxConstraints(minWidth: minWidth),
                     child: DataTable(
                       columnSpacing: 24,
                       headingRowHeight: 52,
@@ -651,7 +656,7 @@ class _AddUserViewState extends State<AddUserView> {
                         Colors.blue.shade50,
                       ),
                       showCheckboxColumn: false,
-                      border: TableBorder.all(color: Colors.grey.shade100),
+                      dividerThickness: 0.0,
                       columns: _buildColumns(),
                       rows: pagedUsers.map((u) => _buildRow(u)).toList(),
                     ),
@@ -692,11 +697,11 @@ class _AddUserViewState extends State<AddUserView> {
           children: [
             Flexible(
               child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.blue.shade800,
+                label.toUpperCase(),
+                style: const TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: 16.0,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
