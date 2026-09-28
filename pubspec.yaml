@@ -2,7 +2,7 @@ name: sriher_display_application
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "SRIHER IT" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -39,7 +39,7 @@ dependencies:
   media_kit: ^1.1.11
   media_kit_video: ^2.0.1
   google_fonts: ^6.1.0
-  
+
   file_picker: ^8.1.7
   http_parser: ^4.1.2
   intl: ^0.20.2
@@ -47,9 +47,6 @@ dependencies:
   media_kit_libs_video: ^1.0.4 #
   video_player: ^2.9.2
   web: ^1.1.1
-
-  
-  
 
 dev_dependencies:
   flutter_test:
@@ -67,7 +64,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
