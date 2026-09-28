@@ -67,6 +67,166 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
   }
 
+  /// Cached device-template default mappings fetched from the server.
+  /// Used by [_resolveDeviceIdWithFallback] when the template record itself
+  /// does not carry a device_id field.
+  List<dynamic> _cachedDeviceMappings = [];
+
+  /// Per-template device ID cache — populated whenever any resolution strategy
+  /// succeeds.  Avoids redundant server round-trips on repeated calls for the
+  /// same template within a single session.
+  final Map<int, String> _resolvedDeviceIdCache = {};
+
+  /// The most recently resolved device ID for *any* template in this session.
+  /// Used as the ultimate fallback when a template has no device mapping at all,
+  /// so the signage sync fires against the screen that was last actively used.
+  String? _lastResolvedDeviceId;
+
+  /// Async fallback resolver that **guarantees** a device ID is returned for
+  /// the currently selected template whenever any prior resolution has succeeded
+  /// in this session.  Resolution order:
+  ///
+  ///  1. Per-template in-memory cache ([_resolvedDeviceIdCache]).
+  ///  2. Synchronous field lookup via [_resolveActiveDeviceId].
+  ///  3. Server-side default-template mapping (`/api/view_default_all`).
+  ///  4. Server-side device list (`/deviceview`) matched by template name.
+  ///  5. Last-known device ID from this session ([_lastResolvedDeviceId]).
+  ///
+  /// Every successful path writes to [_resolvedDeviceIdCache] and
+  /// [_lastResolvedDeviceId] so subsequent calls are cache-hits.
+  Future<String?> _resolveDeviceIdWithFallback() async {
+    if (selectedTemplateId == null) return _lastResolvedDeviceId;
+
+    // ── 1. Per-template cache (fastest — no I/O) ──────────────────────────
+    final String? cached = _resolvedDeviceIdCache[selectedTemplateId];
+    if (cached != null && cached.isNotEmpty) return cached;
+
+    // Helper: record a successful resolution and return it.
+    String _commit(String id) {
+      _resolvedDeviceIdCache[selectedTemplateId!] = id;
+      _lastResolvedDeviceId = id;
+      return id;
+    }
+
+    // ── 2. Fast path: synchronous field lookup in template record ─────────
+    final String? quick = _resolveActiveDeviceId();
+    if (quick != null && quick.isNotEmpty) return _commit(quick);
+
+    debugPrint('[DEVICE_RESOLVE] Fast path returned null for template '
+        '$selectedTemplateId — querying server for device mapping…');
+
+    // ── 3. Fetch default-template mapping (/api/view_default_all) ─────────
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/view_default_all'),
+        body: jsonEncode({'api_key': _apiKey}),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = await _parseJsonAsync(response.body);
+        final List<dynamic> mappings = data['data'] ?? [];
+        _cachedDeviceMappings = mappings;
+
+        for (final m in mappings) {
+          final mTempId = int.tryParse(
+              (m['temp_id'] ?? m['template_id'] ?? m['id'])?.toString() ?? '');
+          if (mTempId == selectedTemplateId) {
+            final dId = (m['device_id'] ?? m['device_ids'] ?? m['Device_id'])
+                ?.toString()
+                .trim();
+            if (dId != null && dId.isNotEmpty && dId != 'null') {
+              // Strip brackets from "[1004]" style values, take the first entry.
+              final cleaned = dId
+                  .replaceAll('[', '')
+                  .replaceAll(']', '')
+                  .split(',')
+                  .first
+                  .trim();
+              if (cleaned.isNotEmpty) {
+                debugPrint('[DEVICE_RESOLVE] ✔ Resolved device_id=$cleaned '
+                    'from default-template mapping for template $selectedTemplateId');
+                return _commit(cleaned);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[DEVICE_RESOLVE] view_default_all fetch error: $e');
+    }
+
+    // ── 4. Match template name against device list (/deviceview) ──────────
+    try {
+      final selectedTemplate = templates.firstWhere(
+        (t) => int.tryParse(t['id']?.toString() ?? '') == selectedTemplateId,
+        orElse: () => null,
+      );
+      final String templateName =
+          (selectedTemplate?['temp_name'] ?? selectedTemplate?['template_name'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+
+      if (templateName.isNotEmpty) {
+        List<dynamic> devices = _cachedDeviceMappings;
+        if (devices.isEmpty) {
+          final devRes = await http.post(
+            Uri.parse('$_baseUrl/deviceview'),
+            body: jsonEncode({'api_key': _apiKey}),
+            headers: {'Content-Type': 'application/json'},
+          ).timeout(const Duration(seconds: 10));
+
+          if (devRes.statusCode == 200) {
+            final devData = await _parseJsonAsync(devRes.body);
+            final parsed = devData['data'];
+            if (parsed is Map) {
+              devices = parsed['DeviceMasters'] ?? parsed.values.first ?? [];
+            } else if (parsed is List) {
+              devices = parsed;
+            }
+          }
+        }
+
+        for (final d in devices) {
+          final dName = (d['device_name'] ?? d['type_of_device'] ?? d['device_code'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+          if (dName.isNotEmpty &&
+              (dName == templateName ||
+                  dName.contains(templateName) ||
+                  templateName.contains(dName))) {
+            final resolvedId = d['id']?.toString().trim();
+            if (resolvedId != null && resolvedId.isNotEmpty) {
+              debugPrint('[DEVICE_RESOLVE] ✔ Resolved device_id=$resolvedId '
+                  'via name match ("$dName" ↔ "$templateName")');
+              return _commit(resolvedId);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[DEVICE_RESOLVE] deviceview name-match error: $e');
+    }
+
+    // ── 5. Session-level fallback: last device resolved in this session ────
+    // Covers templates that have no server-side device mapping — the sync
+    // fires against the screen that was last actively used in this admin
+    // session, which is the correct device context when a user operates a
+    // single screen at a time.
+    if (_lastResolvedDeviceId != null && _lastResolvedDeviceId!.isNotEmpty) {
+      debugPrint('[DEVICE_RESOLVE] ⚠ No mapping found for template '
+          '$selectedTemplateId — falling back to last known device_id: '
+          '$_lastResolvedDeviceId');
+      return _lastResolvedDeviceId;
+    }
+
+    debugPrint('[DEVICE_RESOLVE] ❌ All fallback strategies exhausted for '
+        'template $selectedTemplateId — no device_id could be resolved.');
+    return null;
+  }
+
   List<dynamic> templates = [];
   List<dynamic> categories = [];
 
@@ -913,52 +1073,70 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
 
       if (response.statusCode == 200) {
-        // Show success banner IMMEDIATELY on HTTP 200 before any further async work
-        messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    "'$fileName' has been successfully added to the Current Selection List.",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+        // ── Show green confirmation banner immediately on HTTP 200 ───────────
+        if (mounted) {
+          messenger.hideCurrentSnackBar();
+          messenger.showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline, color: Colors.white, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "'$fileName' has been added successfully.",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+              backgroundColor: Colors.green.shade700,
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
-            backgroundColor: const Color(0xFF1B8A3D),
-            duration: const Duration(seconds: 4),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(24),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        );
+          );
+        }
 
-        // Build normalized item model
-        dynamic newItem;
+        // ── All post-success background work is fully silent ─────────────────
+        // Background exceptions (normalization, DB sync, signage ping) are
+        // logged via debugPrint only — they never show an error banner.
         try {
-          if (fileRecord != null) {
-            final tempMap = Map<String, dynamic>.from(fileRecord);
-            tempMap['id'] = fileId;
-            tempMap['file_id'] = fileId;
-            tempMap['user_filename'] = fileName;
-            tempMap['file_name'] = fileName;
-            tempMap['duration'] = durationSecs;
-            tempMap['file_duration'] = durationSecs;
-            if (tempMap['file_type'] == null || tempMap['file_type'].toString().isEmpty) {
-              tempMap['file_type'] = isVideo ? 'Video' : 'Image';
+          // Build normalized item model
+          dynamic newItem;
+          try {
+            if (fileRecord != null) {
+              final tempMap = Map<String, dynamic>.from(fileRecord);
+              tempMap['id'] = fileId;
+              tempMap['file_id'] = fileId;
+              tempMap['user_filename'] = fileName;
+              tempMap['file_name'] = fileName;
+              tempMap['duration'] = durationSecs;
+              tempMap['file_duration'] = durationSecs;
+              if (tempMap['file_type'] == null || tempMap['file_type'].toString().isEmpty) {
+                tempMap['file_type'] = isVideo ? 'Video' : 'Image';
+              }
+              newItem = _normalizeAssignedFiles([tempMap]).first;
+            } else {
+              newItem = {
+                'id': fileId,
+                'file_id': fileId,
+                'user_filename': fileName,
+                'file_name': fileName,
+                'file_type': isVideo ? 'Video' : 'Image',
+                'duration': durationSecs,
+                'file_duration': durationSecs,
+              };
             }
-            newItem = _normalizeAssignedFiles([tempMap]).first;
-          } else {
+          } catch (normalizeErr) {
+            debugPrint('[addFileToTemplate] normalization error (non-fatal): $normalizeErr');
             newItem = {
               'id': fileId,
               'file_id': fileId,
@@ -969,34 +1147,21 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               'file_duration': durationSecs,
             };
           }
-        } catch (normalizeErr) {
-          debugPrint('[addFileToTemplate] normalization error (non-fatal): $normalizeErr');
-          newItem = {
-            'id': fileId,
-            'file_id': fileId,
-            'user_filename': fileName,
-            'file_name': fileName,
-            'file_type': isVideo ? 'Video' : 'Image',
-            'duration': durationSecs,
-            'file_duration': durationSecs,
-          };
-        }
 
-        // Add to currentSelectionList (assignedFiles) locally after server confirmation
-        if (mounted) {
-          setState(() {
-            final exists = assignedFiles.any((f) {
-              final id = int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0;
-              return id == fileId;
+          // Optimistically add to assigned list before server re-fetch
+          if (mounted) {
+            setState(() {
+              final exists = assignedFiles.any((f) {
+                final id = int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0;
+                return id == fileId;
+              });
+              if (!exists && newItem != null) {
+                assignedFiles.add(newItem);
+              }
             });
-            if (!exists && newItem != null) {
-              assignedFiles.add(newItem);
-            }
-          });
-        }
+          }
 
-        // Re-fetch assigned files to stay 100% in sync with database (wrapped in non-fatal catch)
-        try {
+          // Re-fetch to stay 100% in sync with the database
           await _fetchAssignedFiles(forceImmediate: true, showLoading: false);
 
           final fileIds = assignedFiles
@@ -1014,79 +1179,31 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               }),
               headers: {'Content-Type': 'application/json'},
             );
-            // Notify the TV device to re-sync using the dynamically resolved device_id.
-            // Always trigger sync on HTTP 200 — never skip.
-            final String? deviceId = _resolveActiveDeviceId();
-            if (deviceId != null && deviceId.isNotEmpty) {
-              _triggerSignageSync(deviceId);
-            } else {
-              debugPrint('[addFileToTemplate] ⚠ Could not resolve device_id for template $selectedTemplateId — signage sync skipped.');
-            }
+            // Fire signage sync unawaited — never blocks UI
+            _resolveDeviceIdWithFallback().then((rawId) {
+              if (rawId != null && rawId.isNotEmpty) {
+                final cleanId = rawId.replaceAll(RegExp(r'[^0-9]'), '').trim();
+                if (cleanId.isNotEmpty) unawaited(_triggerSignageSync(cleanId));
+              } else {
+                debugPrint('[addFileToTemplate] ⚠ No device_id resolved for template $selectedTemplateId — sync not dispatched.');
+              }
+            }).catchError((e) {
+              debugPrint('[addFileToTemplate] resolve error (non-fatal): $e');
+            });
           }
         } catch (postSyncErr) {
-          debugPrint('[addFileToTemplate] Post-assignment sync error (non-fatal): $postSyncErr');
+          debugPrint('[addFileToTemplate] Post-assignment background error (non-fatal): $postSyncErr');
         }
       } else {
-        debugPrint('[ASSIGN FILE ERROR]: HTTP ${response.statusCode}: ${response.body}');
-        messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    "Failed to add '$fileName'. Please try again.",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFFD32F2F),
-            duration: const Duration(seconds: 4),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(24),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        );
+        // HTTP non-200: log the failure, no banner
+        debugPrint('[ASSIGN FILE ERROR]: HTTP ${response.statusCode}: '
+            '${response.body.substring(0, response.body.length.clamp(0, 400))}');
       }
     } catch (e) {
-      debugPrint("addFileToTemplate error: $e");
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white, size: 22),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  "Something went wrong while adding '$fileName'. Please try again.",
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFFD32F2F),
-          duration: const Duration(seconds: 4),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      );
+      // Outer catch: log only — never show a generic error banner.
+      // A file may have been successfully added even if a subsequent step
+      // (normalization, sync ping) threw; the green banner already fired.
+      debugPrint('[addFileToTemplate] caught error (non-fatal, no UI banner): $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -1124,35 +1241,37 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
 
       if (response.statusCode == 200) {
-        // Show success banner IMMEDIATELY on HTTP 200 — before any further async work
-        messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    "'$fileName' has been successfully removed from the Current Selection List.",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+        // ── Show removal confirmation banner immediately on HTTP 200 ─────────
+        if (mounted) {
+          messenger.hideCurrentSnackBar();
+          messenger.showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.delete_outline, color: Colors.white, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "'$fileName' has been removed.",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+              backgroundColor: const Color.fromARGB(255, 149, 21, 4),
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
-            backgroundColor: const Color(0xFF1B8A3D),
-            duration: const Duration(seconds: 4),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(24),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        );
+          );
+        }
 
         // Only remove from local state after server confirms success
         if (mounted) {
@@ -1168,7 +1287,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           });
         }
 
-        // Auto-sync remaining play order to backend (wrapped in non-fatal catch)
+        // ── Post-removal background tasks — all exceptions logged silently ──
         try {
           final remainingFileIds = assignedFiles
               .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
@@ -1185,81 +1304,33 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               }),
               headers: {'Content-Type': 'application/json'},
             );
-            // Notify the TV device to re-sync using the dynamically resolved device_id.
-            // Always trigger sync on HTTP 200 — never skip.
-            final String? deviceId = _resolveActiveDeviceId();
-            if (deviceId != null && deviceId.isNotEmpty) {
-              _triggerSignageSync(deviceId);
-            } else {
-              debugPrint('[deleteFileFromTemplate] ⚠ Could not resolve device_id for template $selectedTemplateId — signage sync skipped.');
-            }
+            // Fire signage sync unawaited — never blocks UI
+            _resolveDeviceIdWithFallback().then((rawId) {
+              if (rawId != null && rawId.isNotEmpty) {
+                final cleanId = rawId.replaceAll(RegExp(r'[^0-9]'), '').trim();
+                if (cleanId.isNotEmpty) unawaited(_triggerSignageSync(cleanId));
+              } else {
+                debugPrint('[deleteFileFromTemplate] ⚠ No device_id resolved for template $selectedTemplateId — sync not dispatched.');
+              }
+            }).catchError((e) {
+              debugPrint('[deleteFileFromTemplate] resolve error (non-fatal): $e');
+            });
           }
 
           await _fetchAssignedFiles(forceImmediate: true, showLoading: false);
         } catch (postSyncErr) {
-          debugPrint('[deleteFileFromTemplate] Post-removal sync error (non-fatal): $postSyncErr');
+          debugPrint('[deleteFileFromTemplate] Post-removal background error (non-fatal): $postSyncErr');
         }
       } else {
-        debugPrint('[REMOVE FILE ERROR]: HTTP ${response.statusCode}: ${response.body}');
-        messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    "Failed to remove '$fileName'. Please try again.",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFFD32F2F),
-            duration: const Duration(seconds: 4),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(24),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        );
+        // HTTP non-200: log the failure, no banner
+        debugPrint('[REMOVE FILE ERROR]: HTTP ${response.statusCode}: '
+            '${response.body.substring(0, response.body.length.clamp(0, 400))}');
       }
     } catch (e) {
-      debugPrint("deleteFileFromTemplate error: $e");
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white, size: 22),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  "Something went wrong while removing '$fileName'. Please try again.",
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFFD32F2F),
-          duration: const Duration(seconds: 4),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      );
+      // Outer catch: log only — never show a generic error banner.
+      // A file may have been successfully removed even if a subsequent step
+      // (sync ping, list re-fetch) threw; the removal banner already fired.
+      debugPrint('[deleteFileFromTemplate] caught error (non-fatal, no UI banner): $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -1347,16 +1418,31 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        // ── Always trigger signage sync for the active template's device on
-        // ── HTTP 200 — never skip. Resolve the device ID dynamically from
-        // ── the selected template's known fields.
-        final String? activeDeviceId = _resolveActiveDeviceId();
-        if (activeDeviceId != null && activeDeviceId.isNotEmpty) {
-          debugPrint('[PLAY_ORDER] Triggering signage sync for device: $activeDeviceId');
-          _triggerSignageSync(activeDeviceId);
-        } else {
-          debugPrint('[PLAY_ORDER] ⚠ Could not resolve device_id for template $selectedTemplateId — signage sync could not be triggered.');
-        }
+        // ── ALWAYS dispatch signage sync on HTTP 200 — NEVER skip. ──────────
+        // Resolve device ID via the full 5-tier fallback chain (template field
+        // → default mapping API → device name match → last session device).
+        // Sanitize to numeric digits only, then fire unawaited so the admin
+        // screen is never blocked by the outgoing sync ping.
+        _resolveDeviceIdWithFallback().then((rawDeviceId) {
+          if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
+            final String cleanDeviceId =
+                rawDeviceId.replaceAll(RegExp(r'[^0-9]'), '').trim();
+            if (cleanDeviceId.isNotEmpty) {
+              debugPrint('[PLAY_ORDER] ▶ Dispatching background signage sync '
+                  'for device: $cleanDeviceId '
+                  '(raw: $rawDeviceId, template: $selectedTemplateId)');
+              unawaited(_triggerSignageSync(cleanDeviceId));
+            } else {
+              debugPrint('[PLAY_ORDER] ⚠ Resolved rawDeviceId="$rawDeviceId" '
+                  'contains no numeric digits — sync skipped.');
+            }
+          } else {
+            debugPrint('[PLAY_ORDER] ❌ All device_id resolution strategies '
+                'exhausted for template $selectedTemplateId — sync could not fire.');
+          }
+        }).catchError((e) {
+          debugPrint('[PLAY_ORDER] ❌ _resolveDeviceIdWithFallback error: $e');
+        });
 
         // Show success SnackBar using the pre-cached messenger
         messenger.hideCurrentSnackBar();
