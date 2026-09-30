@@ -12,5 +12,10 @@ String getBaseUrl() {
   // if (kIsWeb) {
   //   return 'http://127.0.0.1/sriherdisplay/public';
   // }
+  
+  // MUST BE THE REAL STRING HERE:
   return 'https://display.sriher.com';
 }
+
+/// Allows direct usage like "${baseUrl}/endpoint" across all screens
+String get baseUrl => getBaseUrl();

@@ -112,16 +112,20 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     final String? quick = _resolveActiveDeviceId();
     if (quick != null && quick.isNotEmpty) return _commit(quick);
 
-    debugPrint('[DEVICE_RESOLVE] Fast path returned null for template '
-        '$selectedTemplateId — querying server for device mapping…');
+    debugPrint(
+      '[DEVICE_RESOLVE] Fast path returned null for template '
+      '$selectedTemplateId — querying server for device mapping…',
+    );
 
     // ── 3. Fetch default-template mapping (/api/view_default_all) ─────────
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/view_default_all'),
-        body: jsonEncode({'api_key': _apiKey}),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/api/view_default_all'),
+            body: jsonEncode({'api_key': _apiKey}),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = await _parseJsonAsync(response.body);
@@ -130,7 +134,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
         for (final m in mappings) {
           final mTempId = int.tryParse(
-              (m['temp_id'] ?? m['template_id'] ?? m['id'])?.toString() ?? '');
+            (m['temp_id'] ?? m['template_id'] ?? m['id'])?.toString() ?? '',
+          );
           if (mTempId == selectedTemplateId) {
             final dId = (m['device_id'] ?? m['device_ids'] ?? m['Device_id'])
                 ?.toString()
@@ -144,8 +149,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   .first
                   .trim();
               if (cleaned.isNotEmpty) {
-                debugPrint('[DEVICE_RESOLVE] ✔ Resolved device_id=$cleaned '
-                    'from default-template mapping for template $selectedTemplateId');
+                debugPrint(
+                  '[DEVICE_RESOLVE] ✔ Resolved device_id=$cleaned '
+                  'from default-template mapping for template $selectedTemplateId',
+                );
                 return _commit(cleaned);
               }
             }
@@ -163,7 +170,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         orElse: () => null,
       );
       final String templateName =
-          (selectedTemplate?['temp_name'] ?? selectedTemplate?['template_name'] ?? '')
+          (selectedTemplate?['temp_name'] ??
+                  selectedTemplate?['template_name'] ??
+                  '')
               .toString()
               .trim()
               .toLowerCase();
@@ -171,11 +180,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       if (templateName.isNotEmpty) {
         List<dynamic> devices = _cachedDeviceMappings;
         if (devices.isEmpty) {
-          final devRes = await http.post(
-            Uri.parse('$_baseUrl/deviceview'),
-            body: jsonEncode({'api_key': _apiKey}),
-            headers: {'Content-Type': 'application/json'},
-          ).timeout(const Duration(seconds: 10));
+          final devRes = await http
+              .post(
+                Uri.parse('$_baseUrl/deviceview'),
+                body: jsonEncode({'api_key': _apiKey}),
+                headers: {'Content-Type': 'application/json'},
+              )
+              .timeout(const Duration(seconds: 10));
 
           if (devRes.statusCode == 200) {
             final devData = await _parseJsonAsync(devRes.body);
@@ -189,18 +200,24 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }
 
         for (final d in devices) {
-          final dName = (d['device_name'] ?? d['type_of_device'] ?? d['device_code'] ?? '')
-              .toString()
-              .trim()
-              .toLowerCase();
+          final dName =
+              (d['device_name'] ??
+                      d['type_of_device'] ??
+                      d['device_code'] ??
+                      '')
+                  .toString()
+                  .trim()
+                  .toLowerCase();
           if (dName.isNotEmpty &&
               (dName == templateName ||
                   dName.contains(templateName) ||
                   templateName.contains(dName))) {
             final resolvedId = d['id']?.toString().trim();
             if (resolvedId != null && resolvedId.isNotEmpty) {
-              debugPrint('[DEVICE_RESOLVE] ✔ Resolved device_id=$resolvedId '
-                  'via name match ("$dName" ↔ "$templateName")');
+              debugPrint(
+                '[DEVICE_RESOLVE] ✔ Resolved device_id=$resolvedId '
+                'via name match ("$dName" ↔ "$templateName")',
+              );
               return _commit(resolvedId);
             }
           }
@@ -216,14 +233,18 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     // session, which is the correct device context when a user operates a
     // single screen at a time.
     if (_lastResolvedDeviceId != null && _lastResolvedDeviceId!.isNotEmpty) {
-      debugPrint('[DEVICE_RESOLVE] ⚠ No mapping found for template '
-          '$selectedTemplateId — falling back to last known device_id: '
-          '$_lastResolvedDeviceId');
+      debugPrint(
+        '[DEVICE_RESOLVE] ⚠ No mapping found for template '
+        '$selectedTemplateId — falling back to last known device_id: '
+        '$_lastResolvedDeviceId',
+      );
       return _lastResolvedDeviceId;
     }
 
-    debugPrint('[DEVICE_RESOLVE] ❌ All fallback strategies exhausted for '
-        'template $selectedTemplateId — no device_id could be resolved.');
+    debugPrint(
+      '[DEVICE_RESOLVE] ❌ All fallback strategies exhausted for '
+      'template $selectedTemplateId — no device_id could be resolved.',
+    );
     return null;
   }
 
@@ -289,14 +310,18 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         print('\n[⏱ POLL_TIMER] ────────────────────────────────────────────');
         print('[POLL_TIMER] Tick at $now');
         print('[POLL_TIMER] baseUrl = ${getBaseUrl()}');
-        print('[POLL_TIMER] templateId = $selectedTemplateId  deptId = $selectedCategoryId');
+        print(
+          '[POLL_TIMER] templateId = $selectedTemplateId  deptId = $selectedCategoryId',
+        );
         print('[POLL_TIMER] ────────────────────────────────────────────');
         _silentRefreshAssignedFiles();
         // Also silently sync available files in the background
         _silentRefreshAvailableFiles();
       }
     });
-    print('[POLL_TIMER] 30-second polling timer started. baseUrl = ${getBaseUrl()}');
+    print(
+      '[POLL_TIMER] 30-second polling timer started. baseUrl = ${getBaseUrl()}',
+    );
   }
 
   @override
@@ -561,8 +586,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     try {
       final bool wantVideos = fileType == 'videos';
       final int categoryId = wantVideos ? 2 : 1;
-      final List<dynamic> merged =
-          await _fetchMergedAvailableFilesList(categoryId, wantVideos);
+      final List<dynamic> merged = await _fetchMergedAvailableFilesList(
+        categoryId,
+        wantVideos,
+      );
 
       if (mounted) {
         final List<dynamic> normalized = _normalizeAvailableFiles(merged);
@@ -586,16 +613,20 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     try {
       final bool wantVideos = fileType == 'videos';
       final int categoryId = wantVideos ? 2 : 1;
-      final List<dynamic> merged =
-          await _fetchMergedAvailableFilesList(categoryId, wantVideos);
+      final List<dynamic> merged = await _fetchMergedAvailableFilesList(
+        categoryId,
+        wantVideos,
+      );
 
       if (!mounted) return;
       final List<dynamic> fresh = _normalizeAvailableFiles(merged);
 
-      final currentIds =
-          _displayedFiles.map((f) => (f['id'] ?? f['file_id'])?.toString()).join(',');
-      final freshIds =
-          fresh.map((f) => (f['id'] ?? f['file_id'])?.toString()).join(',');
+      final currentIds = _displayedFiles
+          .map((f) => (f['id'] ?? f['file_id'])?.toString())
+          .join(',');
+      final freshIds = fresh
+          .map((f) => (f['id'] ?? f['file_id'])?.toString())
+          .join(',');
       if (currentIds != freshIds) {
         debugPrint(
           '[BgSync] Available files updated: ${fresh.length} total for category_id=$categoryId',
@@ -624,13 +655,19 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       final response = await http
           .get(Uri.parse(syncUrl))
           .timeout(const Duration(seconds: 15));
-      debugPrint('[API_CALL] GET $syncUrl -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
+      debugPrint(
+        '[API_CALL] GET $syncUrl -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}',
+      );
       final truncatedBody = response.body.length > 300
           ? '${response.body.substring(0, 300)}…'
           : response.body;
-      print('[SIGNAGE_SYNC] ✔ HTTP ${response.statusCode} — Body: $truncatedBody');
+      print(
+        '[SIGNAGE_SYNC] ✔ HTTP ${response.statusCode} — Body: $truncatedBody',
+      );
       if (response.statusCode != 200) {
-        print('[SIGNAGE_SYNC] ⚠ Non-200 status. TV device may not have received the sync signal.');
+        print(
+          '[SIGNAGE_SYNC] ⚠ Non-200 status. TV device may not have received the sync signal.',
+        );
       } else {
         print('[SIGNAGE_SYNC] ✅ Sync signal delivered successfully.');
       }
@@ -659,7 +696,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   List<dynamic> _normalizeAssignedFiles(List<dynamic> rawList) {
     return rawList.map((file) {
       final Map<String, dynamic> item = Map<String, dynamic>.from(file);
-      final String rawName = (item['file_name'] ?? item['user_filename'] ?? '').toString();
+      final String rawName = (item['file_name'] ?? item['user_filename'] ?? '')
+          .toString();
       final String video720 = (item['video_720p'] ?? '').toString();
       final String video1080 = (item['video_1080p'] ?? '').toString();
       final bool isVid = _isFileVideo(item);
@@ -682,8 +720,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         item['video_url'] = full720.isNotEmpty
             ? full720
             : full1080.isNotEmpty
-                ? full1080
-                : fullRawUrl;
+            ? full1080
+            : fullRawUrl;
       } else {
         if (full720.isNotEmpty) item['video_720p'] = full720;
         if (full1080.isNotEmpty) item['video_1080p'] = full1080;
@@ -700,92 +738,124 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   /// endpoint may return (e.g. `file_url`, `url720p`).
   List<dynamic> _normalizeAvailableFiles(List<dynamic> rawList) {
     return rawList.map((file) {
-      if (file == null) return file;
-      final Map<String, dynamic> item = Map<String, dynamic>.from(file);
+        if (file == null) return file;
+        final Map<String, dynamic> item = Map<String, dynamic>.from(file);
 
-      // Raw file path — the server can return this in several field names.
-      final String rawName = [
-        item['file_name'],
-        item['user_filename'],
-        item['name'],
-        item['file_url'],
-        item['url'],
-      ].firstWhere((v) => v != null && v.toString().isNotEmpty, orElse: () => '')?.toString() ?? '';
+        // Raw file path — the server can return this in several field names.
+        final String rawName =
+            [
+                  item['file_name'],
+                  item['user_filename'],
+                  item['name'],
+                  item['file_url'],
+                  item['url'],
+                ]
+                .firstWhere(
+                  (v) => v != null && v.toString().isNotEmpty,
+                  orElse: () => '',
+                )
+                ?.toString() ??
+            '';
 
-      if ((item['user_filename'] == null || item['user_filename'].toString().isEmpty) &&
-          item['name'] != null && item['name'].toString().isNotEmpty) {
-        item['user_filename'] = item['name'];
-      }
-      if ((item['file_name'] == null || item['file_name'].toString().isEmpty) &&
-          item['name'] != null && item['name'].toString().isNotEmpty) {
-        item['file_name'] = item['name'];
-      }
+        if ((item['user_filename'] == null ||
+                item['user_filename'].toString().isEmpty) &&
+            item['name'] != null &&
+            item['name'].toString().isNotEmpty) {
+          item['user_filename'] = item['name'];
+        }
+        if ((item['file_name'] == null ||
+                item['file_name'].toString().isEmpty) &&
+            item['name'] != null &&
+            item['name'].toString().isNotEmpty) {
+          item['file_name'] = item['name'];
+        }
 
-      // 720p / 1080p video rendition fields
-      final String raw720 = [
-        item['url720p'],
-        item['video_720p'],
-        item['url_720p'],
-      ].firstWhere((v) => v != null && v.toString().isNotEmpty, orElse: () => '')?.toString() ?? '';
+        // 720p / 1080p video rendition fields
+        final String raw720 =
+            [item['url720p'], item['video_720p'], item['url_720p']]
+                .firstWhere(
+                  (v) => v != null && v.toString().isNotEmpty,
+                  orElse: () => '',
+                )
+                ?.toString() ??
+            '';
 
-      final String raw1080 = [
-        item['url1080p'],
-        item['video_1080p'],
-        item['url_1080p'],
-      ].firstWhere((v) => v != null && v.toString().isNotEmpty, orElse: () => '')?.toString() ?? '';
+        final String raw1080 =
+            [item['url1080p'], item['video_1080p'], item['url_1080p']]
+                .firstWhere(
+                  (v) => v != null && v.toString().isNotEmpty,
+                  orElse: () => '',
+                )
+                ?.toString() ??
+            '';
 
-      final bool isVid = _isFileVideo(item);
+        final bool isVid = _isFileVideo(item);
 
-      final String fullUrl    = _normalizeAbsoluteUrl(rawName);
-      final String full720    = _normalizeAbsoluteUrl(raw720);
-      final String full1080   = _normalizeAbsoluteUrl(raw1080);
+        final String fullUrl = _normalizeAbsoluteUrl(rawName);
+        final String full720 = _normalizeAbsoluteUrl(raw720);
+        final String full1080 = _normalizeAbsoluteUrl(raw1080);
 
-      // Always expose a canonical file_url and url so _buildFilePreview works.
-      item['file_url'] = fullUrl;
-      item['url']      = fullUrl;
+        // Always expose a canonical file_url and url so _buildFilePreview works.
+        item['file_url'] = fullUrl;
+        item['url'] = fullUrl;
 
-      if (isVid) {
-        // For videos: populate all rendition fields and derive video_url.
-        // When the converted file is not yet ready (empty), fall back to the
-        // original upload URL so the preview still plays.
-        item['url720p']     = full720.isNotEmpty  ? full720  : fullUrl;
-        item['video_720p']  = full720.isNotEmpty  ? full720  : fullUrl;
-        item['url1080p']    = full1080.isNotEmpty ? full1080 : fullUrl;
-        item['video_1080p'] = full1080.isNotEmpty ? full1080 : fullUrl;
-        item['video_url']   = full720.isNotEmpty
-            ? full720
-            : full1080.isNotEmpty
-                ? full1080
-                : fullUrl;
-      }
+        if (isVid) {
+          // For videos: populate all rendition fields and derive video_url.
+          // When the converted file is not yet ready (empty), fall back to the
+          // original upload URL so the preview still plays.
+          item['url720p'] = full720.isNotEmpty ? full720 : fullUrl;
+          item['video_720p'] = full720.isNotEmpty ? full720 : fullUrl;
+          item['url1080p'] = full1080.isNotEmpty ? full1080 : fullUrl;
+          item['video_1080p'] = full1080.isNotEmpty ? full1080 : fullUrl;
+          item['video_url'] = full720.isNotEmpty
+              ? full720
+              : full1080.isNotEmpty
+              ? full1080
+              : fullUrl;
+        }
 
-      return item;
-    }).toList()
+        return item;
+      }).toList()
       // Sort newest uploads first (descending id) — guaranteed in both the
       // full-fetch and background silent-refresh paths.
       ..sort((a, b) {
-        final idA = int.tryParse(
-                a['id']?.toString() ?? a['file_id']?.toString() ?? '') ??
+        final idA =
+            int.tryParse(
+              a['id']?.toString() ?? a['file_id']?.toString() ?? '',
+            ) ??
             0;
-        final idB = int.tryParse(
-                b['id']?.toString() ?? b['file_id']?.toString() ?? '') ??
+        final idB =
+            int.tryParse(
+              b['id']?.toString() ?? b['file_id']?.toString() ?? '',
+            ) ??
             0;
         return idB.compareTo(idA);
       });
   }
 
   /// Helper to merge fresh server data with any optimistic items that have not yet been reflected in the server response.
-  List<dynamic> _mergeWithOptimisticAssignedFiles(List<dynamic> serverNormalized) {
+  List<dynamic> _mergeWithOptimisticAssignedFiles(
+    List<dynamic> serverNormalized,
+  ) {
     final List<dynamic> merged = serverNormalized.where((n) {
-      final nId = int.tryParse((n['file_id'] ?? n['id'])?.toString() ?? '') ?? 0;
+      final nId =
+          int.tryParse((n['file_id'] ?? n['id'])?.toString() ?? '') ?? 0;
       return nId <= 0 || !_removingFileIds.contains(nId);
     }).toList();
 
     for (var existing in assignedFiles) {
-      final exId = int.tryParse((existing['file_id'] ?? existing['id'])?.toString() ?? '') ?? 0;
-      if (exId > 0 && !_removingFileIds.contains(exId) && (_addingFileIds.contains(exId) || existing['_isOptimistic'] == true)) {
+      final exId =
+          int.tryParse(
+            (existing['file_id'] ?? existing['id'])?.toString() ?? '',
+          ) ??
+          0;
+      if (exId > 0 &&
+          !_removingFileIds.contains(exId) &&
+          (_addingFileIds.contains(exId) ||
+              existing['_isOptimistic'] == true)) {
         final inNormalized = merged.any((n) {
-          final nId = int.tryParse((n['file_id'] ?? n['id'])?.toString() ?? '') ?? 0;
+          final nId =
+              int.tryParse((n['file_id'] ?? n['id'])?.toString() ?? '') ?? 0;
           return nId == exId;
         });
         if (!inNormalized) {
@@ -796,7 +866,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     return merged;
   }
 
-  Future<void> _fetchAssignedFiles({bool forceImmediate = false, bool showLoading = false}) async {
+  Future<void> _fetchAssignedFiles({
+    bool forceImmediate = false,
+    bool showLoading = false,
+  }) async {
     if (selectedTemplateId == null) return;
     if (!mounted) return;
     if (showLoading && assignedFiles.isEmpty) {
@@ -811,18 +884,34 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }),
         headers: {'Content-Type': 'application/json'},
       );
-      debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
+      debugPrint(
+        '[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}',
+      );
       if (response.statusCode == 200) {
         final data = await _parseJsonAsync(response.body);
-        debugPrint('[AssignedFiles] response: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
+        debugPrint(
+          '[AssignedFiles] response: ${response.body.substring(0, response.body.length.clamp(0, 400))}',
+        );
         if (mounted) {
-          final List<dynamic> normalized = _normalizeAssignedFiles(data['data'] ?? []);
-          final List<dynamic> merged = _mergeWithOptimisticAssignedFiles(normalized);
+          final List<dynamic> normalized = _normalizeAssignedFiles(
+            data['data'] ?? [],
+          );
+          final List<dynamic> merged = _mergeWithOptimisticAssignedFiles(
+            normalized,
+          );
 
-          final bool isPlayerActive = _tvSlideTimer != null && _tvSlideTimer!.isActive && assignedFiles.isNotEmpty;
-          if (!forceImmediate && isPlayerActive && _tvSlideIndex > 0 && _tvSlideIndex < assignedFiles.length) {
+          final bool isPlayerActive =
+              _tvSlideTimer != null &&
+              _tvSlideTimer!.isActive &&
+              assignedFiles.isNotEmpty;
+          if (!forceImmediate &&
+              isPlayerActive &&
+              _tvSlideIndex > 0 &&
+              _tvSlideIndex < assignedFiles.length) {
             _pendingAssignedFiles = merged;
-            debugPrint('[AssignedFiles] Stored updated playlist in pending buffer for next cycle.');
+            debugPrint(
+              '[AssignedFiles] Stored updated playlist in pending buffer for next cycle.',
+            );
           } else {
             setState(() {
               assignedFiles = merged;
@@ -837,7 +926,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           }
         }
       } else {
-        debugPrint('[AssignedFiles] HTTP ${response.statusCode}: ${response.body}');
+        debugPrint(
+          '[AssignedFiles] HTTP ${response.statusCode}: ${response.body}',
+        );
       }
     } catch (e) {
       debugPrint("_fetchAssignedFiles error: $e");
@@ -853,7 +944,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   Future<void> _silentRefreshAssignedFiles() async {
     if (selectedTemplateId == null || !mounted) return;
     final endpoint = '$_baseUrl/selectTemplate_filesview';
-    print('[POLL] → GET assigned files: $endpoint  template=$selectedTemplateId');
+    print(
+      '[POLL] → GET assigned files: $endpoint  template=$selectedTemplateId',
+    );
     try {
       final response = await http.post(
         Uri.parse(endpoint),
@@ -863,7 +956,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }),
         headers: {'Content-Type': 'application/json'},
       );
-      print('[POLL] ← HTTP ${response.statusCode} — body length: ${response.body.length}');
+      print(
+        '[POLL] ← HTTP ${response.statusCode} — body length: ${response.body.length}',
+      );
       if (response.statusCode == 200 && mounted) {
         final data = await _parseJsonAsync(response.body);
         final List<dynamic> fresh = _normalizeAssignedFiles(data['data'] ?? []);
@@ -880,18 +975,29 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         print('[POLL]   merged IDs: $mergedIds');
         if (currentIds != mergedIds) {
           print('[POLL] ⚡ Change detected! Updating UI...');
-          final bool isPlayerActive = _tvSlideTimer != null && _tvSlideTimer!.isActive && assignedFiles.isNotEmpty;
-          if (isPlayerActive && _tvSlideIndex > 0 && _tvSlideIndex < assignedFiles.length) {
+          final bool isPlayerActive =
+              _tvSlideTimer != null &&
+              _tvSlideTimer!.isActive &&
+              assignedFiles.isNotEmpty;
+          if (isPlayerActive &&
+              _tvSlideIndex > 0 &&
+              _tvSlideIndex < assignedFiles.length) {
             _pendingAssignedFiles = merged;
-            print('[POLL] Stored fresh playlist in pending buffer for next loop cycle.');
-            debugPrint('[Poll] Stored fresh playlist in pending buffer for next loop cycle.');
+            print(
+              '[POLL] Stored fresh playlist in pending buffer for next loop cycle.',
+            );
+            debugPrint(
+              '[Poll] Stored fresh playlist in pending buffer for next loop cycle.',
+            );
           } else {
             if (mounted) {
               setState(() {
                 assignedFiles = merged;
                 _pendingAssignedFiles = null;
               });
-              print('[POLL] ✔ setState() called — UI re-rendered with ${merged.length} items.');
+              print(
+                '[POLL] ✔ setState() called — UI re-rendered with ${merged.length} items.',
+              );
             }
           }
         } else {
@@ -926,7 +1032,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     if (assignedFiles.isEmpty) return;
 
     if (_tvSlideIndex >= assignedFiles.length) {
-      debugPrint('[TV_PLAYER] Cycle complete. Applying pending playlist or re-fetching from backend...');
+      debugPrint(
+        '[TV_PLAYER] Cycle complete. Applying pending playlist or re-fetching from backend...',
+      );
       if (_pendingAssignedFiles != null && _pendingAssignedFiles!.isNotEmpty) {
         if (mounted) {
           setState(() {
@@ -934,7 +1042,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             _pendingAssignedFiles = null;
           });
         }
-        debugPrint('[TV_PLAYER] Smoothly applied pending play order list for new loop cycle.');
+        debugPrint(
+          '[TV_PLAYER] Smoothly applied pending play order list for new loop cycle.',
+        );
       } else {
         await _fetchAssignedFiles();
       }
@@ -943,14 +1053,20 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
 
     final currentItem = assignedFiles[_tvSlideIndex % assignedFiles.length];
-    final String itemId = (currentItem['file_id'] ?? currentItem['id'] ?? '').toString();
-    final String userFilename = (currentItem['user_filename'] ?? currentItem['file_name'] ?? '').toString();
+    final String itemId = (currentItem['file_id'] ?? currentItem['id'] ?? '')
+        .toString();
+    final String userFilename =
+        (currentItem['user_filename'] ?? currentItem['file_name'] ?? '')
+            .toString();
     final bool isVideo = _isFileVideo(currentItem);
 
     if (mounted) setState(() {});
 
     int durationSecs = 10;
-    final rawDur = currentItem['file_duration'] ?? currentItem['video_duration'] ?? currentItem['duration'];
+    final rawDur =
+        currentItem['file_duration'] ??
+        currentItem['video_duration'] ??
+        currentItem['duration'];
     if (rawDur != null && rawDur.toString() != 'null') {
       double d = double.tryParse(rawDur.toString()) ?? 10.0;
       durationSecs = d.ceil();
@@ -1032,7 +1148,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     int durationSecs =
         _rawFileDurations[fileId] ?? _parseFormattedDuration(formattedDuration);
     if (fileRecord != null) {
-      final rawDur = fileRecord['file_duration'] ??
+      final rawDur =
+          fileRecord['file_duration'] ??
           fileRecord['video_duration'] ??
           fileRecord['duration'];
       if (rawDur != null && rawDur.toString() != 'null') {
@@ -1070,7 +1187,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         headers: {'Content-Type': 'application/json'},
       );
 
-      debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
+      debugPrint(
+        '[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}',
+      );
 
       if (response.statusCode == 200) {
         // ── Show green confirmation banner immediately on HTTP 200 ───────────
@@ -1080,7 +1199,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(Icons.check_circle_outline, color: Colors.white, size: 22),
+                  const Icon(
+                    Icons.check_circle_outline,
+                    color: Colors.white,
+                    size: 22,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -1120,7 +1243,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               tempMap['file_name'] = fileName;
               tempMap['duration'] = durationSecs;
               tempMap['file_duration'] = durationSecs;
-              if (tempMap['file_type'] == null || tempMap['file_type'].toString().isEmpty) {
+              if (tempMap['file_type'] == null ||
+                  tempMap['file_type'].toString().isEmpty) {
                 tempMap['file_type'] = isVideo ? 'Video' : 'Image';
               }
               newItem = _normalizeAssignedFiles([tempMap]).first;
@@ -1136,7 +1260,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               };
             }
           } catch (normalizeErr) {
-            debugPrint('[addFileToTemplate] normalization error (non-fatal): $normalizeErr');
+            debugPrint(
+              '[addFileToTemplate] normalization error (non-fatal): $normalizeErr',
+            );
             newItem = {
               'id': fileId,
               'file_id': fileId,
@@ -1152,7 +1278,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           if (mounted) {
             setState(() {
               final exists = assignedFiles.any((f) {
-                final id = int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0;
+                final id =
+                    int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ??
+                    0;
                 return id == fileId;
               });
               if (!exists && newItem != null) {
@@ -1165,7 +1293,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           await _fetchAssignedFiles(forceImmediate: true, showLoading: false);
 
           final fileIds = assignedFiles
-              .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
+              .map(
+                (f) =>
+                    int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ??
+                    0,
+              )
               .where((id) => id > 0)
               .toList();
 
@@ -1180,30 +1312,45 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               headers: {'Content-Type': 'application/json'},
             );
             // Fire signage sync unawaited — never blocks UI
-            _resolveDeviceIdWithFallback().then((rawId) {
-              if (rawId != null && rawId.isNotEmpty) {
-                final cleanId = rawId.replaceAll(RegExp(r'[^0-9]'), '').trim();
-                if (cleanId.isNotEmpty) unawaited(_triggerSignageSync(cleanId));
-              } else {
-                debugPrint('[addFileToTemplate] ⚠ No device_id resolved for template $selectedTemplateId — sync not dispatched.');
-              }
-            }).catchError((e) {
-              debugPrint('[addFileToTemplate] resolve error (non-fatal): $e');
-            });
+            _resolveDeviceIdWithFallback()
+                .then((rawId) {
+                  if (rawId != null && rawId.isNotEmpty) {
+                    final cleanId = rawId
+                        .replaceAll(RegExp(r'[^0-9]'), '')
+                        .trim();
+                    if (cleanId.isNotEmpty)
+                      unawaited(_triggerSignageSync(cleanId));
+                  } else {
+                    debugPrint(
+                      '[addFileToTemplate] ⚠ No device_id resolved for template $selectedTemplateId — sync not dispatched.',
+                    );
+                  }
+                })
+                .catchError((e) {
+                  debugPrint(
+                    '[addFileToTemplate] resolve error (non-fatal): $e',
+                  );
+                });
           }
         } catch (postSyncErr) {
-          debugPrint('[addFileToTemplate] Post-assignment background error (non-fatal): $postSyncErr');
+          debugPrint(
+            '[addFileToTemplate] Post-assignment background error (non-fatal): $postSyncErr',
+          );
         }
       } else {
         // HTTP non-200: log the failure, no banner
-        debugPrint('[ASSIGN FILE ERROR]: HTTP ${response.statusCode}: '
-            '${response.body.substring(0, response.body.length.clamp(0, 400))}');
+        debugPrint(
+          '[ASSIGN FILE ERROR]: HTTP ${response.statusCode}: '
+          '${response.body.substring(0, response.body.length.clamp(0, 400))}',
+        );
       }
     } catch (e) {
       // Outer catch: log only — never show a generic error banner.
       // A file may have been successfully added even if a subsequent step
       // (normalization, sync ping) threw; the green banner already fired.
-      debugPrint('[addFileToTemplate] caught error (non-fatal, no UI banner): $e');
+      debugPrint(
+        '[addFileToTemplate] caught error (non-fatal, no UI banner): $e',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -1215,7 +1362,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
   }
 
-  Future<void> deleteFileFromTemplate(int fileId, String fileName, {dynamic fileRecord}) async {
+  Future<void> deleteFileFromTemplate(
+    int fileId,
+    String fileName, {
+    dynamic fileRecord,
+  }) async {
     if (fileId <= 0) return;
 
     if (mounted) {
@@ -1238,7 +1389,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }),
         headers: {'Content-Type': 'application/json'},
       );
-      debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}');
+      debugPrint(
+        '[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}, Body: ${response.body.substring(0, response.body.length.clamp(0, 400))}',
+      );
 
       if (response.statusCode == 200) {
         // ── Show removal confirmation banner immediately on HTTP 200 ─────────
@@ -1248,7 +1401,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(Icons.delete_outline, color: Colors.white, size: 22),
+                  const Icon(
+                    Icons.delete_outline,
+                    color: Colors.white,
+                    size: 22,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -1278,7 +1435,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           setState(() {
             assignedFiles.removeWhere((f) {
               if (fileRecord != null && f == fileRecord) return true;
-              final id = int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0;
+              final id =
+                  int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ??
+                  0;
               return id > 0 && id == fileId;
             });
             if (_tvSlideIndex >= assignedFiles.length) {
@@ -1290,7 +1449,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         // ── Post-removal background tasks — all exceptions logged silently ──
         try {
           final remainingFileIds = assignedFiles
-              .map((f) => int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ?? 0)
+              .map(
+                (f) =>
+                    int.tryParse((f['file_id'] ?? f['id'])?.toString() ?? '') ??
+                    0,
+              )
               .where((id) => id > 0 && id != fileId)
               .toList();
 
@@ -1305,32 +1468,47 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               headers: {'Content-Type': 'application/json'},
             );
             // Fire signage sync unawaited — never blocks UI
-            _resolveDeviceIdWithFallback().then((rawId) {
-              if (rawId != null && rawId.isNotEmpty) {
-                final cleanId = rawId.replaceAll(RegExp(r'[^0-9]'), '').trim();
-                if (cleanId.isNotEmpty) unawaited(_triggerSignageSync(cleanId));
-              } else {
-                debugPrint('[deleteFileFromTemplate] ⚠ No device_id resolved for template $selectedTemplateId — sync not dispatched.');
-              }
-            }).catchError((e) {
-              debugPrint('[deleteFileFromTemplate] resolve error (non-fatal): $e');
-            });
+            _resolveDeviceIdWithFallback()
+                .then((rawId) {
+                  if (rawId != null && rawId.isNotEmpty) {
+                    final cleanId = rawId
+                        .replaceAll(RegExp(r'[^0-9]'), '')
+                        .trim();
+                    if (cleanId.isNotEmpty)
+                      unawaited(_triggerSignageSync(cleanId));
+                  } else {
+                    debugPrint(
+                      '[deleteFileFromTemplate] ⚠ No device_id resolved for template $selectedTemplateId — sync not dispatched.',
+                    );
+                  }
+                })
+                .catchError((e) {
+                  debugPrint(
+                    '[deleteFileFromTemplate] resolve error (non-fatal): $e',
+                  );
+                });
           }
 
           await _fetchAssignedFiles(forceImmediate: true, showLoading: false);
         } catch (postSyncErr) {
-          debugPrint('[deleteFileFromTemplate] Post-removal background error (non-fatal): $postSyncErr');
+          debugPrint(
+            '[deleteFileFromTemplate] Post-removal background error (non-fatal): $postSyncErr',
+          );
         }
       } else {
         // HTTP non-200: log the failure, no banner
-        debugPrint('[REMOVE FILE ERROR]: HTTP ${response.statusCode}: '
-            '${response.body.substring(0, response.body.length.clamp(0, 400))}');
+        debugPrint(
+          '[REMOVE FILE ERROR]: HTTP ${response.statusCode}: '
+          '${response.body.substring(0, response.body.length.clamp(0, 400))}',
+        );
       }
     } catch (e) {
       // Outer catch: log only — never show a generic error banner.
       // A file may have been successfully removed even if a subsequent step
       // (sync ping, list re-fetch) threw; the removal banner already fired.
-      debugPrint('[deleteFileFromTemplate] caught error (non-fatal, no UI banner): $e');
+      debugPrint(
+        '[deleteFileFromTemplate] caught error (non-fatal, no UI banner): $e',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -1339,8 +1517,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       }
     }
   }
-
-
 
   /// Sends the reordered [file_ids] to the backend in the exact dragged
   /// sequence, then — only on a confirmed HTTP 200 — triggers the digital
@@ -1386,7 +1562,15 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
     try {
       final List<int> orderedFileIds = filesToProcess
-          .map((item) => int.tryParse((item['file_id'] ?? item['id'] ?? item['file_master_id'])?.toString() ?? '') ?? 0)
+          .map(
+            (item) =>
+                int.tryParse(
+                  (item['file_id'] ?? item['id'] ?? item['file_master_id'])
+                          ?.toString() ??
+                      '',
+                ) ??
+                0,
+          )
           .where((id) => id > 0)
           .toList();
 
@@ -1415,7 +1599,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           )
           .timeout(const Duration(seconds: 15));
 
-      debugPrint('[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}');
+      debugPrint(
+        '[API_CALL] ${response.request?.url} -> Status: ${response.statusCode}',
+      );
 
       if (response.statusCode == 200) {
         // ── ALWAYS dispatch signage sync on HTTP 200 — NEVER skip. ──────────
@@ -1423,26 +1609,37 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         // → default mapping API → device name match → last session device).
         // Sanitize to numeric digits only, then fire unawaited so the admin
         // screen is never blocked by the outgoing sync ping.
-        _resolveDeviceIdWithFallback().then((rawDeviceId) {
-          if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
-            final String cleanDeviceId =
-                rawDeviceId.replaceAll(RegExp(r'[^0-9]'), '').trim();
-            if (cleanDeviceId.isNotEmpty) {
-              debugPrint('[PLAY_ORDER] ▶ Dispatching background signage sync '
-                  'for device: $cleanDeviceId '
-                  '(raw: $rawDeviceId, template: $selectedTemplateId)');
-              unawaited(_triggerSignageSync(cleanDeviceId));
-            } else {
-              debugPrint('[PLAY_ORDER] ⚠ Resolved rawDeviceId="$rawDeviceId" '
-                  'contains no numeric digits — sync skipped.');
-            }
-          } else {
-            debugPrint('[PLAY_ORDER] ❌ All device_id resolution strategies '
-                'exhausted for template $selectedTemplateId — sync could not fire.');
-          }
-        }).catchError((e) {
-          debugPrint('[PLAY_ORDER] ❌ _resolveDeviceIdWithFallback error: $e');
-        });
+        _resolveDeviceIdWithFallback()
+            .then((rawDeviceId) {
+              if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
+                final String cleanDeviceId = rawDeviceId
+                    .replaceAll(RegExp(r'[^0-9]'), '')
+                    .trim();
+                if (cleanDeviceId.isNotEmpty) {
+                  debugPrint(
+                    '[PLAY_ORDER] ▶ Dispatching background signage sync '
+                    'for device: $cleanDeviceId '
+                    '(raw: $rawDeviceId, template: $selectedTemplateId)',
+                  );
+                  unawaited(_triggerSignageSync(cleanDeviceId));
+                } else {
+                  debugPrint(
+                    '[PLAY_ORDER] ⚠ Resolved rawDeviceId="$rawDeviceId" '
+                    'contains no numeric digits — sync skipped.',
+                  );
+                }
+              } else {
+                debugPrint(
+                  '[PLAY_ORDER] ❌ All device_id resolution strategies '
+                  'exhausted for template $selectedTemplateId — sync could not fire.',
+                );
+              }
+            })
+            .catchError((e) {
+              debugPrint(
+                '[PLAY_ORDER] ❌ _resolveDeviceIdWithFallback error: $e',
+              );
+            });
 
         // Show success SnackBar using the pre-cached messenger
         messenger.hideCurrentSnackBar();
@@ -1541,7 +1738,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       }
     }
   }
-
 
   // ──────────────────────────────────────────────────────────────────────────
   // UI BUILDERS
@@ -1658,10 +1854,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                 ),
                 const Text(
                   "Images",
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: 20),
                 Radio<String>(
@@ -1677,10 +1870,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                 ),
                 const Text(
                   "Videos",
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -1689,7 +1879,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       ),
     );
 
-    final rightCard = selectedTemplateId != null
+    final rightCard = (selectedTemplateId != null && selectedCategoryId != null)
         ? Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -1705,7 +1895,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -1728,42 +1918,41 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.sort, size: 18),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Colors.green.shade600,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 14,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                8,
+                Expanded(
+                  flex: isMobile ? 0 : 1,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.sort, size: 18),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                          ),
-                          onPressed: () =>
-                              _showPlayOrderDialog(context),
-                          label: const Text(
-                            "Change Play Order",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
+                            onPressed: () => _showPlayOrderDialog(context),
+                            label: const Text(
+                              "Change Play Order",
+                              style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      _buildAssignedDataTable(),
-                    ],
+                        const SizedBox(height: 24),
+                        isMobile
+                            ? _buildAssignedDataTable()
+                            : Expanded(child: _buildAssignedDataTable()),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -1785,7 +1974,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   const SizedBox(height: 20),
                   _buildAvailableFilesTable(),
                 ],
-                if (selectedTemplateId != null) ...[
+                if (selectedTemplateId != null &&
+                    selectedCategoryId != null) ...[
                   const SizedBox(height: 20),
                   rightCard,
                 ],
@@ -1823,10 +2013,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               // RIGHT PANEL: Content Area (Current Selection List)
               Expanded(
                 flex: 6,
-                child: selectedTemplateId != null
-                    ? SingleChildScrollView(
-                        child: rightCard,
-                      )
+                child:
+                    (selectedTemplateId != null && selectedCategoryId != null)
+                    ? rightCard
                     : Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -1838,7 +2027,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              "Select a Template to view & manage its play list",
+                              "Select a Template and Department to view & manage its play list",
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey.shade500,
@@ -1962,9 +2151,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     final int totalPages = (totalCount / perPage).ceil().clamp(1, 999999);
     if (availableCurrentPage > totalPages) availableCurrentPage = totalPages;
     if (availableCurrentPage < 1) availableCurrentPage = 1;
-    final int startIndex = ((availableCurrentPage - 1) * perPage).clamp(0, totalCount);
+    final int startIndex = ((availableCurrentPage - 1) * perPage).clamp(
+      0,
+      totalCount,
+    );
     final int endIndex = (startIndex + perPage).clamp(0, totalCount);
-    final List<dynamic> paginatedFiles = (startIndex < totalCount && startIndex >= 0)
+    final List<dynamic> paginatedFiles =
+        (startIndex < totalCount && startIndex >= 0)
         ? filteredFiles.sublist(startIndex, endIndex)
         : [];
 
@@ -1981,29 +2174,37 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         children: [
           Expanded(flex: 2, child: Text("File", style: _headerStyle())),
           const SizedBox(width: 8),
-          Expanded(flex: 4, child: Text("File Name", style: _headerStyle())),
-          const SizedBox(width: 8),
+          Expanded(flex: 3, child: Text("File Name", style: _headerStyle())),
+          const Spacer(flex: 1),
           Expanded(
             flex: 2,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                "File Type",
-                textAlign: TextAlign.center,
-                style: _headerStyle(),
-                maxLines: 1,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8.0),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "File Type",
+                  textAlign: TextAlign.left,
+                  style: _headerStyle(),
+                  maxLines: 1,
+                ),
               ),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 2,
-            child: Text(
-              "Action",
-              textAlign: TextAlign.center,
-              style: _headerStyle(),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8.0),
+              child: Text(
+                "Action",
+                textAlign: TextAlign.left,
+                style: _headerStyle(),
+              ),
             ),
           ),
+          const Spacer(flex: 2),
         ],
       ),
     );
@@ -2032,8 +2233,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     } else {
       // ── Lazy ListView.builder — renders only visible rows instantly ─────────
       body = ListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
+        shrinkWrap: !isDesktop,
+        physics: !isDesktop
+            ? const NeverScrollableScrollPhysics()
+            : const AlwaysScrollableScrollPhysics(),
         itemCount: paginatedFiles.length,
         itemBuilder: (context, i) {
           if (i < 0 || i >= paginatedFiles.length) {
@@ -2043,19 +2246,20 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           if (file == null) return const SizedBox.shrink();
           // Resolve ID from either 'id' or 'file_id' — both field names
           // are used depending on which endpoint returned this file.
-          final fileId = int.tryParse(
+          final fileId =
+              int.tryParse(
                 (file['id'] ?? file['file_id'])?.toString() ?? '0',
-              ) ?? 0;
+              ) ??
+              0;
           final bool isVideo = _isFileVideo(file);
 
           // Lazily initialise the duration controller for this row
           if (!_availableFileControllers.containsKey(fileId)) {
             final rawDurationVal = file['file_duration'] ?? file['duration'];
             final rawDurationStr =
-                (rawDurationVal != null &&
-                    rawDurationVal.toString() != 'null')
-                    ? rawDurationVal.toString()
-                    : '30';
+                (rawDurationVal != null && rawDurationVal.toString() != 'null')
+                ? rawDurationVal.toString()
+                : '30';
             final rawSecs = double.tryParse(rawDurationStr)?.toInt() ?? 30;
             _rawFileDurations[fileId] = rawSecs;
             _availableFileControllers[fileId] = TextEditingController(
@@ -2082,7 +2286,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Container(
-                          width: isMobile ? (isVideo ? 85 : 65) : (isVideo ? 120 : 75),
+                          width: isMobile
+                              ? (isVideo ? 85 : 65)
+                              : (isVideo ? 120 : 75),
                           height: isMobile ? 65 : 75,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(6),
@@ -2096,7 +2302,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                     const SizedBox(width: 8),
                     // ── File name ─────────────────────────────────────────
                     Expanded(
-                      flex: 4,
+                      flex: 3,
                       child: Text(
                         file['user_filename'] ?? file['file_name'] ?? '',
                         style: const TextStyle(
@@ -2107,12 +2313,12 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const Spacer(flex: 1),
                     // ── File Type Badge ──────────────────────────────────
                     Expanded(
                       flex: 2,
                       child: Align(
-                        alignment: Alignment.center,
+                        alignment: Alignment.centerLeft,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -2123,7 +2329,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            file['file_type']?.toString() ?? (isVideo ? 'Video' : 'Image'),
+                            file['file_type']?.toString() ??
+                                (isVideo ? 'Video' : 'Image'),
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
@@ -2138,9 +2345,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                     // ── Add button ────────────────────────────────────────
                     Expanded(
                       flex: 2,
-                      child: Center(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
                         child: ElevatedButton(
-                          onPressed: (_addingFileIds.contains(fileId) || isAddingLoading || isLoading)
+                          onPressed:
+                              (_addingFileIds.contains(fileId) ||
+                                  isAddingLoading ||
+                                  isLoading)
                               ? null
                               : () async {
                                   if (mounted) {
@@ -2180,7 +2391,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          child: (_addingFileIds.contains(fileId) || isAddingLoading || isLoading)
+                          child:
+                              (_addingFileIds.contains(fileId) ||
+                                  isAddingLoading ||
+                                  isLoading)
                               ? const SizedBox(
                                   width: 14,
                                   height: 14,
@@ -2199,6 +2413,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                         ),
                       ),
                     ),
+                    const Spacer(flex: 2),
                   ],
                 ),
               ),
@@ -2267,10 +2482,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           clipBehavior: Clip.antiAlias,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              header,
-              body,
-            ],
+            children: [header, body],
           ),
         ),
         footer,
@@ -2280,16 +2492,41 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
   bool _hasImageExtension(dynamic file) {
     if (file == null) return false;
-    final String fn = (file['file_name'] ?? file['user_filename'] ?? file['name'] ?? file['file_url'] ?? file['url'] ?? '').toString().toLowerCase();
+    final String fn =
+        (file['file_name'] ??
+                file['user_filename'] ??
+                file['name'] ??
+                file['file_url'] ??
+                file['url'] ??
+                '')
+            .toString()
+            .toLowerCase();
     final String ft = (file['file_type'] ?? '').toString().toLowerCase();
     final String mime = (file['mime_type'] ?? '').toString().toLowerCase();
 
-    if (ft == 'jpg' || ft == 'jpeg' || ft == 'png' || ft == 'gif' || ft == 'webp' || ft == 'bmp' || ft == 'svg' || ft == 'image') {
+    if (ft == 'jpg' ||
+        ft == 'jpeg' ||
+        ft == 'png' ||
+        ft == 'gif' ||
+        ft == 'webp' ||
+        ft == 'bmp' ||
+        ft == 'svg' ||
+        ft == 'image') {
       return true;
     }
     if (mime.startsWith('image/')) return true;
 
-    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.jfif', '.heic'];
+    const imageExts = [
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.gif',
+      '.webp',
+      '.bmp',
+      '.svg',
+      '.jfif',
+      '.heic',
+    ];
     for (final ext in imageExts) {
       if (fn.endsWith(ext) || fn.contains('$ext?') || fn.contains('$ext#')) {
         return true;
@@ -2300,16 +2537,45 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
   bool _hasVideoExtension(dynamic file) {
     if (file == null) return false;
-    final String fn = (file['file_name'] ?? file['user_filename'] ?? file['name'] ?? file['file_url'] ?? file['url'] ?? '').toString().toLowerCase();
+    final String fn =
+        (file['file_name'] ??
+                file['user_filename'] ??
+                file['name'] ??
+                file['file_url'] ??
+                file['url'] ??
+                '')
+            .toString()
+            .toLowerCase();
     final String ft = (file['file_type'] ?? '').toString().toLowerCase();
     final String mime = (file['mime_type'] ?? '').toString().toLowerCase();
 
-    if (ft == 'mp4' || ft == 'mov' || ft == 'avi' || ft == 'mkv' || ft == 'webm' || ft == 'm4v' || ft == '3gp' || ft == 'flv' || ft == 'wmv' || ft == 'ts' || ft == 'video') {
+    if (ft == 'mp4' ||
+        ft == 'mov' ||
+        ft == 'avi' ||
+        ft == 'mkv' ||
+        ft == 'webm' ||
+        ft == 'm4v' ||
+        ft == '3gp' ||
+        ft == 'flv' ||
+        ft == 'wmv' ||
+        ft == 'ts' ||
+        ft == 'video') {
       return true;
     }
     if (mime.startsWith('video/')) return true;
 
-    const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.3gp', '.flv', '.wmv', '.ts'];
+    const videoExts = [
+      '.mp4',
+      '.mov',
+      '.avi',
+      '.mkv',
+      '.webm',
+      '.m4v',
+      '.3gp',
+      '.flv',
+      '.wmv',
+      '.ts',
+    ];
     for (final ext in videoExts) {
       if (fn.endsWith(ext) || fn.contains('$ext?') || fn.contains('$ext#')) {
         return true;
@@ -2327,14 +2593,26 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     final String fFormat = (file['file_format'] ?? '').toString().toLowerCase();
     final String mimeType = (file['mime_type'] ?? '').toString().toLowerCase();
 
-    if (fType.contains('video') || fType.contains('vinci') || fType.contains('live') ||
-        fFormat.contains('video') || mimeType.contains('video')) {
+    if (fType.contains('video') ||
+        fType.contains('vinci') ||
+        fType.contains('live') ||
+        fFormat.contains('video') ||
+        mimeType.contains('video')) {
       return true;
     }
 
-    final String v720 = (file['video_720p'] ?? '').toString().trim().toLowerCase();
-    final String v1080 = (file['video_1080p'] ?? '').toString().trim().toLowerCase();
-    final String vUrl = (file['video_url'] ?? '').toString().trim().toLowerCase();
+    final String v720 = (file['video_720p'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    final String v1080 = (file['video_1080p'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    final String vUrl = (file['video_url'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
     if (v720.isNotEmpty || v1080.isNotEmpty || vUrl.isNotEmpty) return true;
 
     return false;
@@ -2346,36 +2624,39 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     String raw = '';
     if (isVid) {
       // For videos: prefer pre-converted URLs, fall back to original file_name or file_url
-      raw = [
-        file['video_url'],
-        file['video_720p'],
-        file['url720p'],
-        file['video_1080p'],
-        file['url1080p'],
-        file['file_url'],
-        file['url'],
-        file['file_name'],
-      ].firstWhere(
-        (v) => v != null && v.toString().trim().isNotEmpty,
-        orElse: () => '',
-      ).toString();
+      raw =
+          [
+                file['video_url'],
+                file['video_720p'],
+                file['url720p'],
+                file['video_1080p'],
+                file['url1080p'],
+                file['file_url'],
+                file['url'],
+                file['file_name'],
+              ]
+              .firstWhere(
+                (v) => v != null && v.toString().trim().isNotEmpty,
+                orElse: () => '',
+              )
+              .toString();
     } else {
-      raw = [
-        file['file_url'],
-        file['url'],
-        file['file_name'],
-      ].firstWhere(
-        (v) => v != null && v.toString().trim().isNotEmpty,
-        orElse: () => '',
-      ).toString();
+      raw = [file['file_url'], file['url'], file['file_name']]
+          .firstWhere(
+            (v) => v != null && v.toString().trim().isNotEmpty,
+            orElse: () => '',
+          )
+          .toString();
     }
     return _normalizeAbsoluteUrl(raw);
   }
 
   Widget _buildFilePreview(dynamic file, {bool staticOnly = false}) {
     if (file == null) return _buildFallbackThumbnail();
-    String fileName = (file['file_name'] ?? file['user_filename'] ?? '').toString();
-    String userFileName = (file['user_filename'] ?? file['file_name'] ?? '').toString();
+    String fileName = (file['file_name'] ?? file['user_filename'] ?? '')
+        .toString();
+    String userFileName = (file['user_filename'] ?? file['file_name'] ?? '')
+        .toString();
     bool isVideo = _isFileVideo(file);
     final fileUrl = _getMediaUrl(file);
 
@@ -2424,9 +2705,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     if (isLoadingAssignedFiles) {
       return const Padding(
         padding: EdgeInsets.all(48.0),
-        child: Center(
-          child: CircularProgressIndicator(),
-        ),
+        child: Center(child: CircularProgressIndicator()),
       );
     }
     final bool isMobile = MediaQuery.of(context).size.width < 600;
@@ -2438,225 +2717,272 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             ? constraints.maxWidth
             : minTableWidth;
 
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: tableWidth,
-            child: Column(
-              children: [
-                _buildListHeader(),
-                const SizedBox(height: 8),
-                assignedFiles.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(48.0),
-                        child: Text(
-                          "No files selected",
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      )
-                    : ListView.separated(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: assignedFiles.length,
-                        separatorBuilder: (c, i) {
-                          if (i < 0 || i >= assignedFiles.length - 1) {
-                            return const SizedBox.shrink();
-                          }
-                          return const Divider(height: 1);
-                        },
-                        itemBuilder: (c, i) {
-                          if (i < 0 || i >= assignedFiles.length) {
-                            return const SizedBox.shrink();
-                          }
-                          final file = assignedFiles[i];
-                          if (file == null) return const SizedBox.shrink();
-                          final String fType = (file['file_type'] ?? '').toString().toLowerCase();
-                          final int fileId = int.tryParse(file['id']?.toString() ?? '') ?? 0;
-                          final availableFile = _displayedFiles.firstWhere(
-                            (f) => (int.tryParse(f['id']?.toString() ?? '') ?? 0) == fileId,
-                            orElse: () => null,
-                          );
-                          final String availFType = (availableFile?['file_type'] ?? '').toString().toLowerCase();
-                          final String availFStatus = (availableFile?['file_status'] ?? availableFile?['status'] ?? '0').toString();
-                          final bool isLive = (file['file_status']?.toString() ??
-                                  file['status']?.toString() ??
-                                  '0') ==
-                              '1' ||
-                              fType == 'vinci' ||
-                              fType == 'live' ||
-                              fType.contains('vinci') ||
-                              fType.contains('live') ||
-                              file['_isLive'] == true ||
-                              file['is_live'] == true ||
-                              availFStatus == '1' ||
-                              availFType == 'vinci' ||
-                              availFType == 'live' ||
-                              availFType.contains('vinci') ||
-                              availFType.contains('live') ||
-                              availableFile?['_isLive'] == true ||
-                              availableFile?['is_live'] == true;
-                          // ── Wider thumbnail for videos, square for images ──
-                          final bool isVidItem = _isFileVideo(file);
-                          // Fixed column width — MUST match the header SizedBox width
-                          // so File Name / File Type / Action always align correctly.
-                          final double thumbW = isMobile ? 120.0 : 160.0;
-                          final double thumbH = isVidItem
-                              ? (isMobile ? 75.0  : 100.0)
-                              : (isMobile ? 65.0  : 80.0);
+        final ScrollController _horizontalController = ScrollController();
+        return Scrollbar(
+          controller: _horizontalController,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _horizontalController,
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: tableWidth,
+              child: Column(
+                children: [
+                  _buildListHeader(),
+                  const SizedBox(height: 8),
+                  assignedFiles.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(48.0),
+                          child: Text(
+                            "No files selected",
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      : Flexible(
+                          flex: isMobile ? 0 : 1,
+                          fit: isMobile ? FlexFit.loose : FlexFit.tight,
+                          child: ListView.separated(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: isMobile,
+                            physics: isMobile
+                                ? const NeverScrollableScrollPhysics()
+                                : const AlwaysScrollableScrollPhysics(),
+                            itemCount: assignedFiles.length,
+                            separatorBuilder: (c, i) {
+                              if (i < 0 || i >= assignedFiles.length - 1) {
+                                return const SizedBox.shrink();
+                              }
+                              return const Divider(height: 1);
+                            },
+                            itemBuilder: (c, i) {
+                              if (i < 0 || i >= assignedFiles.length) {
+                                return const SizedBox.shrink();
+                              }
+                              final file = assignedFiles[i];
+                              if (file == null) return const SizedBox.shrink();
+                              final String fType = (file['file_type'] ?? '')
+                                  .toString()
+                                  .toLowerCase();
+                              final int fileId =
+                                  int.tryParse(file['id']?.toString() ?? '') ??
+                                  0;
+                              final availableFile = _displayedFiles.firstWhere(
+                                (f) =>
+                                    (int.tryParse(f['id']?.toString() ?? '') ??
+                                        0) ==
+                                    fileId,
+                                orElse: () => null,
+                              );
+                              final String availFType =
+                                  (availableFile?['file_type'] ?? '')
+                                      .toString()
+                                      .toLowerCase();
+                              final String availFStatus =
+                                  (availableFile?['file_status'] ??
+                                          availableFile?['status'] ??
+                                          '0')
+                                      .toString();
+                              final bool isLive =
+                                  (file['file_status']?.toString() ??
+                                          file['status']?.toString() ??
+                                          '0') ==
+                                      '1' ||
+                                  fType == 'vinci' ||
+                                  fType == 'live' ||
+                                  fType.contains('vinci') ||
+                                  fType.contains('live') ||
+                                  file['_isLive'] == true ||
+                                  file['is_live'] == true ||
+                                  availFStatus == '1' ||
+                                  availFType == 'vinci' ||
+                                  availFType == 'live' ||
+                                  availFType.contains('vinci') ||
+                                  availFType.contains('live') ||
+                                  availableFile?['_isLive'] == true ||
+                                  availableFile?['is_live'] == true;
+                              // ── Wider thumbnail for videos, square for images ──
+                              final bool isVidItem = _isFileVideo(file);
+                              // Fixed column width — MUST match the header SizedBox width
+                              // so File Name / File Type / Action always align correctly.
+                              final double thumbW = isMobile ? 120.0 : 160.0;
+                              final double thumbH = isVidItem
+                                  ? (isMobile ? 75.0 : 100.0)
+                                  : (isMobile ? 65.0 : 80.0);
 
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 10,
-                              horizontal: 16,
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // ── Preview column — FIXED WIDTH matching header ──
-                                SizedBox(
-                                  width: thumbW,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // LIVE badge: only for live-stream videos
-                                      if (isLive && _isFileVideo(file)) ...[
-                                        Container(
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                  horizontal: 16,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    // ── Preview column — FIXED WIDTH matching header ──
+                                    SizedBox(
+                                      width: thumbW,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // LIVE badge: only for live-stream videos
+                                          if (isLive && _isFileVideo(file)) ...[
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.green.shade600,
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: const Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.wifi_tethering,
+                                                    color: Colors.white,
+                                                    size: 10,
+                                                  ),
+                                                  SizedBox(width: 3),
+                                                  Text(
+                                                    'LIVE',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 9,
+                                                      fontWeight:
+                                                          FontWeight.w900,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                          ],
+                                          // Thumbnail — height varies, width fills the fixed column
+                                          SizedBox(
+                                            width: thumbW,
+                                            height: thumbH,
+                                            child: ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              child: _buildFilePreview(file),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // ── File name column — expanded & scrollable ──
+                                    Expanded(
+                                      flex: 3,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            "${file['user_filename'] ?? file['file_name'] ?? '-'}",
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Spacer(flex: 1),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Container(
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
+                                            horizontal: 8,
+                                            vertical: 4,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.green.shade600,
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: const Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.wifi_tethering,
-                                                color: Colors.white,
-                                                size: 10,
-                                              ),
-                                              SizedBox(width: 3),
-                                              Text(
-                                                'LIVE',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.w900,
-                                                  letterSpacing: 0.5,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                      ],
-                                      // Thumbnail — height varies, width fills the fixed column
-                                      SizedBox(
-                                        width: thumbW,
-                                        height: thumbH,
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(6),
-                                          child: _buildFilePreview(file),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                // ── File name column — expanded & scrollable ──
-                                Expanded(
-                                  flex: 5,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        "${file['user_filename'] ?? file['file_name'] ?? '-'}",
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  flex: 2,
-                                  child: Align(
-                                    alignment: Alignment.center,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue.shade50,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        file['file_type']?.toString() ?? '-',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.blue.shade700,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  flex: 2,
-                                  child: Center(
-                                    child: IconButton(
-                                      icon: _removingFileIds.contains(fileId)
-                                          ? const SizedBox(
-                                              width: 16,
-                                              height: 16,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: Colors.red,
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons.delete_outline,
-                                              color: Colors.red,
-                                              size: 20,
+                                            color: Colors.blue.shade50,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
                                             ),
-                                      onPressed: _removingFileIds.contains(fileId)
-                                          ? null
-                                          : () {
-                                              final int targetFileId = int.tryParse(
-                                                    (file['file_id'] ?? file['id'])?.toString() ?? '',
-                                                  ) ??
-                                                  0;
-                                              deleteFileFromTemplate(
-                                                targetFileId,
-                                                file['user_filename'] ??
-                                                    file['file_name'] ??
-                                                    'File',
-                                                fileRecord: file,
-                                              );
-                                            },
+                                          ),
+                                          child: Text(
+                                            file['file_type']?.toString() ??
+                                                '-',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.blue.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+
+                                        child: IconButton(
+                                          icon:
+                                              _removingFileIds.contains(fileId)
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.red,
+                                                      ),
+                                                )
+                                              : const Icon(
+                                                  Icons.delete_outline,
+                                                  color: Colors.red,
+                                                  size: 20,
+                                                ),
+                                          onPressed:
+                                              _removingFileIds.contains(fileId)
+                                              ? null
+                                              : () {
+                                                  final int targetFileId =
+                                                      int.tryParse(
+                                                        (file['file_id'] ??
+                                                                    file['id'])
+                                                                ?.toString() ??
+                                                            '',
+                                                      ) ??
+                                                      0;
+                                                  deleteFileFromTemplate(
+                                                    targetFileId,
+                                                    file['user_filename'] ??
+                                                        file['file_name'] ??
+                                                        'File',
+                                                    fileRecord: file,
+                                                  );
+                                                },
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(flex: 3),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ],
+                              );
+                            },
+                          ),
+                        ), // Closing Flexible
+                ],
+              ),
             ),
           ),
         );
@@ -2680,48 +3006,46 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           // Preview header — SAME fixed width as the thumbnail SizedBox in the row
           SizedBox(
             width: previewColW,
-            child: Text(
-              "Preview",
-              style: _headerStyle(),
-            ),
+            child: Text("Preview", style: _headerStyle()),
           ),
           const SizedBox(width: 8),
-          Expanded(
-            flex: 5,
-            child: Text(
-              "File Name",
-              style: _headerStyle(),
-            ),
-          ),
-          const SizedBox(width: 8),
+          Expanded(flex: 3, child: Text("File Name", style: _headerStyle())),
+          const Spacer(flex: 1),
           Expanded(
             flex: 2,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                "File Type",
-                style: _headerStyle(),
-                maxLines: 1,
-                softWrap: false,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8.0),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "File Type",
+                  style: _headerStyle(),
+                  maxLines: 1,
+                  softWrap: false,
+                ),
               ),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 2,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.center,
-              child: Text(
-                "Action",
-                textAlign: TextAlign.center,
-                style: _headerStyle(),
-                maxLines: 1,
-                softWrap: false,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8.0),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Action",
+                  textAlign: TextAlign.left,
+                  style: _headerStyle(),
+                  maxLines: 1,
+                  softWrap: false,
+                ),
               ),
             ),
           ),
+          const Spacer(flex: 3),
         ],
       ),
     );
@@ -2777,7 +3101,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                 width: 36,
                 height: 36,
                 child: Material(
-                   color: Colors.blue.shade300,
+                  color: Colors.blue.shade300,
                   borderRadius: BorderRadius.circular(6),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(6),
@@ -3148,7 +3472,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     );
   }
 
-
   void _showPlayOrderDialog(BuildContext context) {
     StylishDialog.show(
       context: context,
@@ -3239,8 +3562,10 @@ class _PlayOrderDialogContentState extends State<_PlayOrderDialogContent> {
                   if (mounted) {
                     setState(() {
                       if (oldIndex < newIndex) newIndex -= 1;
-                      if (oldIndex < 0 || oldIndex >= _dialogFiles.length) return;
-                      if (newIndex < 0 || newIndex > _dialogFiles.length) return;
+                      if (oldIndex < 0 || oldIndex >= _dialogFiles.length)
+                        return;
+                      if (newIndex < 0 || newIndex > _dialogFiles.length)
+                        return;
                       final item = _dialogFiles.removeAt(oldIndex);
                       _dialogFiles.insert(newIndex, item);
                     });
@@ -3254,22 +3579,27 @@ class _PlayOrderDialogContentState extends State<_PlayOrderDialogContent> {
                   if (file == null) return const SizedBox.shrink();
                   final String fileIdStr =
                       (file['file_id'] ?? file['id'] ?? 'item').toString();
-                  final String fType =
-                      (file['file_type'] ?? '').toString().toLowerCase();
+                  final String fType = (file['file_type'] ?? '')
+                      .toString()
+                      .toLowerCase();
                   final int fileId =
                       int.tryParse(file['id']?.toString() ?? '') ?? 0;
                   final availableFile = widget.displayedFiles.firstWhere(
                     (f) =>
-                        (int.tryParse(f['id']?.toString() ?? '') ?? 0) == fileId,
+                        (int.tryParse(f['id']?.toString() ?? '') ?? 0) ==
+                        fileId,
                     orElse: () => null,
                   );
-                  final String availFType =
-                      (availableFile?['file_type'] ?? '').toString().toLowerCase();
-                  final String availFStatus = (availableFile?['file_status'] ??
-                          availableFile?['status'] ??
-                          '0')
-                      .toString();
-                  final bool isLive = (file['file_status']?.toString() ??
+                  final String availFType = (availableFile?['file_type'] ?? '')
+                      .toString()
+                      .toLowerCase();
+                  final String availFStatus =
+                      (availableFile?['file_status'] ??
+                              availableFile?['status'] ??
+                              '0')
+                          .toString();
+                  final bool isLive =
+                      (file['file_status']?.toString() ??
                               file['status']?.toString() ??
                               '0') ==
                           '1' ||
@@ -3369,7 +3699,10 @@ class _PlayOrderDialogContentState extends State<_PlayOrderDialogContent> {
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     clipBehavior: Clip.antiAlias,
-                                    child: widget.buildFilePreview(file, staticOnly: true),
+                                    child: widget.buildFilePreview(
+                                      file,
+                                      staticOnly: true,
+                                    ),
                                   ),
                                 ],
                               ),

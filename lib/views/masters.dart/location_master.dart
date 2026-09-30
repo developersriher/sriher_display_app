@@ -1,5 +1,6 @@
 import '../../api_config.dart';
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -26,6 +27,8 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   String entriesValue = "10";
   int? editingId;
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _hScroll = ScrollController();
+  final ScrollController _vScroll = ScrollController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   String searchQuery = "";
   int currentPage = 1;
@@ -45,6 +48,8 @@ class _LocationMasterViewState extends State<LocationMasterView> {
 
   @override
   void dispose() {
+    _hScroll.dispose();
+    _vScroll.dispose();
     _buildingAreaController.dispose();
     _floorNameController.dispose();
     _subLocationController.dispose();
@@ -172,19 +177,48 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   }
 
   // 5. UPDATE STATUS
-  Future<void> toggleLocationStatus(dynamic id, dynamic currentStatus) async {
+  Future<void> toggleLocationStatus(
+    dynamic itemOrId, [
+    dynamic currentStatus,
+  ]) async {
     final url = Uri.parse('$_baseUrl/locationStatusUpdateview');
-    final int newStatus = (currentStatus == 1 || currentStatus == "1") ? 0 : 1;
+    Map<String, dynamic> itemMap = {};
+    dynamic id;
+    dynamic rawStatus;
+
+    if (itemOrId is Map) {
+      itemMap = Map<String, dynamic>.from(itemOrId);
+      id = itemMap['id'] ?? itemMap['location_id'];
+      rawStatus =
+          itemMap['active_status'] ??
+          itemMap['status'] ??
+          itemMap['Status'] ??
+          itemMap['is_active'] ??
+          itemMap['location_status'];
+    } else {
+      id = itemOrId;
+      rawStatus = currentStatus;
+      final found = locationList.firstWhere(
+        (e) => e['id']?.toString() == id?.toString(),
+        orElse: () => null,
+      );
+      if (found is Map) itemMap = Map<String, dynamic>.from(found);
+    }
+
+    final int newStatus = (rawStatus == 0 || rawStatus == "0") ? 1 : 0;
+
+    // Preserve all existing row fields in POST payload
+    final Map<String, dynamic> payload = Map<String, dynamic>.from(itemMap);
+    payload["api_key"] = _apiKey;
+    payload["location_id"] = int.tryParse(id.toString()) ?? id;
+    payload["id"] = int.tryParse(id.toString()) ?? id;
+    payload["status"] = newStatus;
 
     try {
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "api_key": _apiKey,
-          "location_id": int.tryParse(id.toString()),
-          "status": newStatus,
-        }),
+        body: jsonEncode(payload),
       );
 
       if (response.statusCode == 200) {
@@ -224,58 +258,65 @@ class _LocationMasterViewState extends State<LocationMasterView> {
       icon: editingId == null
           ? Icons.add_location_alt_rounded
           : Icons.edit_location_alt_rounded,
-      width: isMobile
-          ? MediaQuery.of(context).size.width * 0.8
-          : MediaQuery.of(context).size.width * 0.4,
-      child: Form(
-        key: _formKey,
-        autovalidateMode: AutovalidateMode.disabled,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildSmallTextField(
-              'Enter Building/Area Name',
-              _buildingAreaController,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+      width: isMobile ? MediaQuery.of(context).size.width * 0.95 : 550,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 550,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            autovalidateMode: AutovalidateMode.disabled,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildSmallTextField(
+                  'Enter Building/Area Name',
+                  _buildingAreaController,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                  ],
+                  validator: (v) => (v == null || v.isEmpty)
+                      ? 'Please enter the Building/Area Name'
+                      : null,
+                ),
+                const SizedBox(height: 20),
+                _buildSmallTextField(
+                  'Enter Floor Name',
+                  _floorNameController,
+                  validator: (v) => (v == null || v.isEmpty)
+                      ? 'Please enter the Floor Name'
+                      : null,
+                ),
+                const SizedBox(height: 20),
+                _buildSmallTextField(
+                  'Enter Sub Location Name',
+                  _subLocationController,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty)
+                      return 'Please enter the Sub Location Name';
+                    final clean = v.trim().toLowerCase();
+                    final exists = locationList.any((loc) {
+                      final sub =
+                          (loc['sublocation'] ?? loc['sub_location'] ?? '')
+                              .toString()
+                              .trim()
+                              .toLowerCase();
+                      final id = loc['id'] ?? loc['ID'];
+                      if (editingId != null &&
+                          id?.toString() == editingId?.toString())
+                        return false;
+                      return sub == clean;
+                    });
+                    if (exists) return 'This sub location already exists.';
+                    return null;
+                  },
+                ),
               ],
-              validator: (v) => (v == null || v.isEmpty)
-                  ? 'Please enter the Building/Area Name'
-                  : null,
             ),
-            const SizedBox(height: 20),
-            _buildSmallTextField(
-              'Enter Floor Name',
-              _floorNameController,
-              validator: (v) => (v == null || v.isEmpty)
-                  ? 'Please enter the Floor Name'
-                  : null,
-            ),
-            const SizedBox(height: 20),
-            _buildSmallTextField(
-              'Enter Sub Location Name',
-              _subLocationController,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty)
-                  return 'Please enter the Sub Location Name';
-                final clean = v.trim().toLowerCase();
-                final exists = locationList.any((loc) {
-                  final sub = (loc['sublocation'] ?? loc['sub_location'] ?? '')
-                      .toString()
-                      .trim()
-                      .toLowerCase();
-                  final id = loc['id'] ?? loc['ID'];
-                  if (editingId != null &&
-                      id?.toString() == editingId?.toString())
-                    return false;
-                  return sub == clean;
-                });
-                if (exists) return 'This sub location already exists.';
-                return null;
-              },
-            ),
-          ],
+          ),
         ),
       ),
       actions: [
@@ -356,7 +397,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 600;
+                  final isNarrow = constraints.maxWidth <= 1100;
                   final heading = const AnimatedHeading(
                     text: "Location List",
                     style: TextStyle(
@@ -557,255 +598,309 @@ class _LocationMasterViewState extends State<LocationMasterView> {
             ? constraints.maxWidth
             : minWidth;
 
-        return Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade200, width: 1.0),
-            borderRadius: BorderRadius.circular(8),
+        return ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
           ),
-          clipBehavior: Clip.antiAlias,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: tableWidth,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Table Header Row
-                  Container(
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      border: Border(
-                        bottom: BorderSide(
+          child: Scrollbar(
+            controller: _hScroll,
+            thumbVisibility: true,
+            thickness: 8.0,
+            trackVisibility: true,
+            interactive: true,
+            child: SingleChildScrollView(
+              controller: _hScroll,
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: tableWidth),
+                child: Scrollbar(
+                  controller: _vScroll,
+                  thumbVisibility: true,
+                  thickness: 8.0,
+                  trackVisibility: true,
+                  interactive: true,
+                  child: SingleChildScrollView(
+                    controller: _vScroll,
+                    scrollDirection: Axis.vertical,
+                    child: Container(
+                      width: tableWidth,
+                      decoration: BoxDecoration(
+                        border: Border.all(
                           color: Colors.grey.shade200,
                           width: 1.0,
                         ),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 4,
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                              child: _buildHeaderCell('BUILDING/AREA NAME', colIndex: 0),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                              child: _buildHeaderCell('FLOOR', colIndex: 1),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 3,
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                              child: _buildHeaderCell('SUB LOCATION', colIndex: 2),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 1,
-                          child: Align(
-                            alignment: Alignment.center,
-                            child: const Text(
-                              'EDIT',
-                              style: TextStyle(
-                                color: Color.fromRGBO(33, 150, 243, 1),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 1,
-                          child: Align(
-                            alignment: Alignment.center,
-                            child: const Text(
-                              'ACTION',
-                              style: TextStyle(
-                                color: Color.fromRGBO(33, 150, 243, 1),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Data Rows
-                  if (pagedList.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 36.0),
-                      alignment: Alignment.center,
+                      clipBehavior: Clip.antiAlias,
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.search_off_rounded,
-                            size: 36,
-                            color: Colors.blue.shade200,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "No matching locations found",
-                            style: TextStyle(
-                              color: Colors.blue.shade900,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                          // Table Header Row
+                          Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.grey.shade200,
+                                  width: 1.0,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 4,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12.0,
+                                      ),
+                                      child: _buildHeaderCell(
+                                        'BUILDING/AREA NAME',
+                                        colIndex: 0,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4.0,
+                                      ),
+                                      child: _buildHeaderCell(
+                                        'FLOOR',
+                                        colIndex: 1,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4.0,
+                                      ),
+                                      child: _buildHeaderCell(
+                                        'SUB LOCATION',
+                                        colIndex: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 1,
+                                  child: Align(
+                                    alignment: Alignment.center,
+                                    child: const Text(
+                                      'EDIT',
+                                      style: TextStyle(
+                                        color: Color.fromRGBO(33, 150, 243, 1),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 1,
+                                  child: Align(
+                                    alignment: Alignment.center,
+                                    child: const Text(
+                                      'ACTION',
+                                      style: TextStyle(
+                                        color: Color.fromRGBO(33, 150, 243, 1),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            "Try a different search term",
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                            ),
-                          ),
+                          // Data Rows
+                          if (pagedList.isEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 36.0,
+                              ),
+                              alignment: Alignment.center,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.search_off_rounded,
+                                    size: 36,
+                                    color: Colors.blue.shade200,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "No matching locations found",
+                                    style: TextStyle(
+                                      color: Colors.blue.shade900,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    "Try a different search term",
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            ...pagedList.map((loc) {
+                              return Container(
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: Colors.grey.shade200,
+                                      width: 1.0,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 4,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12.0,
+                                          ),
+                                          child: Text(
+                                            loc['location_name']?.toString() ??
+                                                "-",
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black87,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4.0,
+                                          ),
+                                          child: Text(
+                                            loc['floor']?.toString() ?? "-",
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black87,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4.0,
+                                          ),
+                                          child: Text(
+                                            loc['sublocation']?.toString() ??
+                                                "-",
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black87,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 1,
+                                      child: Align(
+                                        alignment: Alignment.center,
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.edit,
+                                            color: Colors.blue,
+                                            size: 18,
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () {
+                                            setState(() {
+                                              editingId = int.tryParse(
+                                                loc['id'].toString(),
+                                              );
+                                              _buildingAreaController.text =
+                                                  loc['location_name']
+                                                      ?.toString() ??
+                                                  "";
+                                              _floorNameController.text =
+                                                  loc['floor']?.toString() ??
+                                                  "";
+                                              _subLocationController.text =
+                                                  loc['sublocation']
+                                                      ?.toString() ??
+                                                  "";
+                                            });
+                                            _showLocationDialog();
+                                          },
+                                          tooltip: "Edit",
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 1,
+                                      child: Align(
+                                        alignment: Alignment.center,
+                                        child: Transform.scale(
+                                          scale: 0.7,
+                                          child: Switch(
+                                            value: _isItemActive(loc),
+                                            activeColor: Colors.green,
+                                            onChanged: (val) =>
+                                                toggleLocationStatus(loc),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
                         ],
                       ),
-                    )
-                  else
-                    ...pagedList.map((loc) {
-                      return Container(
-                        height: 48,
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.grey.shade200,
-                              width: 1.0,
-                            ),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 4,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                                  child: Text(
-                                    loc['location_name']?.toString() ?? "-",
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.black87,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                  child: Text(
-                                    loc['floor']?.toString() ?? "-",
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.black87,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 3,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                  child: Text(
-                                    loc['sublocation']?.toString() ?? "-",
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.black87,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 1,
-                              child: Align(
-                                alignment: Alignment.center,
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.edit,
-                                    color: Colors.blue,
-                                    size: 18,
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () {
-                                    setState(() {
-                                      editingId = int.tryParse(
-                                        loc['id'].toString(),
-                                      );
-                                      _buildingAreaController.text =
-                                          loc['location_name']?.toString() ?? "";
-                                      _floorNameController.text =
-                                          loc['floor']?.toString() ?? "";
-                                      _subLocationController.text =
-                                          loc['sublocation']?.toString() ?? "";
-                                    });
-                                    _showLocationDialog();
-                                  },
-                                  tooltip: "Edit",
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 1,
-                              child: Align(
-                                alignment: Alignment.center,
-                                child: Transform.scale(
-                                  scale: 0.7,
-                                  child: Switch(
-                                    value:
-                                        loc['status'] == 1 || loc['status'] == "1",
-                                    activeColor: Colors.blue,
-                                    onChanged: (val) => toggleLocationStatus(
-                                      loc['id'],
-                                      loc['status'],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -926,7 +1021,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   Widget _buildListHeader() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final isNarrow = constraints.maxWidth <= 1100;
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1065,7 +1160,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final isNarrow = constraints.maxWidth <= 1100;
 
         final showingText = Text(
           "Showing ${total == 0 ? 0 : start} to $end of $total entries",
@@ -1257,5 +1352,32 @@ class _LocationMasterViewState extends State<LocationMasterView> {
         ),
       ),
     );
+  }
+
+  bool _isItemActive(dynamic data) {
+    if (data == null || data is! Map) return false;
+    final raw =
+        data['active_status'] ??
+        data['status'] ??
+        data['Status'] ??
+        data['is_active'] ??
+        data['location_status'];
+    if (raw == null) return true;
+    if (raw == 0 || raw == false) return true;
+    if (raw == 1 || raw == true) return false;
+    final str = raw.toString().trim().toLowerCase();
+    if (str == '0' ||
+        str == 'active' ||
+        str == 'true' ||
+        str == 'enabled' ||
+        str == 'on')
+      return true;
+    if (str == '1' ||
+        str == 'inactive' ||
+        str == 'false' ||
+        str == 'disabled' ||
+        str == 'off')
+      return false;
+    return false;
   }
 }

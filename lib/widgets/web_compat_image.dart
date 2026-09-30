@@ -27,6 +27,7 @@ class WebCompatImage extends StatelessWidget {
   final BlendMode? colorBlendMode;
   final int? cacheWidth;
   final int? cacheHeight;
+  final bool showFullScreenIcon;
 
   const WebCompatImage({
     super.key,
@@ -36,26 +37,99 @@ class WebCompatImage extends StatelessWidget {
     this.colorBlendMode,
     this.cacheWidth = 300,
     this.cacheHeight = 300,
+    this.showFullScreenIcon = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    Widget imageWidget;
     if (kIsWeb) {
-      return buildWebImage(url: url, fit: fit);
+      imageWidget = buildWebImage(url: url, fit: fit);
+    } else {
+      imageWidget = Image.network(
+        url,
+        fit: fit,
+        color: color,
+        colorBlendMode: colorBlendMode,
+        cacheWidth: cacheWidth ?? 300,
+        cacheHeight: cacheHeight ?? 300,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+        },
+        errorBuilder: (context, error, stackTrace) => _ErrorPlaceholder(url: url),
+      );
     }
-    return Image.network(
-      url,
-      fit: fit,
-      color: color,
-      colorBlendMode: colorBlendMode,
-      cacheWidth: cacheWidth ?? 300,
-      cacheHeight: cacheHeight ?? 300,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-      },
-      errorBuilder: (context, error, stackTrace) => _ErrorPlaceholder(url: url),
-    );
+
+    if (showFullScreenIcon) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          imageWidget,
+          Positioned(
+            bottom: 2,
+            right: 2,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return Dialog(
+                        backgroundColor: Colors.black,
+                        insetPadding: const EdgeInsets.all(10),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              height: double.infinity,
+                              child: InteractiveViewer(
+                                clipBehavior: Clip.none,
+                                maxScale: 5.0,
+                                minScale: 1.0,
+                                child: kIsWeb
+                                    ? buildWebImage(url: url, fit: BoxFit.contain)
+                                    : Image.network(url, fit: BoxFit.contain),
+                              ),
+                            ),
+                            Positioned(
+                              top: 10,
+                              right: 10,
+                              child: IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                                onPressed: () => Navigator.of(context).pop(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.65),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.fullscreen,
+                    color: Colors.white,
+                    size: 14,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return imageWidget;
   }
 }
 

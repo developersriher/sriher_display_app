@@ -216,9 +216,9 @@ class _DepartmentViewState extends State<DepartmentView> {
   // 5. TOGGLE STATUS (categoryStatusUpdateview)
   Future<void> toggleStatus(dynamic id, dynamic currentStatus) async {
     try {
-      final int newStatus = (currentStatus == 1 || currentStatus == "1")
-          ? 0
-          : 1;
+      final int newStatus = (currentStatus == 0 || currentStatus == "0")
+          ? 1
+          : 0;
       final response = await http.post(
         Uri.parse('$_baseUrl/categoryStatusUpdateview'),
         headers: {"Content-Type": "application/json"},
@@ -698,7 +698,10 @@ class _DepartmentViewState extends State<DepartmentView> {
                   child: Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade200, width: 1.0),
+                      border: Border.all(
+                        color: Colors.grey.shade200,
+                        width: 1.0,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     clipBehavior: Clip.antiAlias,
@@ -721,7 +724,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                             mainAxisAlignment: MainAxisAlignment.start,
                             children: [
                               Expanded(
-                                flex: 5,
+                                flex: 3,
                                 child: Align(
                                   alignment: Alignment.centerLeft,
                                   child: Padding(
@@ -765,7 +768,8 @@ class _DepartmentViewState extends State<DepartmentView> {
                                                 child: Icon(
                                                   Icons.arrow_drop_up,
                                                   size: 18,
-                                                  color: _sortColumnIndex == 0 &&
+                                                  color:
+                                                      _sortColumnIndex == 0 &&
                                                           _sortAscending
                                                       ? Colors.blue
                                                       : const Color(0xFF94A3B8),
@@ -785,7 +789,8 @@ class _DepartmentViewState extends State<DepartmentView> {
                                                 child: Icon(
                                                   Icons.arrow_drop_down,
                                                   size: 18,
-                                                  color: _sortColumnIndex == 0 &&
+                                                  color:
+                                                      _sortColumnIndex == 0 &&
                                                           !_sortAscending
                                                       ? Colors.blue
                                                       : const Color(0xFF94A3B8),
@@ -802,7 +807,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                               Expanded(
                                 flex: 2,
                                 child: Align(
-                                  alignment: Alignment.center,
+                                  alignment: Alignment.centerLeft,
                                   child: const Text(
                                     "EDIT",
                                     style: TextStyle(
@@ -818,25 +823,9 @@ class _DepartmentViewState extends State<DepartmentView> {
                               Expanded(
                                 flex: 2,
                                 child: Align(
-                                  alignment: Alignment.center,
+                                  alignment: Alignment.centerLeft,
                                   child: const Text(
                                     "ACTION",
-                                    style: TextStyle(
-                                      color: Color.fromRGBO(33, 150, 243, 1),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Align(
-                                  alignment: Alignment.center,
-                                  child: const Text(
-                                    "DELETE",
                                     style: TextStyle(
                                       color: Color.fromRGBO(33, 150, 243, 1),
                                       fontWeight: FontWeight.bold,
@@ -852,9 +841,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                         ),
                         if (pagedData.isEmpty)
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 36.0,
-                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 36.0),
                             alignment: Alignment.center,
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -900,7 +887,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                                 mainAxisAlignment: MainAxisAlignment.start,
                                 children: [
                                   Expanded(
-                                    flex: 5,
+                                    flex: 3,
                                     child: Align(
                                       alignment: Alignment.centerLeft,
                                       child: Padding(
@@ -908,10 +895,11 @@ class _DepartmentViewState extends State<DepartmentView> {
                                           horizontal: 12.0,
                                         ),
                                         child: Text(
-                                          item['category_name']?.toString() ?? "-",
+                                          item['category_name']?.toString() ??
+                                              "-",
                                           style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
                                             fontSize: 12,
-                                            color: Colors.black87,
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                           maxLines: 1,
@@ -922,17 +910,17 @@ class _DepartmentViewState extends State<DepartmentView> {
                                   Expanded(
                                     flex: 2,
                                     child: Align(
-                                      alignment: Alignment.center,
+                                      alignment: Alignment.centerLeft,
                                       child: IconButton(
                                         icon: const Icon(
                                           Icons.edit,
-                                          color: Colors.blueAccent,
+                                          color: Colors.blue,
                                           size: 18,
                                         ),
-                                        onPressed: () => loadForEdit(item['id']),
-                                        hoverColor: Colors.blueAccent.withOpacity(
-                                          0.1,
-                                        ),
+                                        onPressed: () =>
+                                            loadForEdit(item['id']),
+                                        hoverColor: Colors.blueAccent
+                                            .withOpacity(0.1),
                                         tooltip: "Edit",
                                       ),
                                     ),
@@ -940,35 +928,19 @@ class _DepartmentViewState extends State<DepartmentView> {
                                   Expanded(
                                     flex: 2,
                                     child: Align(
-                                      alignment: Alignment.center,
+                                      alignment: Alignment.centerLeft,
                                       child: Transform.scale(
                                         scale: 0.7,
                                         child: Switch(
                                           value:
-                                              item['status'] == 1 ||
-                                              item['status'] == "1",
-                                          activeColor: Colors.greenAccent,
+                                              item['status'] == 0 ||
+                                              item['status'] == "0",
+                                          activeColor: Colors.green,
                                           onChanged: (v) => toggleStatus(
                                             item['id'],
                                             item['status'],
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Align(
-                                      alignment: Alignment.center,
-                                      child: IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          color: Colors.red,
-                                          size: 18,
-                                        ),
-                                        onPressed: () =>
-                                            deleteCategory(item['id']),
-                                        tooltip: "Delete",
                                       ),
                                     ),
                                   ),

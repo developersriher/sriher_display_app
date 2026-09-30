@@ -16,7 +16,7 @@ import '../api_config.dart';
 String get _kApiUrl => '${getBaseUrl()}/Dashboardview';
 const _kApiKey =
     '933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2';
-const _kBaseUrl = 'https://display.sriher.com/uploads/';
+String get _kBaseUrl => '$baseUrl/uploads/';
 
 /// Times New Roman is used as the font family for all dashboard text.
 const String _kFont = 'Times New Roman';
@@ -102,6 +102,22 @@ class _DashboardData {
       (raw as List? ?? []).map((e) => Map<String, dynamic>.from(e)).toList();
 }
 
+class _DashboardMetricItem {
+  final String title;
+  final String value;
+  final IconData icon;
+  final Color color;
+  final Animation<double> anim;
+
+  _DashboardMetricItem({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.color,
+    required this.anim,
+  });
+}
+
 // ─── Widget ───────────────────────────────────────────────────────────────────
 
 class DashboardView extends StatefulWidget {
@@ -144,7 +160,7 @@ class _DashboardViewState extends State<DashboardView>
   int _currentPage = 1;
   int? _sortColumnIndex;
   bool _sortAscending = true;
-  
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -510,99 +526,196 @@ class _DashboardViewState extends State<DashboardView>
   }
 
   Widget _buildMetricsGrid(_DashboardData d) {
+    final items = [
+      _DashboardMetricItem(
+        title: 'Active Devices',
+        value: '${d.activeDevice}/${d.totalDevice}',
+        icon: Icons.devices_rounded,
+        color: const Color(0xFF3B82F6),
+        anim: _cardAnimations[0],
+      ),
+      _DashboardMetricItem(
+        title: 'Templates',
+        value: '${d.totScheTemp}/${d.totTemp}',
+        icon: Icons.auto_awesome_mosaic_rounded,
+        color: const Color(0xFF8B5CF6),
+        anim: _cardAnimations[1],
+      ),
+      _DashboardMetricItem(
+        title: 'Live Location',
+        value: '${d.activeLoc}/${d.totLocation}',
+        icon: Icons.location_on_rounded,
+        color: const Color(0xFF10B981),
+        anim: _cardAnimations[2],
+      ),
+      _DashboardMetricItem(
+        title: 'Assets',
+        value: '${d.imgFile + d.vidFile}',
+        icon: Icons.perm_media_rounded,
+        color: const Color(0xFFF59E0B),
+        anim: _cardAnimations[3],
+      ),
+    ];
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          _buildCompactMetric(
-            'Active Devices',
-            '${d.activeDevice}/${d.totalDevice}',
-            Icons.devices_rounded,
-            const Color(0xFF3B82F6),
-            _cardAnimations[0],
-          ),
-          _buildCompactMetric(
-            'Templates',
-            '${d.totScheTemp}/${d.totTemp}',
-            Icons.auto_awesome_mosaic_rounded,
-            const Color(0xFF8B5CF6),
-            _cardAnimations[1],
-          ),
-          _buildCompactMetric(
-            'Live Loc',
-            '${d.activeLoc}/${d.totLocation}',
-            Icons.location_on_rounded,
-            const Color(0xFF10B981),
-            _cardAnimations[2],
-          ),
-          _buildCompactMetric(
-            'Assets',
-            '${d.imgFile + d.vidFile}',
-            Icons.perm_media_rounded,
-            const Color(0xFFF59E0B),
-            _cardAnimations[3],
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          // Responsive flex layout:
+          // Wide screens (>= 800px): All 4 items side-by-side in a single Row spanning left to right
+          if (width >= 800) {
+            return Row(
+              children: List.generate(items.length, (idx) {
+                final item = items[idx];
+                return Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      left: idx == 0 ? 0 : 6,
+                      right: idx == items.length - 1 ? 0 : 6,
+                    ),
+                    child: _buildExpandedMetricCard(item),
+                  ),
+                );
+              }),
+            );
+          } else if (width >= 500) {
+            // Medium screens (tablet 500-800px): 2 items per row, both expanded
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: _buildExpandedMetricCard(items[0])),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildExpandedMetricCard(items[1])),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _buildExpandedMetricCard(items[2])),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildExpandedMetricCard(items[3])),
+                  ],
+                ),
+              ],
+            );
+          } else {
+            // Mobile screens (< 500px): 2x2 grid with compact expanded cards
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildExpandedMetricCard(
+                        items[0],
+                        isCompact: true,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildExpandedMetricCard(
+                        items[1],
+                        isCompact: true,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildExpandedMetricCard(
+                        items[2],
+                        isCompact: true,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildExpandedMetricCard(
+                        items[3],
+                        isCompact: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }
+        },
       ),
     );
   }
 
-  Widget _buildCompactMetric(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-    Animation<double> anim,
-  ) {
+  Widget _buildExpandedMetricCard(
+    _DashboardMetricItem item, {
+    bool isCompact = false,
+  }) {
     return ScaleTransition(
-      scale: anim,
+      scale: item.anim,
       child: FadeTransition(
-        opacity: anim,
+        opacity: item.anim,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: isCompact ? 12 : 16,
+            vertical: isCompact ? 12 : 16,
+          ),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: const Color(0xFFE2E8F0)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.01),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(4),
+                padding: EdgeInsets.all(isCompact ? 8 : 10),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: item.color.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: color, size: 12),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Color(0xFF64748B),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+                child: Icon(
+                  item.icon,
+                  color: item.color,
+                  size: isCompact ? 18 : 22,
                 ),
               ),
-              const SizedBox(width: 6),
-              Container(width: 1, height: 12, color: const Color(0xFFE2E8F0)),
-              const SizedBox(width: 6),
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Color(0xFF0F172A),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
+              SizedBox(width: isCompact ? 10 : 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      item.title,
+                      style: TextStyle(
+                        fontFamily: _kFont,
+                        color: const Color.fromARGB(255, 40, 47, 56),
+                        fontSize: isCompact ? 12 : 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.value,
+                      style: TextStyle(
+                        fontFamily: _kFont,
+                        color: const Color.fromARGB(255, 129, 137, 156),
+                        fontSize: isCompact ? 16 : 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -671,7 +784,10 @@ class _DashboardViewState extends State<DashboardView>
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                  border: Border.all(
+                    color: const Color(0xFFE2E8F0),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.04),
@@ -1487,7 +1603,9 @@ class _DashboardViewState extends State<DashboardView>
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: isSel ? cat.$3.withOpacity(0.12) : cat.$3.withOpacity(0.03),
+                  color: isSel
+                      ? cat.$3.withOpacity(0.12)
+                      : cat.$3.withOpacity(0.03),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: isSel ? cat.$3 : cat.$3.withOpacity(0.15),
@@ -1496,11 +1614,7 @@ class _DashboardViewState extends State<DashboardView>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      cat.$2,
-                      size: 14,
-                      color: cat.$3,
-                    ),
+                    Icon(cat.$2, size: 14, color: cat.$3),
                     const SizedBox(width: 6),
                     Text(
                       cat.$1,
@@ -1701,15 +1815,16 @@ class _DashboardViewState extends State<DashboardView>
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF334155),
+                      width: 1.5,
+                    ),
                   ),
                 ),
                 items: [10, 25, 50, 100]
                     .map(
-                      (v) => DropdownMenuItem(
-                        value: v,
-                        child: Text(v.toString()),
-                      ),
+                      (v) =>
+                          DropdownMenuItem(value: v, child: Text(v.toString())),
                     )
                     .toList(),
                 onChanged: (val) {
@@ -1750,8 +1865,15 @@ class _DashboardViewState extends State<DashboardView>
             style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
             decoration: InputDecoration(
               hintText: 'Search records...',
-              hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-              prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF94A3B8)),
+              hintStyle: const TextStyle(
+                color: Color(0xFF94A3B8),
+                fontSize: 12,
+              ),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                size: 18,
+                color: Color(0xFF94A3B8),
+              ),
               contentPadding: const EdgeInsets.symmetric(horizontal: 10),
               filled: true,
               fillColor: const Color(0xFFF8FAFC),
@@ -1765,7 +1887,10 @@ class _DashboardViewState extends State<DashboardView>
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                borderSide: const BorderSide(
+                  color: Color(0xFF334155),
+                  width: 1.5,
+                ),
               ),
             ),
           ),
@@ -1814,8 +1939,10 @@ class _DashboardViewState extends State<DashboardView>
     return LayoutBuilder(
       builder: (context, constraints) {
         final double minWidth = headers.length * 150.0;
-        final double tableWidth = constraints.maxWidth > minWidth ? constraints.maxWidth : minWidth;
-        
+        final double tableWidth = constraints.maxWidth > minWidth
+            ? constraints.maxWidth
+            : minWidth;
+
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SizedBox(
@@ -1826,7 +1953,9 @@ class _DashboardViewState extends State<DashboardView>
                 Container(
                   height: 56,
                   decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                    border: Border(
+                      bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -1861,8 +1990,10 @@ class _DashboardViewState extends State<DashboardView>
                                     child: Icon(
                                       Icons.arrow_drop_up,
                                       size: 18,
-                                      color: _sortColumnIndex == idx && _sortAscending 
-                                          ? Colors.blue 
+                                      color:
+                                          _sortColumnIndex == idx &&
+                                              _sortAscending
+                                          ? Colors.blue
                                           : const Color(0xFF94A3B8),
                                     ),
                                   ),
@@ -1874,8 +2005,10 @@ class _DashboardViewState extends State<DashboardView>
                                     child: Icon(
                                       Icons.arrow_drop_down,
                                       size: 18,
-                                      color: _sortColumnIndex == idx && !_sortAscending 
-                                          ? Colors.blue 
+                                      color:
+                                          _sortColumnIndex == idx &&
+                                              !_sortAscending
+                                          ? Colors.blue
                                           : const Color(0xFF94A3B8),
                                     ),
                                   ),
@@ -1902,8 +2035,12 @@ class _DashboardViewState extends State<DashboardView>
                             final isOdd = index % 2 != 0;
                             return Container(
                               height: 64,
-                              color: isOdd ? const Color(0xFFF8FAFC).withOpacity(0.5) : Colors.transparent,
-                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              color: isOdd
+                                  ? const Color(0xFFF8FAFC).withOpacity(0.5)
+                                  : Colors.transparent,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                              ),
                               child: Row(
                                 children: row.map((cellValue) {
                                   return Expanded(
@@ -1939,7 +2076,13 @@ class _DashboardViewState extends State<DashboardView>
       case 'Locations':
         return ['Name', 'Floor', 'Sub-Location'];
       case 'Over Views':
-        return ['Device Name', 'Schedule Name', 'Template Name', 'Template Duration', 'Location Name'];
+        return [
+          'Device Name',
+          'Schedule Name',
+          'Template Name',
+          'Template Duration',
+          'Location Name',
+        ];
       default:
         return [];
     }
@@ -1999,20 +2142,22 @@ class _DashboardViewState extends State<DashboardView>
         return row.any((cell) => cell.toString().toLowerCase().contains(query));
       }).toList();
     }
-    
-    if (_sortColumnIndex != null && rows.isNotEmpty && _sortColumnIndex! < rows.first.length) {
+
+    if (_sortColumnIndex != null &&
+        rows.isNotEmpty &&
+        _sortColumnIndex! < rows.first.length) {
       rows.sort((a, b) {
         final aVal = a[_sortColumnIndex!].toString().toLowerCase();
         final bVal = b[_sortColumnIndex!].toString().toLowerCase();
-        
+
         // Push empty or placeholder values to the absolute bottom
         bool aEmpty = aVal == '-' || aVal.trim().isEmpty;
         bool bEmpty = bVal == '-' || bVal.trim().isEmpty;
-        
+
         if (aEmpty && !bEmpty) return 1;
         if (!aEmpty && bEmpty) return -1;
         if (aEmpty && bEmpty) return 0;
-        
+
         return _sortAscending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
       });
     }

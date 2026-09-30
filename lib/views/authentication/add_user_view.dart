@@ -1,3 +1,4 @@
+import 'dart:ui';
 import '../../api_config.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -32,6 +33,7 @@ class _AddUserViewState extends State<AddUserView> {
 
   // Table search controller (NOT form)
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _hScroll = ScrollController();
 
   @override
   void initState() {
@@ -42,6 +44,7 @@ class _AddUserViewState extends State<AddUserView> {
   @override
   void dispose() {
     _searchController.dispose();
+    _hScroll.dispose();
     super.dispose();
   }
 
@@ -198,7 +201,7 @@ class _AddUserViewState extends State<AddUserView> {
         (u) => u['id']?.toString() == user['id']?.toString(),
       );
       if (idx != -1)
-        allUsers[idx] = {...allUsers[idx], 'status': newStatus ? 1 : 0};
+        allUsers[idx] = {...allUsers[idx], 'status': newStatus ? 0 : 1};
     });
 
     try {
@@ -209,7 +212,7 @@ class _AddUserViewState extends State<AddUserView> {
             body: jsonEncode({
               "api_key": _apiKey,
               "device_id": id,
-              "status": newStatus ? 1 : 0,
+              "status": newStatus ? 0 : 1,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -219,7 +222,7 @@ class _AddUserViewState extends State<AddUserView> {
           (u) => u['id']?.toString() == user['id']?.toString(),
         );
         if (idx != -1)
-          allUsers[idx] = {...allUsers[idx], 'status': newStatus ? 0 : 1};
+          allUsers[idx] = {...allUsers[idx], 'status': newStatus ? 1 : 0};
       });
       _showSnack("Failed to update status.", isError: true);
     }
@@ -315,14 +318,14 @@ class _AddUserViewState extends State<AddUserView> {
             body: jsonEncode({
               "api_key": _apiKey,
               "device_id": id,
-              "status": 0,
+              "status": 1,
             }),
           )
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         _showSnack("User deleted successfully.");
-        // Don't re-fetch — the server marks status:0 but still returns the user.
+        // Don't re-fetch — the server marks status:1 but still returns the user.
         // The row is already removed optimistically above.
       } else {
         // Rollback on failure
@@ -468,7 +471,7 @@ class _AddUserViewState extends State<AddUserView> {
     final List<dynamic> pagedUsers = filtered.sublist(start, end);
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth <= 1100;
 
     final heading = const AnimatedHeading(
       text: "User List",
@@ -520,7 +523,7 @@ class _AddUserViewState extends State<AddUserView> {
               // ── Responsive heading row ──
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 600;
+                  final isNarrow = constraints.maxWidth <= 1100;
                   return isNarrow
                       ? SizedBox(
                           width: double.infinity,
@@ -541,35 +544,39 @@ class _AddUserViewState extends State<AddUserView> {
                       child: Center(child: CircularProgressIndicator()),
                     )
                   : (allUsers.isNotEmpty && pagedUsers.isEmpty)
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 30),
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.search_off_rounded,
-                                    size: 48,
-                                    color: Colors.blue.shade200),
-                                const SizedBox(height: 12),
-                                Text(
-                                  "No matching users found",
-                                  style: TextStyle(
-                                    color: Colors.blue.shade900,
-                                    fontSize: 16.0,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  "Try a different search term",
-                                  style: TextStyle(
-                                      color: Colors.grey, fontSize: 13.0),
-                                ),
-                              ],
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 30),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.search_off_rounded,
+                              size: 48,
+                              color: Colors.blue.shade200,
                             ),
-                          ),
-                        )
-                      : _buildTableContainer(pagedUsers),
+                            const SizedBox(height: 12),
+                            Text(
+                              "No matching users found",
+                              style: TextStyle(
+                                color: Colors.blue.shade900,
+                                fontSize: 16.0,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              "Try a different search term",
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 13.0,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : _buildTableContainer(pagedUsers),
               const SizedBox(height: 16),
               _buildPagination(
                 pagedUsers.length,
@@ -641,24 +648,40 @@ class _AddUserViewState extends State<AddUserView> {
             )
           : LayoutBuilder(
               builder: (context, constraints) {
-                final double minWidth = constraints.maxWidth > 700
+                final double minWidth = constraints.maxWidth > 1100
                     ? constraints.maxWidth
-                    : 700;
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: minWidth),
-                    child: DataTable(
-                      columnSpacing: 24,
-                      headingRowHeight: 52,
-                      dataRowMaxHeight: 56,
-                      headingRowColor: WidgetStateProperty.all(
-                        Colors.blue.shade50,
+                    : 1100.0;
+                return ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    dragDevices: {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                    },
+                  ),
+                  child: Scrollbar(
+                    controller: _hScroll,
+                    thumbVisibility: true,
+                    thickness: 12.0,
+                    trackVisibility: true,
+                    interactive: true,
+                    child: SingleChildScrollView(
+                      controller: _hScroll,
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: minWidth),
+                        child: DataTable(
+                          columnSpacing: 24,
+                          headingRowHeight: 52,
+                          dataRowMaxHeight: 56,
+                          headingRowColor: WidgetStateProperty.all(
+                            Colors.blue.shade50,
+                          ),
+                          showCheckboxColumn: false,
+                          dividerThickness: 0.0,
+                          columns: _buildColumns(),
+                          rows: pagedUsers.map((u) => _buildRow(u)).toList(),
+                        ),
                       ),
-                      showCheckboxColumn: false,
-                      dividerThickness: 0.0,
-                      columns: _buildColumns(),
-                      rows: pagedUsers.map((u) => _buildRow(u)).toList(),
                     ),
                   ),
                 );
@@ -749,7 +772,7 @@ class _AddUserViewState extends State<AddUserView> {
         )['role_name'] ??
         'User';
 
-    final isActive = (u['status'] == 1 || u['status'] == '1');
+    final isActive = (u['status'] == 0 || u['status'] == '0');
 
     return DataRow(
       cells: [
@@ -839,9 +862,12 @@ class _AddUserViewState extends State<AddUserView> {
                 vertical: 8,
               ),
             ),
-            items: ["10", "25", "50", "100"]
-                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                .toList(),
+            items: [
+              "10",
+              "25",
+              "50",
+              "100",
+            ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
             onChanged: (v) {
               if (v != null) {
                 setState(() {
@@ -879,10 +905,7 @@ class _AddUserViewState extends State<AddUserView> {
           style: const TextStyle(fontSize: 12, color: Colors.black87),
           decoration: InputDecoration(
             hintText: 'Search ID or Name...',
-            hintStyle: const TextStyle(
-              color: Color(0xFF94A3B8),
-              fontSize: 12,
-            ),
+            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
             prefixIcon: const Icon(
               Icons.search,
               size: 16,
@@ -970,11 +993,7 @@ class _AddUserViewState extends State<AddUserView> {
             width: double.infinity,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                showingText,
-                const SizedBox(height: 10),
-                pagination,
-              ],
+              children: [showingText, const SizedBox(height: 10), pagination],
             ),
           )
         : Row(
@@ -1148,7 +1167,10 @@ class _UserFormDialogState extends State<_UserFormDialog> {
       elevation: 0,
       insetPadding: const EdgeInsets.all(16),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500),
+        constraints: BoxConstraints(
+          maxWidth: 550,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -1256,12 +1278,18 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                           ),
                           decoration: _deco('Enter User ID'),
                           validator: (v) {
-                            if (v == null || v.trim().isEmpty) return 'Please enter the User ID';
+                            if (v == null || v.trim().isEmpty)
+                              return 'Please enter the User ID';
                             final clean = v.trim().toLowerCase();
                             final exists = widget.allUsers.any((u) {
-                              final uid = (u['user_id'] ?? u['userId'] ?? '').toString().trim().toLowerCase();
+                              final uid = (u['user_id'] ?? u['userId'] ?? '')
+                                  .toString()
+                                  .trim()
+                                  .toLowerCase();
                               final id = u['id'] ?? u['ID'];
-                              if (widget.editId != null && id?.toString() == widget.editId?.toString()) return false;
+                              if (widget.editId != null &&
+                                  id?.toString() == widget.editId?.toString())
+                                return false;
                               return uid == clean;
                             });
                             if (exists) return 'This user id already exists.';

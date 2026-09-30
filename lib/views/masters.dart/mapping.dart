@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../api_config.dart';
@@ -39,6 +40,8 @@ class _MappingViewState extends State<MappingView> {
   int _page = 1;
   final _searchCtrl = TextEditingController();
   String _searchQ = '';
+  final ScrollController _hScroll = ScrollController();
+  final ScrollController _vScroll = ScrollController();
 
   // ─── FORM STATE ───────────────────────────────────────────────────────────
   // Row 1: device code (dropdown) | device name (text) | device model (text)
@@ -68,6 +71,8 @@ class _MappingViewState extends State<MappingView> {
     _searchCtrl.dispose();
     _devNameCtrl.dispose();
     _devModelCtrl.dispose();
+    _hScroll.dispose();
+    _vScroll.dispose();
     super.dispose();
   }
 
@@ -408,6 +413,111 @@ class _MappingViewState extends State<MappingView> {
     }
   }
 
+  bool _isItemActive(dynamic data) {
+    if (data == null) return true;
+    final raw = (data is Map)
+        ? (data['active_status'] ??
+              data['status'] ??
+              data['Status'] ??
+              data['is_active'] ??
+              data['mapping_status'])
+        : data;
+    if (raw == null) return true;
+    if (raw == 0 || raw == false) return true;
+    if (raw == 1 || raw == true) return false;
+    final str = raw.toString().trim().toLowerCase();
+    if (str == '0' ||
+        str == 'active' ||
+        str == 'true' ||
+        str == 'enabled' ||
+        str == 'on')
+      return true;
+    if (str == '1' ||
+        str == 'inactive' ||
+        str == 'false' ||
+        str == 'disabled' ||
+        str == 'off')
+      return false;
+    final intVal = int.tryParse(str);
+    if (intVal != null) return intVal == 0;
+    return true;
+  }
+
+  // API 6: TOGGLE STATUS (mappingStatusUpdateview)
+  Future<void> toggleMappingStatus(
+    dynamic itemOrId, [
+    dynamic currentStatus,
+  ]) async {
+    Map<String, dynamic> itemMap = {};
+    dynamic id;
+    dynamic rawStatus;
+
+    if (itemOrId is Map) {
+      itemMap = Map<String, dynamic>.from(itemOrId);
+      id = itemMap['id'] ?? itemMap['mapping_id'];
+      rawStatus =
+          itemMap['active_status'] ??
+          itemMap['status'] ??
+          itemMap['Status'] ??
+          itemMap['is_active'] ??
+          itemMap['mapping_status'];
+    } else {
+      id = itemOrId;
+      rawStatus = currentStatus;
+      final found = _mappingList.firstWhere(
+        (e) => e['id']?.toString() == id?.toString(),
+        orElse: () => null,
+      );
+      if (found is Map) itemMap = Map<String, dynamic>.from(found);
+    }
+
+    final bool currentlyActive = _isItemActive(
+      itemMap.isNotEmpty ? itemMap : {'status': rawStatus},
+    );
+    final int newStatus = currentlyActive ? 1 : 0;
+
+    // Optimistic UI update
+    setState(() {
+      final idx = _mappingList.indexWhere(
+        (e) => (e['id'] ?? e['mapping_id'])?.toString() == id?.toString(),
+      );
+      if (idx != -1) {
+        _mappingList[idx] = Map<String, dynamic>.from(_mappingList[idx])
+          ..['status'] = newStatus
+          ..['active_status'] = newStatus;
+      }
+      if (itemOrId is Map) {
+        itemOrId['status'] = newStatus;
+        itemOrId['active_status'] = newStatus;
+      }
+    });
+
+    try {
+      // Preserve all existing row fields in POST payload
+      final Map<String, dynamic> payload = Map<String, dynamic>.from(itemMap);
+      payload["api_key"] = _apiKey;
+      payload["mapping_id"] = id;
+      payload["id"] = id;
+      payload["status"] = newStatus;
+
+      final res = await http.post(
+        Uri.parse('$_base/mappingStatusUpdateview'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      if (res.statusCode == 200) {
+        if (!mounted) return;
+        _fetchMappings();
+      } else {
+        if (!mounted) return;
+        _fetchMappings();
+      }
+    } catch (e) {
+      debugPrint('Status toggle error: $e');
+      if (mounted) _fetchMappings();
+    }
+  }
+
   // ──────────────────────────── POPUP DIALOG ────────────────────────────────
 
   void _showMappingDialog() {
@@ -425,79 +535,27 @@ class _MappingViewState extends State<MappingView> {
       icon: _editingId == null
           ? Icons.add_link_rounded
           : Icons.edit_note_rounded,
-      width: isMobile
-          ? MediaQuery.of(context).size.width * 0.8
-          : MediaQuery.of(context).size.width * 0.6,
+      width: isMobile ? MediaQuery.of(context).size.width * 0.95 : 550,
       builder: (context, setDialogState) {
-        return Form(
-          key: _formKey,
-          autovalidateMode: AutovalidateMode.disabled,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSectionHeader("DEVICE INFORMATION"),
-                isMobile
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _dropsLoading
-                              ? const Center(
-                                  child: SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                )
-                              : _buildDropdownField(
-                                  hint: "Select Device Code",
-                                  value: _selDeviceId,
-                                  items: _deviceList
-                                      .map(
-                                        (d) => SearchableDropdownItem<String>(
-                                          value: d['id'].toString(),
-                                          label:
-                                              d['device_code']?.toString() ??
-                                              d['id'].toString(),
-                                        ),
-                                      )
-                                      .toList(),
-                                  validator: (v) => (v == null || v.isEmpty)
-                                      ? 'Please select the Device Code'
-                                      : null,
-                                  onChanged: (v) {
-                                    final dev = _deviceList.firstWhere(
-                                      (d) => d['id'].toString() == v,
-                                      orElse: () => <String, dynamic>{},
-                                    );
-                                    if ((dev as Map).isNotEmpty) {
-                                      _devNameCtrl.text =
-                                          dev['device_name']?.toString() ?? '';
-                                      _devModelCtrl.text =
-                                          dev['device_model']?.toString() ?? '';
-                                    }
-                                    setDialogState(() => _selDeviceId = v);
-                                    setState(() => _selDeviceId = v);
-                                  },
-                                ),
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            "Device Name",
-                            _devNameCtrl,
-                            readOnly: false,
-                            validator: (v) => (v == null || v.isEmpty)
-                                ? 'Please enter the Device Name'
-                                : null,
-                          ),
-                        ],
-                      )
-                    : Row(
-                        children: [
-                          Expanded(
-                            child: _dropsLoading
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 550,
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: Form(
+            key: _formKey,
+            autovalidateMode: AutovalidateMode.disabled,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionHeader("DEVICE INFORMATION"),
+                  isMobile
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _dropsLoading
                                 ? const Center(
                                     child: SizedBox(
                                       height: 20,
@@ -540,10 +598,8 @@ class _MappingViewState extends State<MappingView> {
                                       setState(() => _selDeviceId = v);
                                     },
                                   ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildTextField(
+                            const SizedBox(height: 16),
+                            _buildTextField(
                               "Device Name",
                               _devNameCtrl,
                               readOnly: false,
@@ -551,122 +607,184 @@ class _MappingViewState extends State<MappingView> {
                                   ? 'Please enter the Device Name'
                                   : null,
                             ),
-                          ),
-                        ],
-                      ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  "Device Model",
-                  _devModelCtrl,
-                  readOnly: false,
-                  validator: (v) => (v == null || v.isEmpty)
-                      ? 'Please enter the Device Model'
-                      : null,
-                ),
-                const SizedBox(height: 32),
-                _buildSectionHeader("LOCATION ASSIGNMENT"),
-                _dropsLoading
-                    ? const Center(
-                        child: SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : _buildDropdownField(
-                        hint: "Select Location Name",
-                        value: _selLocationId,
-                        items: _locationList
-                            .map(
-                              (l) => SearchableDropdownItem<String>(
-                                value: l['id'].toString(),
-                                label:
-                                    l['location_name']?.toString() ??
-                                    l['id'].toString(),
-                              ),
-                            )
-                            .toList(),
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Please select the Location Name'
-                            : null,
-                        onChanged: (v) {
-                          setDialogState(() => _selLocationId = v);
-                          setState(() => _selLocationId = v);
-                        },
-                      ),
-                const SizedBox(height: 32),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        _clearForm();
-                        Navigator.pop(context);
-                      },
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 20,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      child: const Text(
-                        "Cancel",
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: _submitting
-                          ? null
-                          : () async {
-                              if (_formKey.currentState!.validate()) {
-                                Navigator.pop(context);
-                                if (_editingId == null) {
-                                  await _insert();
-                                } else {
-                                  await _update();
-                                }
-                              }
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 32,
-                        ),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      child: _submitting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text(
-                              _editingId == null ? "Submit" : "Update",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 12,
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: _dropsLoading
+                                  ? const Center(
+                                      child: SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    )
+                                  : _buildDropdownField(
+                                      hint: "Select Device Code",
+                                      value: _selDeviceId,
+                                      items: _deviceList
+                                          .map(
+                                            (d) =>
+                                                SearchableDropdownItem<String>(
+                                                  value: d['id'].toString(),
+                                                  label:
+                                                      d['device_code']
+                                                          ?.toString() ??
+                                                      d['id'].toString(),
+                                                ),
+                                          )
+                                          .toList(),
+                                      validator: (v) => (v == null || v.isEmpty)
+                                          ? 'Please select the Device Code'
+                                          : null,
+                                      onChanged: (v) {
+                                        final dev = _deviceList.firstWhere(
+                                          (d) => d['id'].toString() == v,
+                                          orElse: () => <String, dynamic>{},
+                                        );
+                                        if ((dev as Map).isNotEmpty) {
+                                          _devNameCtrl.text =
+                                              dev['device_name']?.toString() ??
+                                              '';
+                                          _devModelCtrl.text =
+                                              dev['device_model']?.toString() ??
+                                              '';
+                                        }
+                                        setDialogState(() => _selDeviceId = v);
+                                        setState(() => _selDeviceId = v);
+                                      },
+                                    ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildTextField(
+                                "Device Name",
+                                _devNameCtrl,
+                                readOnly: false,
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'Please enter the Device Name'
+                                    : null,
                               ),
                             ),
-                    ),
-                  ],
-                ),
-              ],
+                          ],
+                        ),
+                  const SizedBox(height: 16),
+                  _buildTextField(
+                    "Device Model",
+                    _devModelCtrl,
+                    readOnly: false,
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? 'Please enter the Device Model'
+                        : null,
+                  ),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader("LOCATION ASSIGNMENT"),
+                  _dropsLoading
+                      ? const Center(
+                          child: SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : _buildDropdownField(
+                          hint: "Select Location Name",
+                          value: _selLocationId,
+                          items: _locationList
+                              .map(
+                                (l) => SearchableDropdownItem<String>(
+                                  value: l['id'].toString(),
+                                  label:
+                                      l['location_name']?.toString() ??
+                                      l['id'].toString(),
+                                ),
+                              )
+                              .toList(),
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Please select the Location Name'
+                              : null,
+                          onChanged: (v) {
+                            setDialogState(() => _selLocationId = v);
+                            setState(() => _selLocationId = v);
+                          },
+                        ),
+                  const SizedBox(height: 32),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          _clearForm();
+                          Navigator.pop(context);
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 20,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        child: const Text(
+                          "Cancel",
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: _submitting
+                            ? null
+                            : () async {
+                                if (_formKey.currentState!.validate()) {
+                                  Navigator.pop(context);
+                                  if (_editingId == null) {
+                                    await _insert();
+                                  } else {
+                                    await _update();
+                                  }
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F172A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 32,
+                          ),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        child: _submitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(
+                                _editingId == null ? "Submit" : "Update",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 12,
+                                ),
+                              ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -829,7 +947,7 @@ class _MappingViewState extends State<MappingView> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 600;
+                  final isNarrow = constraints.maxWidth <= 1100;
                   final heading = const AnimatedHeading(
                     text: "Device Mapping",
                     style: TextStyle(
@@ -1299,7 +1417,7 @@ class _MappingViewState extends State<MappingView> {
   Widget _buildTableCard() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final isNarrow = constraints.maxWidth <= 1100;
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1506,405 +1624,444 @@ class _MappingViewState extends State<MappingView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double minTableWidth = constraints.maxWidth > 1250
+        final double minTableWidth = constraints.maxWidth > 1100
             ? constraints.maxWidth
-            : 1250;
+            : 1100.0;
 
-        return Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade200, width: 1.0),
-            borderRadius: BorderRadius.circular(8),
+        return ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
           ),
-          clipBehavior: Clip.antiAlias,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: minTableWidth,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                    // Table Header Row
-                    Container(
-                      height: 45,
+          child: Scrollbar(
+            controller: _hScroll,
+            thumbVisibility: true,
+            thickness: 8.0,
+            trackVisibility: true,
+            interactive: true,
+            child: SingleChildScrollView(
+              controller: _hScroll,
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: minTableWidth),
+                child: Scrollbar(
+                  controller: _vScroll,
+                  thumbVisibility: true,
+                  thickness: 8.0,
+                  trackVisibility: true,
+                  interactive: true,
+                  child: SingleChildScrollView(
+                    controller: _vScroll,
+                    scrollDirection: Axis.vertical,
+                    child: Container(
+                      width: minTableWidth,
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: Colors.grey.shade200,
-                            width: 1.0,
-                          ),
+                        border: Border.all(
+                          color: Colors.grey.shade200,
+                          width: 1.0,
                         ),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.start,
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Expanded(
-                            flex: 2,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8.0,
-                                ),
-                                child: _buildHeaderCell('S.NO', colIndex: 0),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 4,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4.0,
-                                ),
-                                child: _buildHeaderCell(
-                                  'DEVICE CODE',
-                                  colIndex: 1,
+                          // Table Header Row
+                          Container(
+                            height: 45,
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.grey.shade200,
+                                  width: 1.0,
                                 ),
                               ),
                             ),
-                          ),
-                          Expanded(
-                            flex: 4,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4.0,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8.0,
+                                      ),
+                                      child: _buildHeaderCell(
+                                        'S.NO',
+                                        colIndex: 0,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                                child: _buildHeaderCell(
-                                  'DEVICE NAME',
-                                  colIndex: 2,
+                                Expanded(
+                                  flex: 4,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4.0,
+                                      ),
+                                      child: _buildHeaderCell(
+                                        'DEVICE CODE',
+                                        colIndex: 1,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                Expanded(
+                                  flex: 4,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4.0,
+                                      ),
+                                      child: _buildHeaderCell(
+                                        'DEVICE NAME',
+                                        colIndex: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4.0,
+                                      ),
+                                      child: _buildHeaderCell(
+                                        'DEVICE MODEL',
+                                        colIndex: 3,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 4,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4.0,
+                                      ),
+                                      child: _buildHeaderCell(
+                                        'LOCATION',
+                                        colIndex: 4,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4.0,
+                                      ),
+                                      child: _buildHeaderCell(
+                                        'FLOOR',
+                                        colIndex: 5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 4,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4.0,
+                                      ),
+                                      child: _buildHeaderCell(
+                                        'SUB LOCATION',
+                                        colIndex: 6,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Center(
+                                    child: const Text(
+                                      'EDIT',
+                                      style: TextStyle(
+                                        color: Color.fromRGBO(33, 150, 243, 1),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Center(
+                                    child: const Text(
+                                      'ACTION',
+                                      style: TextStyle(
+                                        color: Color.fromRGBO(33, 150, 243, 1),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          Expanded(
-                            flex: 3,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4.0,
-                                ),
-                                child: _buildHeaderCell(
-                                  'DEVICE MODEL',
-                                  colIndex: 3,
-                                ),
+                          // Data Rows
+                          if (rows.isEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 36.0,
                               ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 4,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4.0,
-                                ),
-                                child: _buildHeaderCell(
-                                  'LOCATION',
-                                  colIndex: 4,
-                                ),
+                              alignment: Alignment.center,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.search_off_rounded,
+                                    size: 36,
+                                    color: Colors.blue.shade200,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "NO MATCHING MAPPINGS FOUND",
+                                    style: TextStyle(
+                                      color: Colors.blue.shade900,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    "Try a different search term",
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4.0,
+                            )
+                          else
+                            ...List.generate(rows.length, (i) {
+                              final item = rows[i];
+                              final sno =
+                                  (_page - 1) * (int.tryParse(_entries) ?? 10) +
+                                  i +
+                                  1;
+                              return Container(
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: Colors.grey.shade200,
+                                      width: 1.0,
+                                    ),
+                                  ),
                                 ),
-                                child: _buildHeaderCell('FLOOR', colIndex: 5),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 4,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4.0,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8.0,
+                                          ),
+                                          child: Text(
+                                            '$sno',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black87,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 4,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4.0,
+                                          ),
+                                          child: Text(
+                                            item['device_code']?.toString() ??
+                                                '-',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black87,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 4,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4.0,
+                                          ),
+                                          child: Text(
+                                            item['device_name']?.toString() ??
+                                                '-',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black87,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4.0,
+                                          ),
+                                          child: Text(
+                                            item['device_model']?.toString() ??
+                                                '-',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black87,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 4,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4.0,
+                                          ),
+                                          child: Text(
+                                            item['location_name']?.toString() ??
+                                                '-',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black87,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4.0,
+                                          ),
+                                          child: Text(
+                                            item['floor']?.toString() ?? '-',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black87,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 4,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4.0,
+                                          ),
+                                          child: Text(
+                                            item['sublocation']?.toString() ??
+                                                '-',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black87,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Center(
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.edit,
+                                            color: Colors.blue,
+                                            size: 18,
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () =>
+                                              _loadForEdit(item['id']),
+                                          tooltip: 'Edit',
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Center(
+                                        child: Transform.scale(
+                                          scale: 0.7,
+                                          child: Switch(
+                                            value: _isItemActive(item),
+                                            activeColor: Colors.green,
+                                            onChanged: (v) =>
+                                                toggleMappingStatus(item),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                child: _buildHeaderCell(
-                                  'SUB LOCATION',
-                                  colIndex: 6,
-                                ),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Center(
-                              child: const Text(
-                                'EDIT',
-                                style: TextStyle(
-                                  color: Color.fromRGBO(33, 150, 243, 1),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Center(
-                              child: const Text(
-                                'DELETE',
-                                style: TextStyle(
-                                  color: Color.fromRGBO(33, 150, 243, 1),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                          ),
+                              );
+                            }),
                         ],
                       ),
                     ),
-                    // Data Rows
-                    if (rows.isEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 36.0),
-                        alignment: Alignment.center,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.search_off_rounded,
-                              size: 36,
-                              color: Colors.blue.shade200,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              "NO MATCHING MAPPINGS FOUND",
-                              style: TextStyle(
-                                color: Colors.blue.shade900,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              "Try a different search term",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      ...List.generate(rows.length, (i) {
-                        final item = rows[i];
-                        final sno =
-                            (_page - 1) * (int.tryParse(_entries) ?? 10) +
-                            i +
-                            1;
-                        return Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border(
-                              bottom: BorderSide(
-                                color: Colors.grey.shade200,
-                                width: 1.0,
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                flex: 2,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8.0,
-                                    ),
-                                    child: Text(
-                                      '$sno',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 4,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4.0,
-                                    ),
-                                    child: Text(
-                                      item['device_code']?.toString() ?? '-',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 4,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4.0,
-                                    ),
-                                    child: Text(
-                                      item['device_name']?.toString() ?? '-',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 3,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4.0,
-                                    ),
-                                    child: Text(
-                                      item['device_model']?.toString() ?? '-',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 4,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4.0,
-                                    ),
-                                    child: Text(
-                                      item['location_name']?.toString() ?? '-',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4.0,
-                                    ),
-                                    child: Text(
-                                      item['floor']?.toString() ?? '-',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 4,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4.0,
-                                    ),
-                                    child: Text(
-                                      item['sublocation']?.toString() ?? '-',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Center(
-                                  child: IconButton(
-                                    icon: const Icon(
-                                      Icons.edit,
-                                      color: Colors.blue,
-                                      size: 18,
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    onPressed: () => _loadForEdit(item['id']),
-                                    tooltip: 'Edit',
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Center(
-                                  child: IconButton(
-                                    icon: const Icon(
-                                      Icons.delete,
-                                      color: Colors.red,
-                                      size: 18,
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    onPressed: () => _delete(item['id']),
-                                    tooltip: 'Delete',
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                  ],
+                  ),
                 ),
               ),
             ),
+          ),
         );
       },
     );

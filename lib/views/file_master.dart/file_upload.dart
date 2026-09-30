@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -99,6 +100,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   final TextEditingController _descController = TextEditingController();
   final GlobalKey<FormState> _deptFormKey = GlobalKey<FormState>();
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _hScroll = ScrollController();
   final TextEditingController _fromDateController = TextEditingController();
   final TextEditingController _toDateController = TextEditingController();
   final TextEditingController _newDeptController = TextEditingController();
@@ -122,6 +124,7 @@ class _FileUploadViewState extends State<FileUploadView> {
     _nameController.dispose();
     _descController.dispose();
     _searchController.dispose();
+    _hScroll.dispose();
     _fromDateController.dispose();
     _toDateController.dispose();
     _newDeptController.dispose();
@@ -447,7 +450,8 @@ class _FileUploadViewState extends State<FileUploadView> {
       );
 
       final bool isStatusCodeOk =
-          streamedResponse.statusCode == 200 || streamedResponse.statusCode == 201;
+          streamedResponse.statusCode == 200 ||
+          streamedResponse.statusCode == 201;
 
       if (isStatusCodeOk) {
         Map<String, dynamic> body = {};
@@ -459,20 +463,23 @@ class _FileUploadViewState extends State<FileUploadView> {
           return false;
         }
 
-        final String topStatus = (body['status']?.toString() ?? '').toLowerCase();
+        final String topStatus = (body['status']?.toString() ?? '')
+            .toLowerCase();
         final dynamic dataObj = body['data'];
         final String dataStatus = (dataObj is Map)
             ? (dataObj['status']?.toString() ?? '').toLowerCase()
             : '';
 
-        final bool isStatusNotFalse = body['status'] != false &&
+        final bool isStatusNotFalse =
+            body['status'] != false &&
             body['success'] != false &&
             topStatus != 'false' &&
             topStatus != 'error' &&
             dataStatus != 'false' &&
             dataStatus != 'error';
 
-        final bool isSuccess = isStatusNotFalse &&
+        final bool isSuccess =
+            isStatusNotFalse &&
             (topStatus == 'success' ||
                 topStatus == 'uploaded' ||
                 topStatus == '1' ||
@@ -489,7 +496,8 @@ class _FileUploadViewState extends State<FileUploadView> {
           _showSnackBar('✅ $mediaType uploaded successfully!', isSuccess: true);
           return true;
         } else {
-          final errMsg = body['Message']?.toString() ??
+          final errMsg =
+              body['Message']?.toString() ??
               body['message']?.toString() ??
               (dataObj is Map ? dataObj['message']?.toString() : null) ??
               'Upload failed according to server response.';
@@ -617,13 +625,41 @@ class _FileUploadViewState extends State<FileUploadView> {
   // ──────────────────────────────────────────────────────────────────────────
   // API 5: STATUS TOGGLE (POST /fileStatusUpdateview)
   // ──────────────────────────────────────────────────────────────────────────
-  Future<void> toggleFileStatus(dynamic id, dynamic currentStatus) async {
+  Future<void> toggleFileStatus(
+    dynamic itemOrId, [
+    dynamic currentStatus,
+  ]) async {
+    Map<String, dynamic> itemMap = {};
+    dynamic id;
+    dynamic rawStatus;
+
+    if (itemOrId is Map) {
+      itemMap = Map<String, dynamic>.from(itemOrId);
+      id = itemMap['id'];
+      rawStatus =
+          itemMap['file_status'] ??
+          itemMap['status'] ??
+          itemMap['Status'] ??
+          itemMap['active_status'];
+    } else {
+      id = itemOrId;
+      rawStatus = currentStatus;
+      final found = fileList.firstWhere(
+        (e) => e['id']?.toString() == id?.toString(),
+        orElse: () => null,
+      );
+      if (found is Map) itemMap = Map<String, dynamic>.from(found);
+    }
+
     final String rowKey = id?.toString() ?? '';
 
     // Guard: ignore rapid double-taps while API call is in-flight
     if (_pendingToggle.contains(rowKey)) return;
 
-    final int newStatus = (currentStatus == 1 || currentStatus == "1") ? 0 : 1;
+    final bool currentlyActive = _isItemActive(
+      itemMap.isNotEmpty ? itemMap : {'status': rawStatus},
+    );
+    final int newStatus = currentlyActive ? 1 : 0;
     final idx = fileList.indexWhere((e) => e['id']?.toString() == rowKey);
 
     // ── STEP 1: Optimistic UI update — flip the switch immediately ──
@@ -631,7 +667,6 @@ class _FileUploadViewState extends State<FileUploadView> {
       setState(() {
         _pendingToggle.add(rowKey);
         if (idx != -1) {
-          // Update both field names the server might use
           fileList[idx] = Map<String, dynamic>.from(fileList[idx])
             ..['status'] = newStatus
             ..['file_status'] = newStatus;
@@ -640,55 +675,82 @@ class _FileUploadViewState extends State<FileUploadView> {
     }
 
     try {
-      // ── STEP 2: Hit the server ──
+      // ── STEP 2: Hit the server — preserve all existing row fields in POST payload ──
+      final Map<String, dynamic> payload = Map<String, dynamic>.from(itemMap);
+      payload["api_key"] = _apiKey;
+      payload["id"] = id;
+      payload["status"] = newStatus;
+
       final response = await http
           .post(
             Uri.parse('$_baseUrl/fileStatusUpdateview'),
             headers: {"Content-Type": "application/json"},
-            body: jsonEncode({
-              "api_key": _apiKey,
-              "id": id,
-              "status": newStatus,
-            }),
+            body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        // ── STEP 3a: Success — keep optimistic state, show feedback ──
-        // Do NOT call fetchFilesFromServer() here: that round-trip can return
-        // stale cached data and overwrite our optimistic state (race condition).
         _showSnackBar(
-          newStatus == 1
+          newStatus == 0
               ? "✅ File activated — now live on all displays."
               : "⏸ File deactivated — removed from live stream.",
         );
       } else {
-        // ── STEP 3b: Server rejected — rollback ──
+        // Rollback
         debugPrint('toggleFileStatus: server returned ${response.statusCode}');
         if (idx != -1 && mounted) {
           setState(() {
             fileList[idx] = Map<String, dynamic>.from(fileList[idx])
-              ..['status'] = currentStatus
-              ..['file_status'] = currentStatus;
+              ..['status'] = rawStatus
+              ..['file_status'] = rawStatus;
           });
         }
         _showSnackBar("Status update failed (${response.statusCode}).");
       }
     } catch (e) {
-      // ── STEP 3c: Network error — rollback ──
+      // Rollback
       debugPrint('toggleFileStatus error: $e');
       if (idx != -1 && mounted) {
         setState(() {
           fileList[idx] = Map<String, dynamic>.from(fileList[idx])
-            ..['status'] = currentStatus
-            ..['file_status'] = currentStatus;
+            ..['status'] = rawStatus
+            ..['file_status'] = rawStatus;
         });
       }
       _showSnackBar("Network error — status not changed.");
     } finally {
-      // ── STEP 4: Always release the pending lock ──
       if (mounted) setState(() => _pendingToggle.remove(rowKey));
     }
+  }
+
+  bool _isItemActive(dynamic data) {
+    if (data == null) return true;
+    final raw = (data is Map)
+        ? (data['active_status'] ??
+              data['status'] ??
+              data['Status'] ??
+              data['is_active'] ??
+              data['file_status'])
+        : data;
+    if (raw == null) return true;
+    if (raw == 0 || raw == false) return true;
+    if (raw == 1 || raw == true) return false;
+    final str = raw.toString().trim().toLowerCase();
+    if (str == '0' ||
+        str == 'active' ||
+        str == 'true' ||
+        str == 'enabled' ||
+        str == 'on')
+      return true;
+    if (str == '1' ||
+        str == 'inactive' ||
+        str == 'false' ||
+        str == 'disabled' ||
+        str == 'off')
+      return false;
+    final intVal = int.tryParse(str);
+    if (intVal != null) return intVal == 0;
+    return true;
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -990,7 +1052,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   void _showUploadDialog() {
     _formKey = GlobalKey<FormState>();
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth <= 1100;
     final isTablet = screenWidth < 900 && screenWidth >= 600;
     final isNarrow = isMobile || isTablet;
 
@@ -1173,7 +1235,7 @@ class _FileUploadViewState extends State<FileUploadView> {
 
   Widget _buildFormCardInDialog(StateSetter setDialogState) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth <= 1100;
     final isTablet = screenWidth < 900 && screenWidth >= 600;
     final isNarrow = isMobile || isTablet;
 
@@ -1223,11 +1285,7 @@ class _FileUploadViewState extends State<FileUploadView> {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(6),
                     onTap: _showAddDepartmentPopup,
-                    child: const Icon(
-                      Icons.add,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                    child: const Icon(Icons.add, color: Colors.white, size: 20),
                   ),
                 ),
               ),
@@ -1292,9 +1350,8 @@ class _FileUploadViewState extends State<FileUploadView> {
           "Enter file name",
           _nameController,
           onChanged: (val) => setDialogState(() {}),
-          validator: (v) => (v == null || v.isEmpty)
-              ? 'Please enter the file name'
-              : null,
+          validator: (v) =>
+              (v == null || v.isEmpty) ? 'Please enter the file name' : null,
         ),
         if (_nameController.text.trim().isNotEmpty &&
             fileList.any(
@@ -1318,9 +1375,8 @@ class _FileUploadViewState extends State<FileUploadView> {
         _buildTextField(
           "Enter the description",
           _descController,
-          validator: (v) => (v == null || v.isEmpty)
-              ? 'Please enter the description'
-              : null,
+          validator: (v) =>
+              (v == null || v.isEmpty) ? 'Please enter the description' : null,
         ),
       ],
     );
@@ -1334,10 +1390,7 @@ class _FileUploadViewState extends State<FileUploadView> {
               child: TextFormField(
                 controller: _fromDateController,
                 readOnly: true,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF1E293B),
-                ),
+                style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
                 decoration: InputDecoration(
                   hintText: "From Date",
                   hintStyle: const TextStyle(
@@ -1393,10 +1446,7 @@ class _FileUploadViewState extends State<FileUploadView> {
               child: TextFormField(
                 controller: _toDateController,
                 readOnly: true,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF1E293B),
-                ),
+                style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
                 decoration: InputDecoration(
                   hintText: "To Date",
                   hintStyle: const TextStyle(
@@ -1499,9 +1549,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             ),
             if (!isNarrow && _selectedType == "Short Term") ...[
               const SizedBox(width: 12),
-              Expanded(
-                child: buildShortTermDateFields(),
-              ),
+              Expanded(child: buildShortTermDateFields()),
             ],
           ],
         ),
@@ -1642,7 +1690,7 @@ class _FileUploadViewState extends State<FileUploadView> {
     // ScaffoldMessenger with a stable key ensures snackbars can be shown
     // safely from async callbacks even after dialogs have been popped.
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth <= 1100;
 
     final heading = const AnimatedHeading(
       text: "Uploaded Files List",
@@ -1692,6 +1740,7 @@ class _FileUploadViewState extends State<FileUploadView> {
         child: Padding(
           padding: EdgeInsets.all(isMobile ? 10.0 : 16.0),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               // ── Responsive heading row ──
               Align(
@@ -1699,10 +1748,7 @@ class _FileUploadViewState extends State<FileUploadView> {
                 child: heading,
               ),
               const SizedBox(height: 16),
-              _buildTableCard(
-                isMobile: isMobile,
-                uploadBtn: uploadBtn,
-              ),
+              _buildTableCard(isMobile: isMobile, uploadBtn: uploadBtn),
             ],
           ),
         ),
@@ -1787,28 +1833,46 @@ class _FileUploadViewState extends State<FileUploadView> {
         final double minWidth = constraints.maxWidth > 1200
             ? constraints.maxWidth
             : 1200;
+        final double newMinWidth = constraints.maxWidth > 1100
+            ? constraints.maxWidth
+            : 1100.0;
         return SelectionArea(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: minWidth),
-              child: DataTable(
-                headingRowHeight: 45,
-                dataRowMaxHeight: 116,
-                headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
-                dividerThickness: 0.0,
-                columns: [
-                  _buildCol('ID', 0),
-                  _buildCol('PREVIEW', -1),
-                  _buildCol('FILE NAME', 2),
-                  _buildCol('DESCRIPTION', 3),
-                  _buildCol('TYPE', 4),
-                  _buildCol('VALID FROM', 5),
-                  _buildCol('VALID UPTO', 6),
-                  _buildCol('STATUS', -1),
-                  _buildCol('DELETE', -1),
-                ],
-                rows: data.map((item) => _getRow(item)).toList(),
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+            ),
+            child: Scrollbar(
+              controller: _hScroll,
+              thumbVisibility: true,
+              thickness: 8.0,
+              trackVisibility: true,
+              interactive: true,
+              child: SingleChildScrollView(
+                controller: _hScroll,
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: newMinWidth),
+                  child: DataTable(
+                    headingRowHeight: 45,
+                    dataRowMaxHeight: 116,
+                    headingRowColor: WidgetStateProperty.all(
+                      Colors.blue.shade50,
+                    ),
+                    dividerThickness: 0.0,
+                    columns: [
+                      _buildCol('ID', 0),
+                      _buildCol('PREVIEW', -1),
+                      _buildCol('FILE NAME', 2),
+                      _buildCol('DESCRIPTION', 3),
+                      _buildCol('TYPE', 4),
+                      _buildCol('VALID FROM', 5),
+                      _buildCol('VALID UPTO', 6),
+                      _buildCol('STATUS', -1),
+                      _buildCol('DELETE', -1),
+                    ],
+                    rows: data.map((item) => _getRow(item)).toList(),
+                  ),
+                ),
               ),
             ),
           ),
@@ -2025,7 +2089,7 @@ class _FileUploadViewState extends State<FileUploadView> {
 
     // ── Normal row ──────────────────────────────────────────────────────────
     final String? fileName = item['file_name']?.toString().trim();
-    // Image URL: https://display.sriher.com/uploads/{file_name}
+    // Image URL: ${baseUrl}/uploads/{file_name}
     final String imageUrl = '$_baseUrl/uploads/$fileName';
 
     return DataRow(
@@ -2062,7 +2126,11 @@ class _FileUploadViewState extends State<FileUploadView> {
                                 'Video Preview',
                           )
                         // ── Image: CORS-safe thumbnail
-                        : WebCompatImage(url: imageUrl, fit: BoxFit.cover)
+                        : WebCompatImage(
+                            url: imageUrl,
+                            fit: BoxFit.cover,
+                            showFullScreenIcon: true,
+                          )
                   : const Icon(
                       Icons.image_not_supported_rounded,
                       size: 22,
@@ -2125,11 +2193,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             builder: (context) {
               final String rowKey = item['id']?.toString() ?? '';
               final bool isPending = _pendingToggle.contains(rowKey);
-              final bool isActive =
-                  item['file_status'] == 1 ||
-                  item['file_status'] == "1" ||
-                  item['status'] == 1 ||
-                  item['status'] == "1";
+              final bool isActive = _isItemActive(item);
               return SizedBox(
                 width: 46,
                 height: 28,
@@ -2154,10 +2218,7 @@ class _FileUploadViewState extends State<FileUploadView> {
                           activeColor: Colors.green,
                           inactiveThumbColor: Colors.grey.shade400,
                           inactiveTrackColor: Colors.grey.shade300,
-                          onChanged: (_) => toggleFileStatus(
-                            item['id'],
-                            item['file_status'] ?? item['status'],
-                          ),
+                          onChanged: (_) => toggleFileStatus(item),
                         ),
                       ),
               );
@@ -2285,11 +2346,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             width: double.infinity,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                showingText,
-                const SizedBox(height: 10),
-                pagination,
-              ],
+              children: [showingText, const SizedBox(height: 10), pagination],
             ),
           )
         : Row(
@@ -2466,9 +2523,12 @@ class _FileUploadViewState extends State<FileUploadView> {
                 vertical: 8,
               ),
             ),
-            items: ["10", "25", "50", "100"]
-                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                .toList(),
+            items: [
+              "10",
+              "25",
+              "50",
+              "100",
+            ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
 
             onChanged: (v) {
               if (v != null) {
@@ -2507,10 +2567,7 @@ class _FileUploadViewState extends State<FileUploadView> {
           style: const TextStyle(fontSize: 12, color: Colors.black87),
           decoration: InputDecoration(
             hintText: "Search files...",
-            hintStyle: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF94A3B8),
-            ),
+            hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
             prefixIcon: const Icon(Icons.search, size: 16),
             isDense: true,
             filled: true,
@@ -2565,8 +2622,6 @@ class _FileUploadViewState extends State<FileUploadView> {
           );
   }
 
-
-
   Widget _buildDateField(
     String label,
     TextEditingController controller,
@@ -2615,7 +2670,7 @@ class _FileUploadViewState extends State<FileUploadView> {
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
-              vertical: 10,     
+              vertical: 10,
             ),
             helperText: ' ', // Reserve space so errors don't cause layout jump
           ),

@@ -167,8 +167,6 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
     }
   }
 
-
-
   void _showSnackBar(String msg) => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(msg),
@@ -182,7 +180,8 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 950;
+    final isMobile = screenWidth <= 1100;
+    final isPhone = screenWidth < 600;
 
     return SelectionArea(
       child: Padding(
@@ -223,71 +222,145 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
                         ),
                       ),
                       const SizedBox(height: 32),
-                      _buildDropdown(
-                        label: "Device Name",
-                        hint: "Select Device",
-                        value: selectedDeviceId,
-                        items: deviceList,
-                        onChanged: (val) {
-                          setState(() {
-                            selectedDeviceId = val;
-                            selectedScheduleId = null;
-                            scheduleList = [];
-                            assignedList = [];
-                          });
-                          if (val != null) {
-                            _fetchSchedules(val);
-                            _fetchAssignedSchedules(val);
-                            _controller.forward(from: 0.0);
-                          } else {
-                            _fetchSchedules(null);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      _buildDropdown(
-                        label: "Schedule Name",
-                        hint: "Select Schedule",
-                        value: selectedScheduleId,
-                        items: scheduleList,
-                        onChanged: (val) {
-                          setState(() => selectedScheduleId = val);
-                          if (val != null) {
-                            _controller.forward(from: 0.0);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      Center(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade600,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 40,
-                              vertical: 18,
+                      if (isPhone) ...[
+                        _buildDropdown(
+                          label: "Device Name",
+                          hint: "Select Device",
+                          value: selectedDeviceId,
+                          items: deviceList,
+                          onChanged: (val) {
+                            setState(() {
+                              selectedDeviceId = val;
+                              selectedScheduleId = null;
+                              scheduleList = [];
+                              assignedList = [];
+                            });
+                            if (val != null) {
+                              _fetchSchedules(val);
+                              _fetchAssignedSchedules(val);
+                              _controller.forward(from: 0.0);
+                            } else {
+                              _fetchSchedules(null);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        _buildDropdown(
+                          label: "Schedule Name",
+                          hint: "Select Schedule",
+                          value: selectedScheduleId,
+                          items: scheduleList,
+                          onChanged: (val) {
+                            setState(() => selectedScheduleId = val);
+                            if (val != null) {
+                              _controller.forward(from: 0.0);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 24),
+                        Center(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 40,
+                                vertical: 18,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 3,
+                              disabledBackgroundColor: Colors.grey.shade200,
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 3,
-                            disabledBackgroundColor: Colors.grey.shade200,
-                          ),
-                          onPressed:
-                              (selectedDeviceId != null &&
-                                  selectedScheduleId != null)
-                              ? _handleAssignmentSubmit
-                              : null,
-                          
-                          label: const Text(
-                            "SUBMIT",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
+                            onPressed:
+                                (selectedDeviceId != null &&
+                                    selectedScheduleId != null)
+                                ? _handleAssignmentSubmit
+                                : null,
+
+                            label: const Text(
+                              "SUBMIT",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ] else ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: _buildDropdown(
+                                label: "Device Name",
+                                hint: "Select Device",
+                                value: selectedDeviceId,
+                                items: deviceList,
+                                onChanged: (val) {
+                                  setState(() {
+                                    selectedDeviceId = val;
+                                    selectedScheduleId = null;
+                                    scheduleList = [];
+                                    assignedList = [];
+                                  });
+                                  if (val != null) {
+                                    _fetchSchedules(val);
+                                    _fetchAssignedSchedules(val);
+                                    _controller.forward(from: 0.0);
+                                  } else {
+                                    _fetchSchedules(null);
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildDropdown(
+                                label: "Schedule Name",
+                                hint: "Select Schedule",
+                                value: selectedScheduleId,
+                                items: scheduleList,
+                                onChanged: (val) {
+                                  setState(() => selectedScheduleId = val);
+                                  if (val != null) {
+                                    _controller.forward(from: 0.0);
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                  vertical: 18,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 3,
+                                disabledBackgroundColor: Colors.grey.shade200,
+                              ),
+                              onPressed:
+                                  (selectedDeviceId != null &&
+                                      selectedScheduleId != null)
+                                  ? _handleAssignmentSubmit
+                                  : null,
+                              label: const Text(
+                                "SUBMIT",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       if (selectedDeviceId != null)
                         FadeTransition(
                           opacity: _opacityAnimation,
@@ -398,9 +471,10 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
     final List<SearchableDropdownItem<int>> dropdownItems = [];
 
     for (var item in items) {
-      final idStr = item['schedule_id']?.toString() ?? item['id']?.toString() ?? '';
+      final idStr =
+          item['schedule_id']?.toString() ?? item['id']?.toString() ?? '';
       final id = int.tryParse(idStr) ?? 0;
-      
+
       final itemLabel =
           item['device_name']?.toString() ??
           item['schedule_name']?.toString() ??
@@ -414,10 +488,9 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
 
       final normLabel = itemLabel.toLowerCase().trim();
       if (seenLabels.add(normLabel) && seenValues.add(id)) {
-        dropdownItems.add(SearchableDropdownItem<int>(
-          value: id,
-          label: itemLabel,
-        ));
+        dropdownItems.add(
+          SearchableDropdownItem<int>(value: id, label: itemLabel),
+        );
       }
     }
 
@@ -459,7 +532,11 @@ class _AssignDeviceViewState extends State<AssignDeviceView>
           ),
           child: Row(
             children: [
-              Icon(Icons.display_settings, size: 20, color: Colors.blue.shade800),
+              Icon(
+                Icons.display_settings,
+                size: 20,
+                color: Colors.blue.shade800,
+              ),
               const SizedBox(width: 12),
               Text(
                 monthName,

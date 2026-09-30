@@ -1,3 +1,4 @@
+import 'dart:ui';
 import '../../api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -51,6 +52,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
   final TextEditingController _toTimeController = TextEditingController();
   final TextEditingController _newScheduleController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _hScroll = ScrollController();
+  final ScrollController _vScroll = ScrollController();
+  final ScrollController _vScrollRightCol = ScrollController();
 
   /// Filtered template files based on search query
   List<dynamic> get _filteredTemplateFiles {
@@ -138,6 +142,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     _toTimeController.dispose();
     _newScheduleController.dispose();
     _searchController.dispose();
+    _hScroll.dispose();
+    _vScroll.dispose();
+    _vScrollRightCol.dispose();
     _durationPanelController.dispose();
     super.dispose();
   }
@@ -467,7 +474,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       body: SelectionArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 950;
+            final isNarrow = constraints.maxWidth <= 1100;
             return Padding(
               padding: EdgeInsets.all(isNarrow ? 12.0 : 24.0),
               child: isNarrow
@@ -478,12 +485,13 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                           const SizedBox(height: 20),
                           const Divider(),
                           const SizedBox(height: 20),
-                          if (isSelectionComplete) _buildRightColumn(isMobile: true),
+                          if (isSelectionComplete)
+                            _buildRightColumn(isMobile: true),
                         ],
                       ),
                     )
                   : Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Expanded(
                           flex: 6,
@@ -548,82 +556,130 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
     DateTime? selectedFromDate;
     if (_fromDateController.text.isNotEmpty) {
       try {
-        selectedFromDate = DateFormat('yyyy-MM-dd').parse(_fromDateController.text);
+        selectedFromDate = DateFormat(
+          'yyyy-MM-dd',
+        ).parse(_fromDateController.text);
       } catch (_) {}
     }
     DateTime toDateLimitFirstDate = selectedFromDate ?? DateTime(2000);
 
     final columnContent = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (widget.editData != null) ...[
-            Align(
-              alignment: Alignment.topLeft,
-              child: ElevatedButton.icon(
-                onPressed: widget.onBack,
-                icon: const Icon(Icons.arrow_back),
-                label: const Text(
-                  "BACK",
-                  style: TextStyle(
-                    fontSize: 14.0,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.editData != null) ...[
+          Align(
+            alignment: Alignment.topLeft,
+            child: ElevatedButton.icon(
+              onPressed: widget.onBack,
+              icon: const Icon(Icons.arrow_back),
+              label: const Text(
+                "BACK",
+                style: TextStyle(
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey.shade200,
-                  foregroundColor: Colors.black87,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey.shade200,
+                foregroundColor: Colors.black87,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-          ],
+          ),
+          const SizedBox(height: 16),
+        ],
 
-          Container(
-            padding: const EdgeInsets.all(24.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: LayoutBuilder(
-              builder: (context, boxConstraints) {
-                final isNarrowBox = boxConstraints.maxWidth < 600;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Align(
-                      alignment: Alignment.center,
-                      child: Text(
-                        (widget.isExtend ? "EXTEND SCHEDULE" : "SCHEDULE ALLOCATION"),
-                        style: const TextStyle(
-                          fontSize: 14.0,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.blue,
-                          letterSpacing: 1.5,
-                        ),
+        Container(
+          padding: const EdgeInsets.all(24.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 15,
+                offset: const Offset(0, 5),
+              ),
+            ],
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: LayoutBuilder(
+            builder: (context, boxConstraints) {
+              final isNarrowBox = boxConstraints.maxWidth < 600;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Align(
+                    alignment: Alignment.center,
+                    child: Text(
+                      (widget.isExtend
+                          ? "EXTEND SCHEDULE"
+                          : "SCHEDULE ALLOCATION"),
+                      style: const TextStyle(
+                        fontSize: 14.0,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.blue,
+                        letterSpacing: 1.5,
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    isNarrowBox
-                        ? Column(
-                            children: [
-                              _buildDropdown(
+                  ),
+                  const SizedBox(height: 20),
+                  isNarrowBox
+                      ? Column(
+                          children: [
+                            _buildDropdown(
+                              label: "Schedule Name",
+                              hint: "Select Schedule Name",
+                              value: selectedScheduleId,
+                              items: scheduleList,
+                              showAdd: true,
+                              onChanged: (val) {
+                                setState(() {
+                                  selectedScheduleId = val;
+                                  _fromDateController.clear();
+                                  _fromTimeController.clear();
+                                  _toDateController.clear();
+                                  _toTimeController.clear();
+                                  selectAllSlot = false;
+                                  selectedSlotsByDay.clear();
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            _buildDropdown(
+                              label: "Template Name",
+                              hint: "Select Template Name",
+                              value: selectedTemplateId,
+                              items: templateList,
+                              onChanged: (val) {
+                                setState(() {
+                                  selectedTemplateId = val;
+                                  templateFiles = [];
+                                  currentFilePage = 1;
+                                  _fromDateController.clear();
+                                  _fromTimeController.clear();
+                                  _toDateController.clear();
+                                  _toTimeController.clear();
+                                  selectAllSlot = false;
+                                  selectedSlotsByDay.clear();
+                                });
+                                if (val != null) _fetchTemplateFiles(val);
+                              },
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: _buildDropdown(
                                 label: "Schedule Name",
                                 hint: "Select Schedule Name",
                                 value: selectedScheduleId,
@@ -641,8 +697,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                                   });
                                 },
                               ),
-                              const SizedBox(height: 20),
-                              _buildDropdown(
+                            ),
+                            const SizedBox(width: 25),
+                            Expanded(
+                              child: _buildDropdown(
                                 label: "Template Name",
                                 hint: "Select Template Name",
                                 value: selectedTemplateId,
@@ -662,323 +720,292 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                                   if (val != null) _fetchTemplateFiles(val);
                                 },
                               ),
-                            ],
-                          )
-                        : Row(
-                            children: [
-                              Expanded(
-                                child: _buildDropdown(
-                                  label: "Schedule Name",
-                                  hint: "Select Schedule Name",
-                                  value: selectedScheduleId,
-                                  items: scheduleList,
-                                  showAdd: true,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      selectedScheduleId = val;
-                                      _fromDateController.clear();
-                                      _fromTimeController.clear();
-                                      _toDateController.clear();
-                                      _toTimeController.clear();
-                                      selectAllSlot = false;
-                                      selectedSlotsByDay.clear();
-                                    });
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 25),
-                              Expanded(
-                                child: _buildDropdown(
-                                  label: "Template Name",
-                                  hint: "Select Template Name",
-                                  value: selectedTemplateId,
-                                  items: templateList,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      selectedTemplateId = val;
-                                      templateFiles = [];
-                                      currentFilePage = 1;
-                                      _fromDateController.clear();
-                                      _fromTimeController.clear();
-                                      _toDateController.clear();
-                                      _toTimeController.clear();
-                                      selectAllSlot = false;
-                                      selectedSlotsByDay.clear();
-                                    });
-                                    if (val != null) _fetchTemplateFiles(val);
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                    const SizedBox(height: 25),
-                    isNarrowBox
-                        ? Column(
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Expanded(
-                                    child: _buildDateField(
-                                      "From Date",
-                                      _fromDateController,
-                                      enabled: selectedScheduleId != null &&
-                                          selectedTemplateId != null,
-                                      firstDate: DateTime(2000),
-                                      onChanged: () {
-                                        setState(() {
-                                          _fromTimeController.clear();
-                                          _toDateController.clear();
-                                          _toTimeController.clear();
-                                          selectAllSlot = false;
-                                          selectedSlotsByDay.clear();
-                                        });
-                                      },
-                                    ),
+                            ),
+                          ],
+                        ),
+                  const SizedBox(height: 25),
+                  isNarrowBox
+                      ? Column(
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Expanded(
+                                  child: _buildDateField(
+                                    "From Date",
+                                    _fromDateController,
+                                    enabled:
+                                        selectedScheduleId != null &&
+                                        selectedTemplateId != null,
+                                    firstDate: DateTime(2000),
+                                    onChanged: () {
+                                      setState(() {
+                                        _fromTimeController.clear();
+                                        _toDateController.clear();
+                                        _toTimeController.clear();
+                                        selectAllSlot = false;
+                                        selectedSlotsByDay.clear();
+                                      });
+                                    },
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: _buildTimeDropdown(
-                                      "From Time",
-                                      "From Time",
-                                      _fromTimeController,
-                                      enabled: selectedScheduleId != null &&
-                                          selectedTemplateId != null &&
-                                          _fromDateController.text.isNotEmpty,
-                                      onChanged: () {
-                                        setState(() {
-                                          _toDateController.clear();
-                                          _toTimeController.clear();
-                                          selectAllSlot = false;
-                                          selectedSlotsByDay.clear();
-                                        });
-                                      },
-                                    ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildTimeDropdown(
+                                    "From Time",
+                                    "From Time",
+                                    _fromTimeController,
+                                    enabled:
+                                        selectedScheduleId != null &&
+                                        selectedTemplateId != null &&
+                                        _fromDateController.text.isNotEmpty,
+                                    onChanged: () {
+                                      setState(() {
+                                        _toDateController.clear();
+                                        _toTimeController.clear();
+                                        selectAllSlot = false;
+                                        selectedSlotsByDay.clear();
+                                      });
+                                    },
                                   ),
-                                ],
-                              ),
-                              const SizedBox(height: 20),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Expanded(
-                                    child: _buildDateField(
-                                      "To Date",
-                                      _toDateController,
-                                      enabled: selectedScheduleId != null &&
-                                          selectedTemplateId != null &&
-                                          _fromDateController.text.isNotEmpty &&
-                                          _fromTimeController.text.isNotEmpty,
-                                      firstDate: toDateLimitFirstDate,
-                                      onChanged: () {
-                                        setState(() {
-                                          _toTimeController.clear();
-                                          selectAllSlot = false;
-                                          selectedSlotsByDay.clear();
-                                        });
-                                      },
-                                    ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Expanded(
+                                  child: _buildDateField(
+                                    "To Date",
+                                    _toDateController,
+                                    enabled:
+                                        selectedScheduleId != null &&
+                                        selectedTemplateId != null &&
+                                        _fromDateController.text.isNotEmpty &&
+                                        _fromTimeController.text.isNotEmpty,
+                                    firstDate: toDateLimitFirstDate,
+                                    onChanged: () {
+                                      setState(() {
+                                        _toTimeController.clear();
+                                        selectAllSlot = false;
+                                        selectedSlotsByDay.clear();
+                                      });
+                                    },
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: _buildTimeDropdown(
-                                      "To Time",
-                                      "To Time",
-                                      _toTimeController,
-                                      enabled: selectedScheduleId != null &&
-                                          selectedTemplateId != null &&
-                                          _fromDateController.text.isNotEmpty &&
-                                          _fromTimeController.text.isNotEmpty &&
-                                          _toDateController.text.isNotEmpty,
-                                      onChanged: () {
-                                        setState(() {
-                                          selectAllSlot = false;
-                                          selectedSlotsByDay.clear();
-                                          _prepopulateSlots();
-                                        });
-                                      },
-                                    ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildTimeDropdown(
+                                    "To Time",
+                                    "To Time",
+                                    _toTimeController,
+                                    enabled:
+                                        selectedScheduleId != null &&
+                                        selectedTemplateId != null &&
+                                        _fromDateController.text.isNotEmpty &&
+                                        _fromTimeController.text.isNotEmpty &&
+                                        _toDateController.text.isNotEmpty,
+                                    onChanged: () {
+                                      setState(() {
+                                        selectAllSlot = false;
+                                        selectedSlotsByDay.clear();
+                                        _prepopulateSlots();
+                                      });
+                                    },
                                   ),
-                                ],
-                              ),
-                            ],
-                          )
-                        : Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Expanded(
-                                flex: 2,
-                                child: _buildDateField(
-                                  "From Date",
-                                  _fromDateController,
-                                  enabled: selectedScheduleId != null &&
-                                      selectedTemplateId != null,
-                                  firstDate: DateTime(2000),
-                                  onChanged: () {
-                                    setState(() {
-                                      _fromTimeController.clear();
-                                      _toDateController.clear();
-                                      _toTimeController.clear();
-                                      selectAllSlot = false;
-                                      selectedSlotsByDay.clear();
-                                    });
-                                  },
                                 ),
+                              ],
+                            ),
+                          ],
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: _buildDateField(
+                                "From Date",
+                                _fromDateController,
+                                enabled:
+                                    selectedScheduleId != null &&
+                                    selectedTemplateId != null,
+                                firstDate: DateTime(2000),
+                                onChanged: () {
+                                  setState(() {
+                                    _fromTimeController.clear();
+                                    _toDateController.clear();
+                                    _toTimeController.clear();
+                                    selectAllSlot = false;
+                                    selectedSlotsByDay.clear();
+                                  });
+                                },
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                flex: 2,
-                                child: _buildTimeDropdown(
-                                  "From Time",
-                                  "From Time",
-                                  _fromTimeController,
-                                  enabled: selectedScheduleId != null &&
-                                      selectedTemplateId != null &&
-                                      _fromDateController.text.isNotEmpty,
-                                  onChanged: () {
-                                    setState(() {
-                                      _toDateController.clear();
-                                      _toTimeController.clear();
-                                      selectAllSlot = false;
-                                      selectedSlotsByDay.clear();
-                                    });
-                                  },
-                                ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: _buildTimeDropdown(
+                                "From Time",
+                                "From Time",
+                                _fromTimeController,
+                                enabled:
+                                    selectedScheduleId != null &&
+                                    selectedTemplateId != null &&
+                                    _fromDateController.text.isNotEmpty,
+                                onChanged: () {
+                                  setState(() {
+                                    _toDateController.clear();
+                                    _toTimeController.clear();
+                                    selectAllSlot = false;
+                                    selectedSlotsByDay.clear();
+                                  });
+                                },
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                flex: 2,
-                                child: _buildDateField(
-                                  "To Date",
-                                  _toDateController,
-                                  enabled: selectedScheduleId != null &&
-                                      selectedTemplateId != null &&
-                                      _fromDateController.text.isNotEmpty &&
-                                      _fromTimeController.text.isNotEmpty,
-                                  firstDate: toDateLimitFirstDate,
-                                  onChanged: () {
-                                    setState(() {
-                                      _toTimeController.clear();
-                                      selectAllSlot = false;
-                                      selectedSlotsByDay.clear();
-                                    });
-                                  },
-                                ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: _buildDateField(
+                                "To Date",
+                                _toDateController,
+                                enabled:
+                                    selectedScheduleId != null &&
+                                    selectedTemplateId != null &&
+                                    _fromDateController.text.isNotEmpty &&
+                                    _fromTimeController.text.isNotEmpty,
+                                firstDate: toDateLimitFirstDate,
+                                onChanged: () {
+                                  setState(() {
+                                    _toTimeController.clear();
+                                    selectAllSlot = false;
+                                    selectedSlotsByDay.clear();
+                                  });
+                                },
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                flex: 2,
-                                child: _buildTimeDropdown(
-                                  "To Time",
-                                  "To Time",
-                                  _toTimeController,
-                                  enabled: selectedScheduleId != null &&
-                                      selectedTemplateId != null &&
-                                      _fromDateController.text.isNotEmpty &&
-                                      _fromTimeController.text.isNotEmpty &&
-                                      _toDateController.text.isNotEmpty,
-                                  onChanged: () {
-                                    setState(() {
-                                      selectAllSlot = false;
-                                      selectedSlotsByDay.clear();
-                                      _prepopulateSlots();
-                                    });
-                                  },
-                                ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: _buildTimeDropdown(
+                                "To Time",
+                                "To Time",
+                                _toTimeController,
+                                enabled:
+                                    selectedScheduleId != null &&
+                                    selectedTemplateId != null &&
+                                    _fromDateController.text.isNotEmpty &&
+                                    _fromTimeController.text.isNotEmpty &&
+                                    _toDateController.text.isNotEmpty,
+                                onChanged: () {
+                                  setState(() {
+                                    selectAllSlot = false;
+                                    selectedSlotsByDay.clear();
+                                    _prepopulateSlots();
+                                  });
+                                },
                               ),
-                            ],
-                          ),
-                  ],
-                );
-              },
+                            ),
+                          ],
+                        ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (isAllFilled) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: selectAllSlot,
+                  activeColor: Colors.blue,
+                  side: BorderSide(color: Colors.grey.shade400),
+                  onChanged: (val) => setState(() {
+                    selectAllSlot = val!;
+                    if (selectAllSlot) {
+                      try {
+                        DateTime start = DateFormat(
+                          'yyyy-MM-dd',
+                        ).parse(_fromDateController.text);
+                        DateTime end = DateFormat(
+                          'yyyy-MM-dd',
+                        ).parse(_toDateController.text);
+                        if (end.isBefore(start)) end = start;
+                        for (
+                          int i = 0;
+                          i <= end.difference(start).inDays;
+                          i++
+                        ) {
+                          String key = DateFormat(
+                            'yyyy-MM-dd',
+                          ).format(start.add(Duration(days: i)));
+                          selectedSlotsByDay[key] = List.from(slotPairs);
+                        }
+                      } catch (e) {
+                        debugPrint(e.toString());
+                      }
+                    } else {
+                      selectedSlotsByDay.clear();
+                    }
+                  }),
+                ),
+                const Text(
+                  "Select All",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12.0,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 10),
-          if (isAllFilled) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: selectAllSlot,
-                    activeColor: Colors.blue,
-                    side: BorderSide(color: Colors.grey.shade400),
-                    onChanged: (val) => setState(() {
-                      selectAllSlot = val!;
-                      if (selectAllSlot) {
-                        try {
-                          DateTime start = DateFormat(
-                            'yyyy-MM-dd',
-                          ).parse(_fromDateController.text);
-                          DateTime end = DateFormat(
-                            'yyyy-MM-dd',
-                          ).parse(_toDateController.text);
-                          if (end.isBefore(start)) end = start;
-                          for (
-                            int i = 0;
-                            i <= end.difference(start).inDays;
-                            i++
-                          ) {
-                            String key = DateFormat(
-                              'yyyy-MM-dd',
-                            ).format(start.add(Duration(days: i)));
-                            selectedSlotsByDay[key] = List.from(slotPairs);
-                          }
-                        } catch (e) {
-                          debugPrint(e.toString());
-                        }
-                      } else {
-                        selectedSlotsByDay.clear();
-                      }
-                    }),
-                  ),
-                  const Text(
-                    "Select All",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12.0,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            _buildSlotSelectionCard(),
-            const SizedBox(height: 30),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade600,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 18,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  elevation: 3,
+          _buildSlotSelectionCard(),
+          const SizedBox(height: 30),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 40,
+                  vertical: 18,
                 ),
-                onPressed: _handleScheduleSubmit,
-                child: const Text(
-                  "SUBMIT",
-                  style: TextStyle(
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 3,
+              ),
+              onPressed: _handleScheduleSubmit,
+              child: const Text(
+                "SUBMIT",
+                style: TextStyle(
+                  fontSize: 12.0,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
                 ),
               ),
             ),
-          ],
+          ),
         ],
-      );
+      ],
+    );
     if (isMobile) return columnContent;
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: columnContent,
+    return Scrollbar(
+      controller: _vScrollRightCol,
+      thumbVisibility: true,
+      thickness: 8.0,
+      trackVisibility: true,
+      child: SingleChildScrollView(
+        controller: _vScrollRightCol,
+        physics: const BouncingScrollPhysics(),
+        child: columnContent,
+      ),
     );
   }
 
@@ -997,10 +1024,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         ],
         border: Border.all(color: Colors.grey.shade200),
       ),
-      child: ListView(
-        shrinkWrap: true,
-        physics: isMobile ? const NeverScrollableScrollPhysics() : null,
-        padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1015,158 +1040,192 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               ),
             ),
           ),
-           
-          _buildListHeader(),
-         
-          const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (isLoadingFiles) {
-                return const SizedBox(
-                  height: 300,
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
 
-              if (templateFiles.isEmpty) {
-                return const SizedBox(
-                  height: 200,
-                  child: Center(
-                    child: Text(
-                      "No files found for this template",
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 16.0,
-                        fontStyle: FontStyle.italic,
+          _buildListHeader(),
+
+          const SizedBox(height: 16),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (isLoadingFiles) {
+                  return const SizedBox(
+                    height: 300,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                if (templateFiles.isEmpty) {
+                  return const SizedBox(
+                    height: 200,
+                    child: Center(
+                      child: Text(
+                        "No files found for this template",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 16.0,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                if (_filteredTemplateFiles.isEmpty) {
+                  return const SizedBox(
+                    height: 200,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 40,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            "No matching files found",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 16.0,
+                              fontWeight: FontWeight.bold,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                final double newMinWidth = constraints.maxWidth > 1100
+                    ? constraints.maxWidth
+                    : 1100.0;
+                return ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    dragDevices: {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                    },
+                  ),
+                  child: Scrollbar(
+                    controller: _hScroll,
+                    thumbVisibility: true,
+                    thickness: 8.0,
+                    trackVisibility: true,
+                    interactive: true,
+                    child: SingleChildScrollView(
+                      controller: _hScroll,
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: newMinWidth),
+                        child: Scrollbar(
+                          controller: _vScroll,
+                          thumbVisibility: true,
+                          thickness: 8.0,
+                          trackVisibility: true,
+                          interactive: true,
+                          child: SingleChildScrollView(
+                            controller: _vScroll,
+                            scrollDirection: Axis.vertical,
+                            child: DataTable(
+                              columnSpacing: 25,
+                              horizontalMargin: 20,
+                              dataRowMinHeight: 70,
+                              dataRowMaxHeight: 85,
+                              headingRowHeight: 45,
+                              headingRowColor: WidgetStateProperty.all(
+                                Colors.blue.shade50,
+                              ),
+                              columns: [
+                                _buildSortableColumn('PLAY ORDER'),
+                                _buildSortableColumn('FILE'),
+                                _buildSortableColumn('FILE NAME'),
+                                _buildSortableColumn('DURATION'),
+                              ],
+                              rows: _pagedTemplateFiles.map((file) {
+                                final index =
+                                    _filteredTemplateFiles.indexOf(file) + 1;
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Text(
+                                        index.toString(),
+                                        style: const TextStyle(
+                                          fontSize: 12.0,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 8.0,
+                                        ),
+                                        child: Container(
+                                          width: 100,
+                                          height: 65,
+                                          clipBehavior: Clip.antiAlias,
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          child: _buildFilePreview(file),
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        file['user_filename'] ??
+                                            file['file_name'] ??
+                                            '-',
+                                        style: const TextStyle(
+                                          fontSize: 12.0,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade50,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          "${file['duration'] ?? '30'}s",
+                                          style: TextStyle(
+                                            fontSize: 12.0,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 );
-              }
-
-              if (_filteredTemplateFiles.isEmpty) {
-                return const SizedBox(
-                  height: 200,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off_rounded,
-                          size: 40,
-                          color: Colors.grey,
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          "No matching files found",
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 16.0,
-                            fontWeight: FontWeight.bold,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: constraints.maxWidth,
-                  ),
-                  child: DataTable(
-                    columnSpacing: 25,
-                    horizontalMargin: 20,
-                    dataRowMinHeight: 70,
-                    dataRowMaxHeight: 85,
-                    headingRowHeight: 45,
-                    headingRowColor: WidgetStateProperty.all(
-                      Colors.blue.shade50,
-                    ),
-                    columns: [
-                      _buildSortableColumn('PLAY ORDER'),
-                      _buildSortableColumn('FILE'),
-                      _buildSortableColumn('FILE NAME'),
-                      _buildSortableColumn('DURATION'),
-                    ],
-                    rows: _pagedTemplateFiles.map((file) {
-                      final index =
-                          _filteredTemplateFiles.indexOf(file) + 1;
-                      return DataRow(
-                        cells: [
-                          DataCell(
-                            Text(
-                              index.toString(),
-                              style: const TextStyle(
-                                fontSize: 12.0,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                          DataCell(
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 8.0,
-                              ),
-                              child: Container(
-                                width: 50,
-                                height: 65,
-                                clipBehavior: Clip.antiAlias,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                child: _buildFilePreview(file),
-                              ),
-                            ),
-                          ),
-                          DataCell(
-                            Text(
-                              file['user_filename'] ??
-                                  file['file_name'] ??
-                                  '-',
-                              style: const TextStyle(
-                                fontSize: 12.0,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                "${file['duration'] ?? '30'}s",
-                                style: TextStyle(
-                                  fontSize: 12.0,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade900,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
-                  ),
-                ),
-              );
-            },
+              },
+            ),
           ),
-           
+
           _buildPagination(),
         ],
       ),
@@ -1348,7 +1407,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           enabled: enabled,
           style: const TextStyle(fontSize: 13.0, color: Colors.black87),
           decoration: InputDecoration(
-            hintText: 'MM/DD/YYYY',                                                                                                                                   
+            hintText: 'MM/DD/YYYY',
             hintStyle: const TextStyle(color: Colors.black38, fontSize: 13.0),
             filled: true,
             fillColor: Colors.white,
@@ -1380,7 +1439,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   DateTime parsedCurrent = today;
                   if (controller.text.isNotEmpty) {
                     try {
-                      parsedCurrent = DateFormat('yyyy-MM-dd').parse(controller.text);
+                      parsedCurrent = DateFormat(
+                        'yyyy-MM-dd',
+                      ).parse(controller.text);
                     } catch (_) {}
                   }
 
@@ -1414,7 +1475,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
   Widget _buildListHeader() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final isNarrow = constraints.maxWidth <= 1100;
 
         final dropdownButton = SizedBox(
           width: 75,
@@ -1441,16 +1502,22 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                borderSide: const BorderSide(
+                  color: Color(0xFF334155),
+                  width: 1.5,
+                ),
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 8,
                 vertical: 8,
               ),
             ),
-            items: ["10", "25", "50", "100"]
-                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                .toList(),
+            items: [
+              "10",
+              "25",
+              "50",
+              "100",
+            ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
             onChanged: (v) => setState(() {
               entriesValue = v!;
               currentFilePage = 1;
@@ -1486,7 +1553,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         );
 
         final searchBox = SizedBox(
-          width: isNarrow ? constraints.maxWidth * 0.5 : constraints.maxWidth * 0.45,
+          width: isNarrow
+              ? constraints.maxWidth * 0.5
+              : constraints.maxWidth * 0.45,
           height: 38,
           child: TextField(
             controller: _searchController,
@@ -1495,7 +1564,11 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             }),
             style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF64748B)),
+              prefixIcon: const Icon(
+                Icons.search,
+                size: 16,
+                color: Color(0xFF64748B),
+              ),
               hintText: "Search files...",
               hintStyle: const TextStyle(
                 fontSize: 12.0,
@@ -1504,7 +1577,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               isDense: true,
               filled: true,
               fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 8,
+                horizontal: 10,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
                 borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
@@ -1515,7 +1591,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                borderSide: const BorderSide(
+                  color: Color(0xFF334155),
+                  width: 1.5,
+                ),
               ),
             ),
           ),
@@ -1527,15 +1606,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: showEntries,
-                    ),
+                    Align(alignment: Alignment.centerRight, child: showEntries),
                     const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: searchBox,
-                    ),
+                    Align(alignment: Alignment.centerRight, child: searchBox),
                   ],
                 )
               : Row(
@@ -1543,10 +1616,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     showEntries,
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: searchBox,
-                    ),
+                    Align(alignment: Alignment.centerRight, child: searchBox),
                   ],
                 ),
         );
@@ -1588,7 +1658,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth < 600;
+          final isNarrow = constraints.maxWidth <= 1100;
           final paginationText = Text(
             "Showing $start to $end of $total entries",
             style: const TextStyle(
@@ -1626,10 +1696,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               : Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    paginationText,
-                    paginationControls,
-                  ],
+                  children: [paginationText, paginationControls],
                 );
         },
       ),
@@ -1747,8 +1814,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           const Divider(height: 1),
           Expanded(
             child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(bottom: Radius.circular(12)),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(12),
+              ),
               child: ListView.separated(
                 itemCount: days.length,
                 separatorBuilder: (context, index) => const Divider(height: 1),
@@ -1786,12 +1854,12 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             ],
           ),
         ),
-        
+
         Padding(
           padding: const EdgeInsets.all(16),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 600;
+              final isNarrow = constraints.maxWidth <= 1100;
               return GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -1823,7 +1891,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                         color: isSelected ? Colors.blue : Colors.white,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: isSelected ? Colors.blue : Colors.grey.shade300,
+                          color: isSelected
+                              ? Colors.blue
+                              : Colors.grey.shade300,
                         ),
                       ),
                       child: Center(
@@ -1841,7 +1911,9 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                                 fontWeight: isSelected
                                     ? FontWeight.bold
                                     : FontWeight.normal,
-                                color: isSelected ? Colors.white : Colors.black87,
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.black87,
                               ),
                             ),
                           ),
@@ -1859,9 +1931,16 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
   }
 
   bool _isFileVideo(dynamic file) {
-    String fn = (file['file_name'] ?? file['fileName'] ?? file['user_filename'] ?? '').toString().toLowerCase();
-    String fType = (file['file_type'] ?? file['type'] ?? '').toString().toLowerCase();
-    String fFormat = (file['format'] ?? file['file_format'] ?? '').toString().toLowerCase();
+    String fn =
+        (file['file_name'] ?? file['fileName'] ?? file['user_filename'] ?? '')
+            .toString()
+            .toLowerCase();
+    String fType = (file['file_type'] ?? file['type'] ?? '')
+        .toString()
+        .toLowerCase();
+    String fFormat = (file['format'] ?? file['file_format'] ?? '')
+        .toString()
+        .toLowerCase();
     return fn.endsWith('.mp4') ||
         fn.endsWith('.webm') ||
         fn.endsWith('.avi') ||
@@ -1873,10 +1952,18 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
   }
 
   Widget _buildFilePreview(dynamic file) {
-    String fileName = (file['file_name'] ?? file['fileName'] ?? '').toString().trim();
-    String userFileName = (file['user_filename'] ?? file['userFileName'] ?? '').toString().trim();
+    String fileName = (file['file_name'] ?? file['fileName'] ?? '')
+        .toString()
+        .trim();
+    String userFileName = (file['user_filename'] ?? file['userFileName'] ?? '')
+        .toString()
+        .trim();
     if (fileName.isEmpty) {
-      return const Icon(Icons.image_not_supported_rounded, size: 24, color: Colors.grey);
+      return const Icon(
+        Icons.image_not_supported_rounded,
+        size: 24,
+        color: Colors.grey,
+      );
     }
     bool isVideo = _isFileVideo(file);
     final encodedName = Uri.encodeFull(fileName);
@@ -1891,6 +1978,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
       return WebCompatImage(
         url: fileUrl,
         fit: BoxFit.cover,
+        showFullScreenIcon: true,
       );
     }
   }

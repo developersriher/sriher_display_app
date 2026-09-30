@@ -1,5 +1,6 @@
 import '../../api_config.dart';
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -30,6 +31,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   String searchQuery = "";
   int currentPage = 0;
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _hScroll = ScrollController();
+  final ScrollController _vScroll = ScrollController();
   int? _sortColumnIndex;
   bool _sortAscending = true;
 
@@ -56,6 +59,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
 
   @override
   void dispose() {
+    _hScroll.dispose();
+    _vScroll.dispose();
     _deviceCodeController.dispose();
     _deviceNameController.dispose();
     _modelController.dispose();
@@ -287,6 +292,67 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
     }
   }
 
+  // 5. TOGGLE DEVICE STATUS (deviceStatusUpdateview)
+  Future<void> toggleDeviceStatus(
+    dynamic itemOrId, [
+    dynamic currentStatus,
+  ]) async {
+    Map<String, dynamic> itemMap = {};
+    dynamic id;
+    dynamic rawStatus;
+
+    if (itemOrId is Map) {
+      itemMap = Map<String, dynamic>.from(itemOrId);
+      id = itemMap['id'] ?? itemMap['device_id'];
+      rawStatus =
+          itemMap['active_status'] ??
+          itemMap['status'] ??
+          itemMap['Status'] ??
+          itemMap['is_active'] ??
+          itemMap['device_status'];
+    } else {
+      id = itemOrId;
+      rawStatus = currentStatus;
+      final found = deviceList.firstWhere(
+        (e) => e['id']?.toString() == id?.toString(),
+        orElse: () => null,
+      );
+      if (found is Map) itemMap = Map<String, dynamic>.from(found);
+    }
+
+    final int newStatus = (rawStatus == 0 || rawStatus == "0") ? 1 : 0;
+
+    // Optimistic UI update
+    setState(() {
+      if (itemOrId is Map) {
+        itemOrId['status'] = newStatus;
+        itemOrId['active_status'] = newStatus;
+      }
+    });
+
+    try {
+      final url = Uri.parse('$_baseUrl/deviceStatusUpdateview');
+      final Map<String, dynamic> payload = Map<String, dynamic>.from(itemMap);
+      payload["api_key"] = _apiKey;
+      payload["device_id"] = id;
+      payload["id"] = id;
+      payload["status"] = newStatus;
+
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 200) {
+        if (!mounted) return;
+        fetchDevices();
+      }
+    } catch (e) {
+      debugPrint("Device Status Toggle Error: $e");
+    }
+  }
+
   // 4. DELETE DEVICE
   Future<void> deleteDevice(dynamic id) async {
     // Using the specific local URL provided by the user for delete
@@ -352,228 +418,209 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       icon: editingId == null
           ? Icons.add_to_queue_rounded
           : Icons.edit_note_rounded,
-      width: MediaQuery.of(context).size.width * 0.8,
+      width: MediaQuery.of(context).size.width < 800
+          ? MediaQuery.of(context).size.width * 0.8
+          : 550,
       builder: (context, setDialogState) {
         final isDialogMobile = MediaQuery.of(context).size.width < 800;
-        return Form(
-          key: dialogFormKey,
-          autovalidateMode:
-              AutovalidateMode.disabled, // ← no validation until submit
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSectionHeader("DEVICE IDENTITY"),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildTextField(
-                        "Enter Device Name",
-                        _deviceNameController,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty)
-                            return 'Please enter the Device Name';
-                          final clean = v.trim().toLowerCase();
-                          final exists = deviceList.any((d) {
-                            final name =
-                                (d['device_name'] ?? d['deviceName'] ?? '')
-                                    .toString()
-                                    .trim()
-                                    .toLowerCase();
-                            final id = d['id'] ?? d['ID'];
-                            if (editingId != null &&
-                                id?.toString() == editingId?.toString())
-                              return false;
-                            return name == clean;
-                          });
-                          if (exists) return 'This device name already exists.';
-                          return null;
-                        },
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 550,
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: Form(
+            key: dialogFormKey,
+            autovalidateMode:
+                AutovalidateMode.disabled, // ← no validation until submit
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionHeader("DEVICE IDENTITY"),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildTextField(
+                          "Enter Device Name",
+                          _deviceNameController,
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty)
+                              return 'Please enter the Device Name';
+                            final clean = v.trim().toLowerCase();
+                            final exists = deviceList.any((d) {
+                              final name =
+                                  (d['device_name'] ?? d['deviceName'] ?? '')
+                                      .toString()
+                                      .trim()
+                                      .toLowerCase();
+                              final id = d['id'] ?? d['ID'];
+                              if (editingId != null &&
+                                  id?.toString() == editingId?.toString())
+                                return false;
+                              return name == clean;
+                            });
+                            if (exists)
+                              return 'This device name already exists.';
+                            return null;
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildTextField(
-                        "Enter Device ID/Code",
-                        _deviceCodeController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty)
-                            return 'Please enter the Device ID/Code';
-                          final clean = v.trim().toLowerCase();
-                          final exists = deviceList.any((d) {
-                            final code =
-                                (d['device_code'] ??
-                                        d['deviceCode'] ??
-                                        d['code'] ??
-                                        '')
-                                    .toString()
-                                    .trim()
-                                    .toLowerCase();
-                            final id = d['id'] ?? d['ID'];
-                            if (editingId != null &&
-                                id?.toString() == editingId?.toString())
-                              return false;
-                            return code == clean;
-                          });
-                          if (exists) return 'This device id already exists.';
-                          return null;
-                        },
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildTextField(
+                          "Enter Device ID/Code",
+                          _deviceCodeController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty)
+                              return 'Please enter the Device ID/Code';
+                            final clean = v.trim().toLowerCase();
+                            final exists = deviceList.any((d) {
+                              final code =
+                                  (d['device_code'] ??
+                                          d['deviceCode'] ??
+                                          d['code'] ??
+                                          '')
+                                      .toString()
+                                      .trim()
+                                      .toLowerCase();
+                              final id = d['id'] ?? d['ID'];
+                              if (editingId != null &&
+                                  id?.toString() == editingId?.toString())
+                                return false;
+                              return code == clean;
+                            });
+                            if (exists) return 'This device id already exists.';
+                            return null;
+                          },
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildDropdownField(
-                  hint: "Select Device Type",
-                  value: selectedDeviceType,
-                  items: () {
-                    final List<String> defaultTypes = [
-                      "Android Smart TV",
-                      "LED Display",
-                      "Projector",
-                      "Linux Player",
-                    ];
-                    if (selectedDeviceType != null &&
-                        selectedDeviceType!.isNotEmpty &&
-                        !defaultTypes.contains(selectedDeviceType)) {
-                      defaultTypes.add(selectedDeviceType!);
-                    }
-                    return defaultTypes;
-                  }(),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Please select the Device Type'
-                      : null,
-                  onChanged: (val) {
-                    setDialogState(() => selectedDeviceType = val);
-                    setState(() => selectedDeviceType = val);
-                  },
-                ),
-                const SizedBox(height: 32),
-                _buildSectionHeader("HARDWARE SPECIFICATIONS"),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildTextField(
-                        "Enter Model Number",
-                        _modelController,
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Please enter the Model Number'
-                            : null,
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDropdownField(
+                    hint: "Select Device Type",
+                    value: selectedDeviceType,
+                    items: () {
+                      final List<String> defaultTypes = [
+                        "Android Smart TV",
+                        "LED Display",
+                        "Projector",
+                        "Linux Player",
+                      ];
+                      if (selectedDeviceType != null &&
+                          selectedDeviceType!.isNotEmpty &&
+                          !defaultTypes.contains(selectedDeviceType)) {
+                        defaultTypes.add(selectedDeviceType!);
+                      }
+                      return defaultTypes;
+                    }(),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Please select the Device Type'
+                        : null,
+                    onChanged: (val) {
+                      setDialogState(() => selectedDeviceType = val);
+                      setState(() => selectedDeviceType = val);
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader("HARDWARE SPECIFICATIONS"),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildTextField(
+                          "Enter Model Number",
+                          _modelController,
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Please enter the Model Number'
+                              : null,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildTextField(
-                        "Enter OS System",
-                        _osController,
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Please enter the OS System'
-                            : null,
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildTextField(
+                          "Enter OS System",
+                          _osController,
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Please enter the OS System'
+                              : null,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildTextField(
-                        "Enter Year of Model",
-                        _yearController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(4),
-                        ],
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Please enter the Year of Model'
-                            : null,
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildTextField(
+                          "Enter Year of Model",
+                          _yearController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(4),
+                          ],
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Please enter the Year of Model'
+                              : null,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildTextField(
-                        "Enter Serial Number",
-                        _serialNoController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty)
-                            return 'Please enter the Serial Number';
-                          final clean = v.trim().toLowerCase();
-                          final exists = deviceList.any((d) {
-                            final sno =
-                                (d['device_s_no'] ??
-                                        d['deviceSNo'] ??
-                                        d['serial_number'] ??
-                                        d['serial'] ??
-                                        '')
-                                    .toString()
-                                    .trim()
-                                    .toLowerCase();
-                            final id = d['id'] ?? d['ID'];
-                            if (editingId != null &&
-                                id?.toString() == editingId?.toString())
-                              return false;
-                            return sno == clean;
-                          });
-                          if (exists)
-                            return 'This serial number already exists.';
-                          return null;
-                        },
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildTextField(
+                          "Enter Serial Number",
+                          _serialNoController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty)
+                              return 'Please enter the Serial Number';
+                            final clean = v.trim().toLowerCase();
+                            final exists = deviceList.any((d) {
+                              final sno =
+                                  (d['device_s_no'] ??
+                                          d['deviceSNo'] ??
+                                          d['serial_number'] ??
+                                          d['serial'] ??
+                                          '')
+                                      .toString()
+                                      .trim()
+                                      .toLowerCase();
+                              final id = d['id'] ?? d['ID'];
+                              if (editingId != null &&
+                                  id?.toString() == editingId?.toString())
+                                return false;
+                              return sno == clean;
+                            });
+                            if (exists)
+                              return 'This serial number already exists.';
+                            return null;
+                          },
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                _buildSectionHeader("MANUFACTURING DETAILS"),
-                isDialogMobile
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildTextField(
-                            "Enter Manufacturer Name",
-                            _manufacturerController,
-                            validator: (v) => (v == null || v.isEmpty)
-                                ? 'Please enter the Manufacturer Name'
-                                : null,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            "Enter Warranty Status",
-                            _warrantyController,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                RegExp(r'[a-zA-Z ]'),
-                              ),
-                            ],
-                            validator: (v) => (v == null || v.isEmpty)
-                                ? 'Please enter the Warranty Status'
-                                : null,
-                          ),
-                        ],
-                      )
-                    : Row(
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader("MANUFACTURING DETAILS"),
+                  isDialogMobile
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildTextField(
                               "Enter Manufacturer Name",
                               _manufacturerController,
                               validator: (v) => (v == null || v.isEmpty)
                                   ? 'Please enter the Manufacturer Name'
                                   : null,
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildTextField(
+                            const SizedBox(height: 16),
+                            _buildTextField(
                               "Enter Warranty Status",
                               _warrantyController,
                               inputFormatters: [
@@ -585,79 +632,107 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                                   ? 'Please enter the Warranty Status'
                                   : null,
                             ),
-                          ),
-                        ],
-                      ),
-                const SizedBox(height: 32),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        _clearForm();
-                        Navigator.pop(context);
-                      },
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 20,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text(
-                        "Cancel",
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: isSubmitting
-                          ? null
-                          : () async {
-                              if (dialogFormKey.currentState!.validate()) {
-                                if (Navigator.canPop(context))
-                                  Navigator.pop(context);
-                                await handleFormSubmit();
-                              }
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 32,
-                        ),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: isSubmitting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text(
-                              editingId == null ? "Submit" : "Update",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 13,
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: _buildTextField(
+                                "Enter Manufacturer Name",
+                                _manufacturerController,
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'Please enter the Manufacturer Name'
+                                    : null,
                               ),
                             ),
-                    ),
-                  ],
-                ),
-              ],
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildTextField(
+                                "Enter Warranty Status",
+                                _warrantyController,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[a-zA-Z ]'),
+                                  ),
+                                ],
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'Please enter the Warranty Status'
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                  const SizedBox(height: 32),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          _clearForm();
+                          Navigator.pop(context);
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 20,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          "Cancel",
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: isSubmitting
+                            ? null
+                            : () async {
+                                if (dialogFormKey.currentState!.validate()) {
+                                  if (Navigator.canPop(context))
+                                    Navigator.pop(context);
+                                  await handleFormSubmit();
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F172A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 32,
+                          ),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: isSubmitting
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(
+                                editingId == null ? "Submit" : "Update",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 13,
+                                ),
+                              ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -711,7 +786,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 600;
+                  final isNarrow = constraints.maxWidth <= 1100;
                   final heading = const AnimatedHeading(
                     text: "Device List",
                     style: TextStyle(
@@ -910,338 +985,388 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           10: FlexColumnWidth(1.6), // ACTION
         };
 
-        return Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade200, width: 1.0),
-            borderRadius: BorderRadius.circular(8),
+        return ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
           ),
-          clipBehavior: Clip.antiAlias,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: tableWidth,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Table Header Row
-                  Container(
-                    height: 48,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      border: Border(
-                        bottom: BorderSide(
+          child: Scrollbar(
+            controller: _hScroll,
+            thumbVisibility: true,
+            thickness: 8.0,
+            trackVisibility: true,
+            interactive: true,
+            child: SingleChildScrollView(
+              controller: _hScroll,
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: tableWidth),
+                child: Scrollbar(
+                  controller: _vScroll,
+                  thumbVisibility: true,
+                  thickness: 8.0,
+                  trackVisibility: true,
+                  interactive: true,
+                  child: SingleChildScrollView(
+                    controller: _vScroll,
+                    scrollDirection: Axis.vertical,
+                    child: Container(
+                      width: tableWidth,
+                      decoration: BoxDecoration(
+                        border: Border.all(
                           color: Colors.grey.shade200,
                           width: 1.0,
                         ),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ),
-                    child: Table(
-                      columnWidths: colWidths,
-                      defaultVerticalAlignment:
-                          TableCellVerticalAlignment.middle,
-                      children: [
-                        TableRow(
-                          children: [
-                            _buildHeaderCell("TYPE OF DEVICE", colIndex: 0),
-                            _buildHeaderCell("DEVICE ID", colIndex: 1),
-                            _buildHeaderCell("NAME", colIndex: 2),
-                            _buildHeaderCell("MODEL", colIndex: 3),
-                            _buildHeaderCell("OS", colIndex: 4),
-                            _buildHeaderCell("YEAR OF MODEL", colIndex: 5),
-                            _buildHeaderCell("WARRANTY", colIndex: 6),
-                            _buildHeaderCell("SERIAL NO", colIndex: 7),
-                            _buildHeaderCell("MANUFACTURE", colIndex: 8),
-                            _buildHeaderCell("EDIT"),
-                            _buildHeaderCell("ACTION"),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Data Rows or Empty State
-                  if (pagedList.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 36.0),
-                      alignment: Alignment.center,
+                      clipBehavior: Clip.antiAlias,
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.search_off_rounded,
-                            size: 36,
-                            color: Colors.blue.shade200,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "No matching devices found",
-                            style: TextStyle(
-                              color: Colors.blue.shade900,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                          // Table Header Row
+                          Container(
+                            height: 48,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.grey.shade200,
+                                  width: 1.0,
+                                ),
+                              ),
+                            ),
+                            child: Table(
+                              columnWidths: colWidths,
+                              defaultVerticalAlignment:
+                                  TableCellVerticalAlignment.middle,
+                              children: [
+                                TableRow(
+                                  children: [
+                                    _buildHeaderCell(
+                                      "TYPE OF DEVICE",
+                                      colIndex: 0,
+                                    ),
+                                    _buildHeaderCell("DEVICE ID", colIndex: 1),
+                                    _buildHeaderCell("NAME", colIndex: 2),
+                                    _buildHeaderCell("MODEL", colIndex: 3),
+                                    _buildHeaderCell("OS", colIndex: 4),
+                                    _buildHeaderCell(
+                                      "YEAR OF MODEL",
+                                      colIndex: 5,
+                                    ),
+                                    _buildHeaderCell("WARRANTY", colIndex: 6),
+                                    _buildHeaderCell("SERIAL NO", colIndex: 7),
+                                    _buildHeaderCell(
+                                      "MANUFACTURE",
+                                      colIndex: 8,
+                                    ),
+                                    _buildHeaderCell("EDIT"),
+                                    _buildHeaderCell("ACTION"),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            "Try a different search term",
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
+
+                          // Data Rows or Empty State
+                          if (pagedList.isEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 36.0,
+                              ),
+                              alignment: Alignment.center,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.search_off_rounded,
+                                    size: 36,
+                                    color: Colors.blue.shade200,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "No matching devices found",
+                                    style: TextStyle(
+                                      color: Colors.blue.shade900,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    "Try a different search term",
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            Table(
+                              columnWidths: colWidths,
+                              defaultVerticalAlignment:
+                                  TableCellVerticalAlignment.middle,
+                              children: pagedList.map((device) {
+                                final Map<String, dynamic> data =
+                                    (device is Map)
+                                    ? Map<String, dynamic>.from(device)
+                                    : {};
+                                String val(List<String> keys) {
+                                  for (var k in keys) {
+                                    if (data.containsKey(k) &&
+                                        data[k] != null) {
+                                      return data[k].toString();
+                                    }
+                                  }
+                                  return "-";
+                                }
+
+                                return TableRow(
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Colors.grey.shade200,
+                                        width: 1.0,
+                                      ),
+                                    ),
+                                  ),
+                                  children: [
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          val([
+                                            'type_of_device',
+                                            'typeOfDevice',
+                                            'device_type',
+                                            'type',
+                                          ]),
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          val([
+                                            'device_code',
+                                            'deviceCode',
+                                            'code',
+                                          ]),
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          val([
+                                            'device_name',
+                                            'deviceName',
+                                            'name',
+                                          ]),
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          val([
+                                            'device_model',
+                                            'deviceModel',
+                                            'model',
+                                          ]),
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          val(['device_os', 'deviceOs', 'os']),
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          val([
+                                            'device_yr_model',
+                                            'deviceYrModel',
+                                            'year',
+                                            'year_of_model',
+                                          ]),
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          val([
+                                            'device_warranty',
+                                            'deviceWarranty',
+                                            'warranty',
+                                          ]),
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          val([
+                                            'device_s_no',
+                                            'deviceSNo',
+                                            'serial_number',
+                                            'serial',
+                                          ]),
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          val(['Manufacture', 'manufacture']),
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.center,
+                                      child: IconButton(
+                                        icon: const Icon(
+                                          Icons.edit,
+                                          color: Colors.blue,
+                                          size: 18,
+                                        ),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () {
+                                          Map<String, dynamic> localData =
+                                              Map<String, dynamic>.from(data);
+                                          loadDeviceToEdit(
+                                            data['id'] ?? data['ID'],
+                                            localData,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.center,
+                                      child: Transform.scale(
+                                        scale: 0.7,
+                                        child: Switch(
+                                          value: _isItemActive(data),
+                                          activeColor: Colors.green,
+                                          onChanged: (v) =>
+                                              toggleDeviceStatus(data),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
                             ),
-                          ),
                         ],
                       ),
-                    )
-                  else
-                    Table(
-                      columnWidths: colWidths,
-                      defaultVerticalAlignment:
-                          TableCellVerticalAlignment.middle,
-                      children: pagedList.map((device) {
-                        final Map<String, dynamic> data = (device is Map)
-                            ? Map<String, dynamic>.from(device)
-                            : {};
-                        String val(List<String> keys) {
-                          for (var k in keys) {
-                            if (data.containsKey(k) && data[k] != null) {
-                              return data[k].toString();
-                            }
-                          }
-                          return "-";
-                        }
-
-                        return TableRow(
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: Colors.grey.shade200,
-                                width: 1.0,
-                              ),
-                            ),
-                          ),
-                          children: [
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6.0,
-                                  vertical: 10.0,
-                                ),
-                                child: Text(
-                                  val([
-                                    'type_of_device',
-                                    'typeOfDevice',
-                                    'device_type',
-                                    'type',
-                                  ]),
-                                  style: const TextStyle(
-                                    fontSize: 12.0,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6.0,
-                                  vertical: 10.0,
-                                ),
-                                child: Text(
-                                  val(['device_code', 'deviceCode', 'code']),
-                                  style: const TextStyle(
-                                    fontSize: 12.0,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6.0,
-                                  vertical: 10.0,
-                                ),
-                                child: Text(
-                                  val(['device_name', 'deviceName', 'name']),
-                                  style: const TextStyle(
-                                    fontSize: 12.0,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6.0,
-                                  vertical: 10.0,
-                                ),
-                                child: Text(
-                                  val(['device_model', 'deviceModel', 'model']),
-                                  style: const TextStyle(
-                                    fontSize: 12.0,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6.0,
-                                  vertical: 10.0,
-                                ),
-                                child: Text(
-                                  val(['device_os', 'deviceOs', 'os']),
-                                  style: const TextStyle(
-                                    fontSize: 12.0,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6.0,
-                                  vertical: 10.0,
-                                ),
-                                child: Text(
-                                  val([
-                                    'device_yr_model',
-                                    'deviceYrModel',
-                                    'year',
-                                    'year_of_model',
-                                  ]),
-                                  style: const TextStyle(
-                                    fontSize: 12.0,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6.0,
-                                  vertical: 10.0,
-                                ),
-                                child: Text(
-                                  val([
-                                    'device_warranty',
-                                    'deviceWarranty',
-                                    'warranty',
-                                  ]),
-                                  style: const TextStyle(
-                                    fontSize: 12.0,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6.0,
-                                  vertical: 10.0,
-                                ),
-                                child: Text(
-                                  val([
-                                    'device_s_no',
-                                    'deviceSNo',
-                                    'serial_number',
-                                    'serial',
-                                  ]),
-                                  style: const TextStyle(
-                                    fontSize: 12.0,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6.0,
-                                  vertical: 10.0,
-                                ),
-                                child: Text(
-                                  val(['Manufacture', 'manufacture']),
-                                  style: const TextStyle(
-                                    fontSize: 12.0,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.center,
-                              child: IconButton(
-                                icon: const Icon(
-                                  Icons.edit,
-                                  color: Colors.blue,
-                                  size: 18,
-                                ),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                onPressed: () {
-                                  Map<String, dynamic> localData =
-                                      Map<String, dynamic>.from(data);
-                                  loadDeviceToEdit(
-                                    data['id'] ?? data['ID'],
-                                    localData,
-                                  );
-                                },
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.center,
-                              child: Transform.scale(
-                                scale: 0.7,
-                                child: Switch(
-                                  value:
-                                      data['active_status'] == 1 ||
-                                      data['status'] == 1 ||
-                                      data['status'] == "1",
-                                  activeColor: Colors.green,
-                                  onChanged: (v) {},
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
                     ),
-                ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -1396,7 +1521,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           (title) => DataColumn(
             label: Text(
               title,
-              style:TextStyle(
+              style: TextStyle(
                 color: Color.fromRGBO(33, 150, 243, 1),
                 fontWeight: FontWeight.bold,
                 fontSize: 10,
@@ -1481,8 +1606,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           IconButton(
             icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
             onPressed: () {
-              Map<String, dynamic> localData =
-                  Map<String, dynamic>.from(data);
+              Map<String, dynamic> localData = Map<String, dynamic>.from(data);
               loadDeviceToEdit(data['id'] ?? data['ID'], localData);
             },
           ),
@@ -1492,20 +1616,39 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
           Transform.scale(
             scale: 0.7,
             child: Switch(
-              // Use active_status or status based on your API
-              value:
-                  data['active_status'] == 1 ||
-                  data['status'] == 1 ||
-                  data['status'] == "1",
+              value: _isItemActive(data),
               activeColor: Colors.green,
-              onChanged: (v) {
-                // Status toggle logic would go here
-              },
+              onChanged: (v) => toggleDeviceStatus(data),
             ),
           ),
         ),
       ],
     );
+  }
+
+  bool _isItemActive(dynamic data) {
+    if (data == null || data is! Map) return false;
+    final raw =
+        data['status'] ??
+        data['active_status'] ??
+        data['Status'] ??
+        data['is_active'] ??
+        data['device_status'];
+    if (raw == null) return true;
+
+    // Status 0 -> Active/ON
+    // Status 1 -> Inactive/OFF
+    if (raw == 0 || raw == false || raw == '0') return true;
+    if (raw == 1 || raw == true || raw == '1') return false;
+
+    final str = raw.toString().trim().toLowerCase();
+    if (str == '0' || str == 'active' || str == 'on') {
+      return true;
+    }
+    if (str == '1' || str == 'inactive' || str == 'off') {
+      return false;
+    }
+    return false;
   }
 
   // --- REUSABLE COMPONENTS ---
@@ -1670,7 +1813,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   Widget _buildListHeaderControls() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final isNarrow = constraints.maxWidth <= 1100;
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1813,7 +1956,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final isNarrow = constraints.maxWidth <= 1100;
         final paginationText = Text(
           "Showing $start to $end of $total entries",
           style: const TextStyle(

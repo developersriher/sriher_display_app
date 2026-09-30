@@ -52,7 +52,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     _entryController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1800),
+      duration: const Duration(milliseconds: 0),
+      value: 1.0,
     );
 
     _buttonController = AnimationController(
@@ -170,8 +171,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     return KeyEventResult.ignored;
   }
-
-
 
   // ── Login logic ────────────────────────────────────────────────────
   Future<void> _handleLogin() async {
@@ -350,13 +349,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               ),
             ),
 
-            Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 16 * scale,
-                  vertical: 12 * scale,
+            Positioned.fill(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16 * scale,
+                    vertical: 12 * scale,
+                  ),
+                  child: _buildLoginCard(scale),
                 ),
-                child: _buildLoginCard(scale),
               ),
             ),
           ],
@@ -377,21 +378,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Widget _buildLoginCard(double scale) {
-    final cardMaxWidth = (380 * scale).clamp(280.0, 440.0);
-    final cardPadding = (28 * scale).clamp(16.0, 40.0);
-    final logoPad = (14 * scale).clamp(8.0, 18.0);
-    final logoHeight = (48 * scale).clamp(32.0, 64.0);
-    final logoFallbackSize = (36 * scale).clamp(24.0, 44.0);
-    final titleFontSize = (20 * scale).clamp(14.0, 26.0);
-    final subtitleFontSize = (12 * scale).clamp(10.0, 15.0);
-    final sectionGap = (20 * scale).clamp(10.0, 36.0);
-    final fieldGap = (12 * scale).clamp(6.0, 20.0);
-    final buttonGap = (20 * scale).clamp(10.0, 36.0);
+    final cardMaxWidth = (380 * scale).clamp(300.0, 450.0);
+    final cardPadding = (36 * scale).clamp(24.0, 52.0);
+    final logoPad = (16 * scale).clamp(10.0, 22.0);
+    final logoHeight = (56 * scale).clamp(38.0, 72.0);
+    final logoFallbackSize = (40 * scale).clamp(28.0, 50.0);
+    final titleFontSize = (22 * scale).clamp(16.0, 28.0);
+    final subtitleFontSize = (13 * scale).clamp(11.0, 16.0);
+    final sectionGap = (28 * scale).clamp(16.0, 44.0);
+    final fieldGap = (18 * scale).clamp(10.0, 28.0);
+    final buttonGap = (28 * scale).clamp(16.0, 44.0);
 
     return GlassCard(
       constraints: BoxConstraints(maxWidth: cardMaxWidth),
       padding: EdgeInsets.all(cardPadding),
-      opacity: 0.04,
+      opacity: 0.08,
       blur: 25,
       border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.5),
       child: Form(
@@ -411,8 +412,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.05),
                       shape: BoxShape.circle,
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.1)),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.2),
@@ -595,8 +595,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     : null,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF3B82F6)
-                        .withOpacity(isFocused ? 0.8 : 0.4),
+                    color: const Color(
+                      0xFF3B82F6,
+                    ).withOpacity(isFocused ? 0.8 : 0.4),
                     blurRadius: isFocused ? 25 : 20,
                     offset: const Offset(0, 8),
                   ),
@@ -620,8 +621,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         height: 22 * scale,
                         child: const CircularProgressIndicator(
                           strokeWidth: 3,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : Row(
@@ -704,8 +706,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
             prefixIcon: Container(
               margin: const EdgeInsets.only(right: 8),
-              child:
-                  Icon(icon, color: Colors.white.withOpacity(0.4), size: iconSize),
+              child: Icon(
+                icon,
+                color: Colors.white.withOpacity(0.4),
+                size: iconSize,
+              ),
             ),
             suffixIcon: isPassword
                 ? IconButton(
@@ -731,8 +736,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(borderRadius),
-              borderSide:
-                  const BorderSide(color: Color(0xFF3B82F6), width: 3),
+              borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 3),
             ),
             contentPadding: EdgeInsets.symmetric(
               horizontal: horizPad,

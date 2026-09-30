@@ -2,16 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'web_video_thumbnail.dart';
+import '../../api_config.dart';
 
 class VideoThumbnail extends StatefulWidget {
   final String url;
   final String? title;
 
-  const VideoThumbnail({
-    super.key,
-    required this.url,
-    this.title,
-  });
+  const VideoThumbnail({super.key, required this.url, this.title});
 
   @override
   State<VideoThumbnail> createState() => _VideoThumbnailState();
@@ -60,12 +57,12 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
       return url;
     }
     if (url.startsWith('/uploads/')) {
-      return 'https://display.sriher.com$url';
+      return '${baseUrl}$url';
     }
     if (url.startsWith('uploads/')) {
-      return 'https://display.sriher.com/$url';
+      return '${baseUrl}/$url';
     }
-    return 'https://display.sriher.com/uploads/${Uri.encodeFull(url)}';
+    return '${baseUrl}/uploads/${Uri.encodeFull(url)}';
   }
 
   Future<void> _toggleInlinePlay() async {
@@ -77,8 +74,9 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
         _hasError = false;
       });
       try {
-        final controller =
-            VideoPlayerController.networkUrl(Uri.parse(_normalizedUrl));
+        final controller = VideoPlayerController.networkUrl(
+          Uri.parse(_normalizedUrl),
+        );
         _controller = controller;
         await controller.initialize();
         if (mounted) {
@@ -131,9 +129,7 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.black,
-      ),
+      decoration: const BoxDecoration(color: Colors.black),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -153,10 +149,7 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
               ),
             )
           else if (kIsWeb && _normalizedUrl.isNotEmpty)
-            WebVideoThumbnail(
-              url: _normalizedUrl,
-              fit: BoxFit.cover,
-            )
+            WebVideoThumbnail(url: _normalizedUrl, fit: BoxFit.cover)
           else
             Container(
               decoration: const BoxDecoration(
@@ -292,12 +285,12 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       return url;
     }
     if (url.startsWith('/uploads/')) {
-      return 'https://display.sriher.com$url';
+      return '${baseUrl}$url';
     }
     if (url.startsWith('uploads/')) {
-      return 'https://display.sriher.com/$url';
+      return '${baseUrl}/$url';
     }
-    return 'https://display.sriher.com/uploads/${Uri.encodeFull(url)}';
+    return '${baseUrl}/uploads/${Uri.encodeFull(url)}';
   }
 
   Future<void> _initializePlayer() async {
@@ -307,8 +300,9 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       _hasError = false;
     });
     try {
-      final controller =
-          VideoPlayerController.networkUrl(Uri.parse(_normalizedUrl));
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(_normalizedUrl),
+      );
       _controller = controller;
       await controller.initialize();
       if (mounted) {
@@ -355,29 +349,36 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                     child: VideoPlayer(_controller!),
                   )
                 : _hasError
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.movie_creation_rounded,
-                              color: Colors.white70, size: 48),
-                          const SizedBox(height: 16),
-                          Text(
-                            widget.title,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 16),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                            ),
-                            onPressed: _initializePlayer,
-                            child: const Text('Retry Playback',
-                                style: TextStyle(color: Colors.white)),
-                          ),
-                        ],
-                      )
-                    : const CircularProgressIndicator(color: Colors.white),
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.movie_creation_rounded,
+                        color: Colors.white70,
+                        size: 48,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        widget.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                        ),
+                        onPressed: _initializePlayer,
+                        child: const Text(
+                          'Retry Playback',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  )
+                : const CircularProgressIndicator(color: Colors.white),
           ),
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
@@ -391,8 +392,11 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
-                    icon: const Icon(Icons.arrow_back,
-                        color: Colors.white, size: 24),
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      color: Colors.white,
+                      size: 24,
+                    ),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
@@ -400,7 +404,9 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black54,
                       borderRadius: BorderRadius.circular(8),
@@ -423,30 +429,70 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
           if (_initialized && _controller != null)
             Positioned(
               bottom: 20,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      _controller!.value.isPlaying
-                          ? Icons.pause
-                          : Icons.play_arrow,
-                      color: Colors.white,
-                      size: 36,
+              left: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.75),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _controller!.value.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          if (_controller!.value.isPlaying) {
+                            _controller!.pause();
+                          } else {
+                            _controller!.play();
+                          }
+                        });
+                      },
                     ),
-                    onPressed: () {
-                      setState(() {
-                        if (_controller!.value.isPlaying) {
-                          _controller!.pause();
-                        } else {
-                          _controller!.play();
-                        }
-                      });
-                    },
-                  ),
-                ],
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: VideoProgressIndicator(
+                          _controller!,
+                          allowScrubbing: true,
+                          colors: const VideoProgressColors(
+                            playedColor: Colors.blueAccent,
+                            bufferedColor: Colors.white38,
+                            backgroundColor: Colors.white24,
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        _controller!.value.volume == 0
+                            ? Icons.volume_off_rounded
+                            : Icons.volume_up_rounded,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          if (_controller!.value.volume == 0) {
+                            _controller!.setVolume(1.0);
+                          } else {
+                            _controller!.setVolume(0.0);
+                          }
+                        });
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
         ],

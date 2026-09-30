@@ -158,7 +158,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             position: _viewSlide,
                             child: Container(
                               margin: EdgeInsets.fromLTRB(
-                                0, 0,
+                                0,
+                                0,
                                 showSidebar ? 24 : 12,
                                 showSidebar ? 24 : 12,
                               ),
@@ -166,7 +167,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 color: Colors.white.withOpacity(0.4),
                                 borderRadius: BorderRadius.circular(32),
                                 border: Border.all(
-                                    color: Colors.white, width: 2),
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
                               ),
                               clipBehavior: Clip.antiAlias,
                               child: _getSelectedView(),
@@ -240,7 +243,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   if (isDrawer) ...[
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white70,
+                      ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
@@ -252,79 +258,151 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
-                  _buildSidebarItem(Icons.dashboard_rounded, 'Dashboard', 0, isDrawer: isDrawer),
-                  const SizedBox(height: 16),
-                  _buildSectionHeader('SYSTEM MASTERS'),
                   _buildSidebarItem(
-                    Icons.admin_panel_settings_rounded,
-                    'Roles',
-                    11,
+                    Icons.space_dashboard_rounded,
+                    'Dashboard',
+                    0,
                     isDrawer: isDrawer,
+                    iconColor: const Color(
+                      0xFF3B82F6,
+                    ), // Dashboard icon color (Blue)
+                    isHeaderStyle: true,
                   ),
-                  _buildSidebarItem(Icons.settings_cell_rounded, 'Devices', 12, isDrawer: isDrawer),
-                  _buildSidebarItem(Icons.business_rounded, 'Departments', 13, isDrawer: isDrawer),
-                  _buildSidebarItem(Icons.location_on_rounded, 'Locations', 14, isDrawer: isDrawer),
-                  _buildSidebarItem(Icons.map_rounded, 'Mapping', 15, isDrawer: isDrawer),
-                  const SizedBox(height: 16),
-                  _buildSectionHeader('MANAGEMENT'),
-                  _buildSidebarItem(Icons.person_add_rounded, 'Add User', 1, isDrawer: isDrawer),
-                  _buildSidebarItem(
-                    Icons.folder_shared_rounded,
-                    'File Upload',
-                    2,
-                    isDrawer: isDrawer,
+                  const SizedBox(height: 5),
+
+                  _CollapsibleSection(
+                    title: 'Authentication',
+                    icon: Icons.lock_person_rounded,
+                    iconColor: const Color(0xFFFBBF24),
+                    children: [
+                      _buildSidebarItem(
+                        Icons.person_add_rounded,
+                        'Add User',
+                        1,
+                        isDrawer: isDrawer,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  _buildSectionHeader('TEMPLATE'),
-                  _buildSidebarItem(
-                    Icons.dashboard_customize_rounded,
-                    'Create Template',
-                    3,
-                    isDrawer: isDrawer,
+
+                  const SizedBox(height: 5),
+
+                  _CollapsibleSection(
+                    title: 'Masters',
+                    icon: Icons.dns_rounded,
+                    iconColor: const Color(0xFF34D399),
+                    children: [
+                      _buildSidebarItem(
+                        Icons.admin_panel_settings_rounded,
+                        'Roles',
+                        11,
+                        isDrawer: isDrawer,
+                      ),
+                      _buildSidebarItem(
+                        Icons.settings_cell_rounded,
+                        'Device Master',
+                        12,
+                        isDrawer: isDrawer,
+                      ),
+                      _buildSidebarItem(
+                        Icons.business_rounded,
+                        'Department',
+                        13,
+                        isDrawer: isDrawer,
+                      ),
+                      _buildSidebarItem(
+                        Icons.location_on_rounded,
+                        'Location Master',
+                        14,
+                        isDrawer: isDrawer,
+                      ),
+                      _buildSidebarItem(
+                        Icons.map_rounded,
+                        'Mapping',
+                        15,
+                        isDrawer: isDrawer,
+                      ),
+                    ],
                   ),
-                  _buildSidebarItem(
-                    Icons.view_quilt_rounded,
-                    'Default Templates',
-                    4,
-                    isDrawer: isDrawer,
+                  const SizedBox(height: 5),
+
+                  _CollapsibleSection(
+                    title: 'File Master',
+                    icon: Icons.folder_shared_rounded,
+                    iconColor: const Color(0xFFF472B6),
+                    children: [
+                      _buildSidebarItem(
+                        Icons.cloud_upload_rounded,
+                        'File Upload',
+                        2,
+                        isDrawer: isDrawer,
+                      ),
+                    ],
                   ),
-                  _buildSidebarItem(
-                    Icons.dashboard_customize_outlined,
-                    'Select Template',
-                    5,
-                    isDrawer: isDrawer,
+                  const SizedBox(height: 5),
+
+                  _CollapsibleSection(
+                    title: 'Template Master',
+                    icon: Icons.dashboard_customize_rounded,
+                    iconColor: const Color(0xFFA78BFA),
+                    children: [
+                      _buildSidebarItem(
+                        Icons.add_to_photos_rounded,
+                        'Create Template',
+                        3,
+                        isDrawer: isDrawer,
+                      ),
+                      _buildSidebarItem(
+                        Icons.view_quilt_rounded,
+                        'Default Templates',
+                        4,
+                        isDrawer: isDrawer,
+                      ),
+                      _buildSidebarItem(
+                        Icons.dashboard_customize_outlined,
+                        'Select Template',
+                        5,
+                        isDrawer: isDrawer,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  _buildSectionHeader('SCHEDULES'),
-                  _buildSidebarItem(
-                    Icons.calendar_month_rounded,
-                    'Schedule Allocate',
-                    6,
-                    isDrawer: isDrawer,
-                  ),
-                  _buildSidebarItem(
-                    Icons.precision_manufacturing_rounded,
-                    'Assign Device',
-                    7,
-                    isDrawer: isDrawer,
-                  ),
-                  _buildSidebarItem(
-                    Icons.view_headline_rounded,
-                    'Schedule List',
-                    8,
-                    isDrawer: isDrawer,
-                  ),
-                  _buildSidebarItem(
-                    Icons.date_range_rounded,
-                    'Specific Ranges',
-                    9,
-                    isDrawer: isDrawer,
-                  ),
-                  _buildSidebarItem(
-                    Icons.copy_all_rounded,
-                    'Copy & Wipe Off',
-                    10,
-                    isDrawer: isDrawer,
+                  const SizedBox(height: 5),
+
+                  _CollapsibleSection(
+                    title: 'Schedule',
+                    icon: Icons.calendar_month_rounded,
+                    iconColor: const Color(0xFF22D3EE),
+                    children: [
+                      _buildSidebarItem(
+                        Icons.event_available_rounded,
+                        'Schedule Allocate',
+                        6,
+                        isDrawer: isDrawer,
+                      ),
+                      _buildSidebarItem(
+                        Icons.precision_manufacturing_rounded,
+                        'Assign Device',
+                        7,
+                        isDrawer: isDrawer,
+                      ),
+                      _buildSidebarItem(
+                        Icons.view_headline_rounded,
+                        'Schedule List',
+                        8,
+                        isDrawer: isDrawer,
+                      ),
+                      _buildSidebarItem(
+                        Icons.date_range_rounded,
+                        'Specific Ranges',
+                        9,
+                        isDrawer: isDrawer,
+                      ),
+                      _buildSidebarItem(
+                        Icons.copy_all_rounded,
+                        'Copy and Wipe Off',
+                        10,
+                        isDrawer: isDrawer,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -397,22 +475,46 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(String title, IconData icon, Color iconColor) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.65),
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1.5,
-        ),
+      padding: const EdgeInsets.fromLTRB(8, 14, 8, 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(icon, size: 13, color: iconColor),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.75),
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.5,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildSidebarItem(IconData icon, String title, int index, {bool isDrawer = false}) {
+  Widget _buildSidebarItem(
+    IconData icon,
+    String title,
+    int index, {
+    bool isDrawer = false,
+    Color? iconColor,
+    bool isHeaderStyle = false,
+  }) {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () {
@@ -449,20 +551,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           children: [
             Icon(
               icon,
-              color: isSelected ? Colors.white : Colors.white.withOpacity(0.4),
+              color: isSelected
+                  ? Colors.white
+                  : (iconColor ?? Colors.white.withOpacity(0.4)),
               size: 18,
             ),
             const SizedBox(width: 12),
             Text(
               title,
-              style: TextStyle(
-                color: isSelected
-                    ? Colors.white
-                    : Colors.white.withOpacity(0.6),
-                fontSize: 13,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0.2,
-              ),
+              style: isHeaderStyle
+                  ? TextStyle(
+                      color: isSelected
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.75),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    )
+                  : TextStyle(
+                      color: isSelected
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.6),
+                      fontSize: 13,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      letterSpacing: 0.2,
+                    ),
             ),
             if (isSelected) ...[
               const Spacer(),
@@ -485,7 +600,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Container(
       height: 72,
       margin: EdgeInsets.fromLTRB(
-        showSidebar ? 0 : 12, 24, showSidebar ? 24 : 12, 16),
+        showSidebar ? 0 : 12,
+        24,
+        showSidebar ? 24 : 12,
+        16,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.8),
@@ -587,7 +706,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       case 9:
         return "Time Ranges";
       case 10:
-        return "Copy & Cleanup";
+        return "Copy and wipe off";
       case 11:
         return "Role Configuration";
       case 12:
@@ -729,5 +848,87 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       default:
         return const DashboardView();
     }
+  }
+}
+
+class _CollapsibleSection extends StatefulWidget {
+  final String title;
+  final IconData icon;
+  final Color iconColor;
+  final List<Widget> children;
+
+  const _CollapsibleSection({
+    required this.title,
+    required this.icon,
+    required this.iconColor,
+    required this.children,
+  });
+
+  @override
+  State<_CollapsibleSection> createState() => _CollapsibleSectionState();
+}
+
+class _CollapsibleSectionState extends State<_CollapsibleSection> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() {
+              _isExpanded = !_isExpanded;
+            });
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 14, 8, 6),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: widget.iconColor.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(widget.icon, size: 13, color: widget.iconColor),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.75),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(
+                  _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.white.withOpacity(0.5),
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedCrossFade(
+          firstChild: const SizedBox(width: double.infinity, height: 0),
+          secondChild: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: widget.children,
+          ),
+          crossFadeState: _isExpanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 200),
+        ),
+      ],
+    );
   }
 }

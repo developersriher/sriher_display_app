@@ -1,3 +1,4 @@
+import 'dart:ui';
 import '../../api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -37,7 +38,9 @@ class _ScheduleListViewState extends State<ScheduleListView> {
   String entriesValue = "10";
   int _currentPage = 1;
   final TextEditingController _searchCtrl = TextEditingController();
-  
+  final ScrollController _hScroll = ScrollController();
+  final ScrollController _vScroll = ScrollController();
+
   // Sort State
   int _sortColumnIndex = 1;
   bool _sortAscending = true;
@@ -52,6 +55,8 @@ class _ScheduleListViewState extends State<ScheduleListView> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _hScroll.dispose();
+    _vScroll.dispose();
     super.dispose();
   }
 
@@ -75,18 +80,30 @@ class _ScheduleListViewState extends State<ScheduleListView> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() {
-          scheduleData = (data['data'] as List<dynamic>?) ?? [];
-          _currentPage = 1;
-        });
-        _applyFilter();
+        List<dynamic> list = [];
+        if (data is Map) {
+          list = (data['data'] as List<dynamic>?) ??
+              (data['result'] as List<dynamic>?) ??
+              [];
+        } else if (data is List) {
+          list = data;
+        }
+        if (mounted) {
+          setState(() {
+            scheduleData = list;
+            _currentPage = 1;
+          });
+          _applyFilter();
+        }
       } else {
         _showServiceUnavailable();
       }
     } catch (_) {
       _showServiceUnavailable();
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -96,8 +113,9 @@ class _ScheduleListViewState extends State<ScheduleListView> {
     // from_date = Jan 1 of selected year  →  broad enough range to always return data
     // to_date   = last day of selected month
     final fromDate = DateFormat('yyyy-MM-dd').format(DateTime(year, 1, 1));
-    final toDate = DateFormat('yyyy-MM-dd')
-        .format(DateTime(year, month + 1, 0)); // day 0 = last day of month
+    final toDate = DateFormat(
+      'yyyy-MM-dd',
+    ).format(DateTime(year, month + 1, 0)); // day 0 = last day of month
 
     // Update outer widget state BEFORE async work
     setState(() {
@@ -124,18 +142,30 @@ class _ScheduleListViewState extends State<ScheduleListView> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() {
-          scheduleData = (data['data'] as List<dynamic>?) ?? [];
-          _currentPage = 1;
-        });
-        _applyFilter();
+        List<dynamic> list = [];
+        if (data is Map) {
+          list = (data['data'] as List<dynamic>?) ??
+              (data['result'] as List<dynamic>?) ??
+              [];
+        } else if (data is List) {
+          list = data;
+        }
+        if (mounted) {
+          setState(() {
+            scheduleData = list;
+            _currentPage = 1;
+          });
+          _applyFilter();
+        }
       } else {
         _showServiceUnavailable();
       }
     } catch (_) {
       _showServiceUnavailable();
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -174,14 +204,16 @@ class _ScheduleListViewState extends State<ScheduleListView> {
     final q = _searchCtrl.text.toLowerCase();
     setState(() {
       _filteredData = scheduleData.where((item) {
-        return (item['schedule_name'] ?? '').toString().toLowerCase().contains(q) ||
+        return (item['schedule_name'] ?? '').toString().toLowerCase().contains(
+              q,
+            ) ||
             (item['temp_name'] ?? '').toString().toLowerCase().contains(q);
       }).toList();
-      
+
       _filteredData.sort((a, b) {
         String aVal = "";
         String bVal = "";
-        
+
         switch (_sortColumnIndex) {
           case 1:
             aVal = a['schedule_name']?.toString() ?? "";
@@ -196,9 +228,9 @@ class _ScheduleListViewState extends State<ScheduleListView> {
             bVal = b['id']?.toString() ?? "";
             break;
         }
-        return _sortAscending 
-             ? aVal.toLowerCase().compareTo(bVal.toLowerCase()) 
-             : bVal.toLowerCase().compareTo(aVal.toLowerCase());
+        return _sortAscending
+            ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
+            : bVal.toLowerCase().compareTo(aVal.toLowerCase());
       });
       _currentPage = 1;
     });
@@ -211,20 +243,24 @@ class _ScheduleListViewState extends State<ScheduleListView> {
     final start = (_currentPage - 1) * _perPage;
     if (start >= _filteredData.length) return [];
     return _filteredData.sublist(
-        start, (start + _perPage).clamp(0, _filteredData.length));
+      start,
+      (start + _perPage).clamp(0, _filteredData.length),
+    );
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red.shade800 : Colors.blue.shade800,
-      behavior: SnackBarBehavior.floating,
-      margin: const EdgeInsets.all(16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red.shade800 : Colors.blue.shade800,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
   }
 
   void _showServiceUnavailable() {
@@ -242,9 +278,14 @@ class _ScheduleListViewState extends State<ScheduleListView> {
             backgroundColor: const Color(0xFF0F172A),
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 32),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
-          child: const Text("OK", style: TextStyle(fontWeight: FontWeight.bold)),
+          child: const Text(
+            "OK",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
         ),
       ),
     );
@@ -271,24 +312,29 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("Month",
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Color(0xFF0F172A))),
+                      const Text(
+                        "Month",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       SearchableDropdown<int>(
                         value: tmpMonth,
                         hint: "Month",
                         items: List.generate(12, (i) => i + 1)
-                            .map((m) => SearchableDropdownItem<int>(
-                                  value: m,
-                                  label: DateFormat('MMMM')
-                                      .format(DateTime(2024, m)),
-                                ))
+                            .map(
+                              (m) => SearchableDropdownItem<int>(
+                                value: m,
+                                label: DateFormat(
+                                  'MMMM',
+                                ).format(DateTime(2024, m)),
+                              ),
+                            )
                             .toList(),
-                        onChanged: (m) =>
-                            setPopupState(() => tmpMonth = m!),
+                        onChanged: (m) => setPopupState(() => tmpMonth = m!),
                       ),
                     ],
                   ),
@@ -299,24 +345,27 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("Year",
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Color(0xFF0F172A))),
+                      const Text(
+                        "Year",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       SearchableDropdown<int>(
                         value: tmpYear,
                         hint: "Year",
-                        items: List.generate(
-                                5, (i) => DateTime.now().year - i)
-                            .map((y) => SearchableDropdownItem<int>(
-                                  value: y,
-                                  label: y.toString(),
-                                ))
+                        items: List.generate(5, (i) => DateTime.now().year - i)
+                            .map(
+                              (y) => SearchableDropdownItem<int>(
+                                value: y,
+                                label: y.toString(),
+                              ),
+                            )
                             .toList(),
-                        onChanged: (y) =>
-                            setPopupState(() => tmpYear = y!),
+                        onChanged: (y) => setPopupState(() => tmpYear = y!),
                       ),
                     ],
                   ),
@@ -332,14 +381,20 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                   onPressed: () => Navigator.pop(ctx),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
-                        vertical: 12, horizontal: 24),
+                      vertical: 12,
+                      horizontal: 24,
+                    ),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                  child: const Text("Close",
-                      style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    "Close",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 // Save
@@ -356,13 +411,18 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                     backgroundColor: const Color(0xFF0F172A),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
-                        vertical: 12, horizontal: 32),
+                      vertical: 12,
+                      horizontal: 32,
+                    ),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                  child: const Text("Save",
-                      style: TextStyle(fontWeight: FontWeight.w900)),
+                  child: const Text(
+                    "Save",
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
                 ),
               ],
             ),
@@ -377,12 +437,10 @@ class _ScheduleListViewState extends State<ScheduleListView> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth <= 1100;
 
     final heading = AnimatedHeading(
-      text: showActive
-          ? "Active Schedule List"
-          : "Inactive Schedule List",
+      text: showActive ? "Active Schedule List" : "Inactive Schedule List",
       style: const TextStyle(
         fontSize: 22,
         fontWeight: FontWeight.bold,
@@ -400,7 +458,8 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                   : const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
               minimumSize: isMobile ? const Size(80, 32) : null,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
+                borderRadius: BorderRadius.circular(8),
+              ),
               elevation: 2,
             ),
             onPressed: _showInactivePopup,
@@ -422,7 +481,8 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                   : const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
               minimumSize: isMobile ? const Size(80, 32) : null,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
+                borderRadius: BorderRadius.circular(8),
+              ),
               elevation: 2,
             ),
             onPressed: _showInactivePopup,
@@ -436,121 +496,122 @@ class _ScheduleListViewState extends State<ScheduleListView> {
             ),
           );
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      resizeToAvoidBottomInset: false,
-      body: SelectionArea(
-        child: Padding(
-          padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Padding(
-              padding: EdgeInsets.all(isMobile ? 10.0 : 20.0),
-              child: Column(
-                children: [
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isNarrow = constraints.maxWidth < 600;
-                      return isNarrow
-                          ? SizedBox(
-                              width: double.infinity,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  if (!showActive)
-                                    Positioned(
-                                      left: 0,
-                                      child: Tooltip(
-                                        message: "Back to Active Schedules",
-                                        child: InkWell(
-                                          borderRadius: BorderRadius.circular(8),
-                                          onTap: () {
-                                            setState(() {
-                                              showActive = true;
-                                              scheduleData = [];
-                                            });
-                                            _fetchSchedules();
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF0F172A),
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: const Icon(
-                                              Icons.arrow_back_rounded,
-                                              color: Colors.white,
-                                              size: 20,
-                                            ),
+    return SelectionArea(
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(isMobile ? 10.0 : 20.0),
+            child: Column(
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isNarrow = constraints.maxWidth <= 1100;
+                    return isNarrow
+                        ? SizedBox(
+                            width: double.infinity,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                if (!showActive)
+                                  Positioned(
+                                    left: 0,
+                                    child: Tooltip(
+                                      message: "Back to Active Schedules",
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(
+                                          8,
+                                        ),
+                                        onTap: () {
+                                          setState(() {
+                                            showActive = true;
+                                            scheduleData = [];
+                                          });
+                                          _fetchSchedules();
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF0F172A),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: const Icon(
+                                            Icons.arrow_back_rounded,
+                                            color: Colors.white,
+                                            size: 20,
                                           ),
                                         ),
                                       ),
                                     ),
-                                  heading,
-                                ],
-                              ),
-                            )
-                          : Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                if (!showActive) ...[
-                                  Tooltip(
-                                    message: "Back to Active Schedules",
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(8),
-                                      onTap: () {
-                                        setState(() {
-                                          showActive = true;
-                                          scheduleData = [];
-                                        });
-                                        _fetchSchedules();
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF0F172A),
-                                          borderRadius: BorderRadius.circular(8),
+                                  ),
+                                heading,
+                              ],
+                            ),
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              if (!showActive) ...[
+                                Tooltip(
+                                  message: "Back to Active Schedules",
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: () {
+                                      setState(() {
+                                        showActive = true;
+                                        scheduleData = [];
+                                      });
+                                      _fetchSchedules();
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0F172A),
+                                        borderRadius: BorderRadius.circular(
+                                          8,
                                         ),
-                                        child: const Icon(
-                                          Icons.arrow_back_rounded,
-                                          color: Colors.white,
-                                          size: 20,
-                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.arrow_back_rounded,
+                                        color: Colors.white,
+                                        size: 20,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                ],
-                                Expanded(child: heading),
+                                ),
                                 const SizedBox(width: 12),
-                                actionBtn,
                               ],
-                            );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _buildListHeader(isMobile: isMobile, actionBtn: actionBtn),
-                  
-                  Expanded(
-                    child: isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : _buildTableContainer(),
-                  ),
-                  
-                  _buildFooter(isMobile: isMobile),
-                ],
-              ),
+                              Expanded(child: heading),
+                              const SizedBox(width: 12),
+                              actionBtn,
+                            ],
+                          );
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildListHeader(isMobile: isMobile, actionBtn: actionBtn),
+
+                Expanded(
+                  child: isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _buildTableContainer(),
+                ),
+
+                _buildFooter(isMobile: isMobile),
+              ],
             ),
           ),
         ),
@@ -562,144 +623,401 @@ class _ScheduleListViewState extends State<ScheduleListView> {
 
   Widget _buildTableContainer() {
     final rows = _pageData;
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade200, width: 1.0),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: LayoutBuilder(builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints:
-                      BoxConstraints(minWidth: constraints.maxWidth),
-                  child: DataTable(
-                    headingRowColor:
-                        WidgetStateProperty.all(Colors.blue.shade50),
-                    headingRowHeight: 48,
-                    dataRowMaxHeight: 64,
-                    horizontalMargin: 20,
-                    columnSpacing: 20,
-                    columns: [
-                      _col('S.NO', -1),
-                      _col('SCHEDULE NAME', 1),
-                      _col('TEMPLATE NAME', 2),
-                      _col('FROM TIME – TO TIME', -1),
-                      _col('FROM DATE', -1),
-                      _col('TO DATE', -1),
-                      _col('STATUS', -1),
-                      _col('CHANGES', -1),
-                    ],
-                    rows: rows.asMap().entries.map((e) {
-                      final sno =
-                          (_currentPage - 1) * _perPage + e.key + 1;
-                      return _buildRow(e.value, sno);
-                    }).toList(),
-                  ),
-                ),
-              ),
-              if (rows.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 60),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off_rounded,
-                          size: 48,
-                          color: Colors.blue.shade200,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double minWidth = constraints.maxWidth > 1100
+            ? constraints.maxWidth
+            : 1100.0;
+        return Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade200, width: 1.0),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+            ),
+            child: Scrollbar(
+              controller: _vScroll,
+              thickness: 8.0,
+              interactive: true,
+              child: SingleChildScrollView(
+                controller: _vScroll,
+                scrollDirection: Axis.vertical,
+                child: Scrollbar(
+                  controller: _hScroll,
+                  thickness: 8.0,
+                  interactive: true,
+                  child: SingleChildScrollView(
+                    controller: _hScroll,
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: minWidth),
+                      child: Container(
+                        width: minWidth,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Table Header Row
+                            Container(
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: Colors.grey.shade200,
+                                    width: 1.0,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: [
+                                  _buildHeaderCell("#", flex: 1),
+                                  _buildSortableHeaderCell(
+                                    "SCHEDULE NAME",
+                                    colIndex: 1,
+                                    flex: 3,
+                                  ),
+                                  _buildSortableHeaderCell(
+                                    "TEMPLATE NAME",
+                                    colIndex: 2,
+                                    flex: 3,
+                                  ),
+                                  _buildHeaderCell(
+                                    "FROM TIME – TO TIME",
+                                    flex: 3,
+                                  ),
+                                  _buildHeaderCell("FROM DATE", flex: 2),
+                                  _buildHeaderCell("TO DATE", flex: 2),
+                                  _buildHeaderCell("ACTION", flex: 2),
+                                  _buildHeaderCell("CHANGES", flex: 2),
+                                ],
+                              ),
+                            ),
+
+                            // Data Rows or Empty State
+                            if (rows.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 60,
+                                ),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.search_off_rounded,
+                                        size: 48,
+                                        color: Colors.blue.shade200,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        "No matching schedules found",
+                                        style: TextStyle(
+                                          color: Colors.blue.shade900,
+                                          fontSize: 16.0,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        "Try a different search term",
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 13.0,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            else
+                              ...rows.asMap().entries.map((e) {
+                                final sno =
+                                    (_currentPage - 1) * _perPage + e.key + 1;
+                                return _buildCustomDataRow(e.value, sno);
+                              }),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          "No matching schedules found",
-                          style: TextStyle(
-                            color: Colors.blue.shade900,
-                            fontSize: 16.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          "Try a different search term",
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 13.0,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-            ],
+              ),
+            ),
           ),
         );
-      }),
+      },
     );
   }
 
-  DataRow _buildRow(dynamic item, int sno) {
-    final isActive =
-        (item['status'] == 1 || item['status'] == '1');
-    final id = int.tryParse(item['id'].toString()) ?? 0;
-    return DataRow(cells: [
-      DataCell(Text(sno.toString(),
-          style:
-              const TextStyle(color: Colors.black54, fontSize: 12))),
-      DataCell(Text(item['schedule_name'] ?? '-',
-          style: const TextStyle(
-              fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 12))),
-      DataCell(Text(item['temp_name'] ?? '-',
-          style: const TextStyle(color: Colors.black87, fontSize: 12))),
-      DataCell(Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.blue.shade50,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          "${item['from_time'] ?? '-'} – ${item['to_time'] ?? '-'}",
-          style: TextStyle(
-              fontSize: 12,
+  Widget _buildHeaderCell(String label, {required int flex}) {
+    return Expanded(
+      flex: flex,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10.0),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color.fromRGBO(33, 150, 243, 1),
               fontWeight: FontWeight.bold,
-              color: Colors.blue.shade700),
+              fontSize: 14,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
         ),
-      )),
-      DataCell(Text(item['from_date'] ?? '-',
-          style: const TextStyle(color: Colors.black87, fontSize: 12))),
-      DataCell(Text(item['to_date'] ?? '-',
-          style: const TextStyle(color: Colors.black87, fontSize: 12))),
-      DataCell(Transform.scale(
-        scale: 0.8,
-        child: Switch(
-          value: isActive,
-          activeColor: Colors.green.shade600,
-          inactiveThumbColor: Colors.red.shade400,
-          inactiveTrackColor: Colors.red.shade100,
-          onChanged: (val) => _updateStatus(id, val ? 1 : 0),
+      ),
+    );
+  }
+
+  Widget _buildSortableHeaderCell(
+    String label, {
+    required int colIndex,
+    required int flex,
+  }) {
+    final isSorted = _sortColumnIndex == colIndex;
+    return Expanded(
+      flex: flex,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (_sortColumnIndex == colIndex) {
+              _sortAscending = !_sortAscending;
+            } else {
+              _sortColumnIndex = colIndex;
+              _sortAscending = true;
+            }
+          });
+          _applyFilter();
+        },
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: Color.fromRGBO(33, 150, 243, 1),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Align(
+                      heightFactor: 0.4,
+                      child: Icon(
+                        Icons.arrow_drop_up,
+                        size: 16,
+                        color: isSorted && _sortAscending
+                            ? Colors.blue.shade800
+                            : Colors.blue.shade300,
+                      ),
+                    ),
+                    Align(
+                      heightFactor: 0.4,
+                      child: Icon(
+                        Icons.arrow_drop_down,
+                        size: 16,
+                        color: isSorted && !_sortAscending
+                            ? Colors.blue.shade800
+                            : Colors.blue.shade300,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
-      )),
-      DataCell(_buildChangesBtn(item)),
-    ]);
+      ),
+    );
+  }
+
+  Widget _buildCustomDataRow(dynamic item, int sno) {
+    final isActive = (item['status'] == 1 || item['status'] == '1');
+    final id =
+        int.tryParse(
+          item['id']?.toString() ?? item['schedule_id']?.toString() ?? '0',
+        ) ??
+        0;
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 1.0),
+        ),
+      ),
+      child: Row(
+        children: [
+          // S.NO
+          Expanded(
+            flex: 1,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: Text(
+                  "$sno",
+                  style: const TextStyle(color: Colors.black54, fontSize: 13),
+                ),
+              ),
+            ),
+          ),
+          // SCHEDULE NAME
+          Expanded(
+            flex: 3,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: Text(
+                  item['schedule_name']?.toString() ?? '-',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ),
+          ),
+          // TEMPLATE NAME
+          Expanded(
+            flex: 3,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: Text(
+                  item['temp_name']?.toString() ?? '-',
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ),
+          ),
+          // FROM TIME - TO TIME
+          Expanded(
+            flex: 3,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    "${item['from_time'] ?? '-'} – ${item['to_time'] ?? '-'}",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // FROM DATE
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: Text(
+                  item['from_date']?.toString() ?? '-',
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ),
+          ),
+          // TO DATE
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: Text(
+                  item['to_date']?.toString() ?? '-',
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ),
+          ),
+          // STATUS
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Transform.scale(
+                scale: 0.8,
+                child: Switch(
+                  value: isActive,
+                  activeColor: Colors.green.shade600,
+                  inactiveThumbColor: Colors.red.shade400,
+                  inactiveTrackColor: Colors.red.shade100,
+                  onChanged: (val) => _updateStatus(id, val ? 1 : 0),
+                ),
+              ),
+            ),
+          ),
+          // CHANGES
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _buildChangesBtn(item),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildChangesBtn(dynamic item) {
     return PopupMenuButton<String>(
       offset: const Offset(0, 40),
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       color: Colors.white,
       elevation: 4,
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: Colors.blue.shade50,
           borderRadius: BorderRadius.circular(8),
@@ -724,29 +1042,37 @@ class _ScheduleListViewState extends State<ScheduleListView> {
       itemBuilder: (_) => [
         PopupMenuItem(
           value: 'edit',
-          child: Row(children: [
-            Icon(Icons.edit_outlined,
-                size: 20, color: Colors.blue.shade600),
-            const SizedBox(width: 12),
-            const Text("Edit Schedule",
+          child: Row(
+            children: [
+              Icon(Icons.edit_outlined, size: 20, color: Colors.blue.shade600),
+              const SizedBox(width: 12),
+              const Text(
+                "Edit Schedule",
                 style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87)),
-          ]),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
         ),
         PopupMenuItem(
           value: 'extend',
-          child: Row(children: [
-            Icon(Icons.more_time,
-                size: 20, color: Colors.orange.shade600),
-            const SizedBox(width: 12),
-            const Text("Extend Period",
+          child: Row(
+            children: [
+              Icon(Icons.more_time, size: 20, color: Colors.orange.shade600),
+              const SizedBox(width: 12),
+              const Text(
+                "Extend Period",
                 style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87)),
-          ]),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -755,17 +1081,19 @@ class _ScheduleListViewState extends State<ScheduleListView> {
   DataColumn _col(String label, int colIndex) {
     return DataColumn(
       label: InkWell(
-        onTap: colIndex < 0 ? null : () {
-          setState(() {
-            if (_sortColumnIndex == colIndex) {
-              _sortAscending = !_sortAscending;
-            } else {
-              _sortColumnIndex = colIndex;
-              _sortAscending = true;
-            }
-          });
-          _applyFilter();
-        },
+        onTap: colIndex < 0
+            ? null
+            : () {
+                setState(() {
+                  if (_sortColumnIndex == colIndex) {
+                    _sortAscending = !_sortAscending;
+                  } else {
+                    _sortColumnIndex = colIndex;
+                    _sortAscending = true;
+                  }
+                });
+                _applyFilter();
+              },
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -858,9 +1186,12 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                 vertical: 8,
               ),
             ),
-            items: ["10", "25", "50", "100"]
-                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                .toList(),
+            items: [
+              "10",
+              "25",
+              "50",
+              "100",
+            ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
             onChanged: (v) {
               if (v != null) {
                 setState(() {
@@ -894,22 +1225,11 @@ class _ScheduleListViewState extends State<ScheduleListView> {
           style: const TextStyle(fontSize: 12, color: Colors.black87),
           decoration: InputDecoration(
             hintText: 'Search schedules…',
-            hintStyle: const TextStyle(
-              color: Color(0xFF94A3B8),
-              fontSize: 12,
-            ),
-            prefixIcon: const Icon(
-              Icons.search,
-              size: 16,
-              color: Colors.grey,
-            ),
+            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+            prefixIcon: const Icon(Icons.search, size: 16, color: Colors.grey),
             suffixIcon: _searchCtrl.text.isNotEmpty
                 ? IconButton(
-                    icon: const Icon(
-                      Icons.clear,
-                      size: 16,
-                      color: Colors.grey,
-                    ),
+                    icon: const Icon(Icons.clear, size: 16, color: Colors.grey),
                     onPressed: _searchCtrl.clear,
                   )
                 : null,
@@ -958,32 +1278,34 @@ class _ScheduleListViewState extends State<ScheduleListView> {
   }
 
   Widget _buildFooter({bool isMobile = false}) {
-    final start = _filteredData.isEmpty
-        ? 0
-        : (_currentPage - 1) * _perPage + 1;
-    final end =
-        (_currentPage * _perPage).clamp(0, _filteredData.length);
+    final start = _filteredData.isEmpty ? 0 : (_currentPage - 1) * _perPage + 1;
+    final end = (_currentPage * _perPage).clamp(0, _filteredData.length);
 
     final showingText = Text(
       _filteredData.isEmpty
           ? "Showing 0 entries"
           : "Showing $start–$end of ${_filteredData.length} entries",
       style: const TextStyle(
-          color: Colors.black54,
-          fontWeight: FontWeight.bold,
-          fontSize: 13),
+        color: Colors.black54,
+        fontWeight: FontWeight.bold,
+        fontSize: 13,
+      ),
     );
 
     final pagination = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _pageBtn("Previous",
-            enabled: _currentPage > 1,
-            onTap: () => setState(() => _currentPage--)),
+        _pageBtn(
+          "Previous",
+          enabled: _currentPage > 1,
+          onTap: () => setState(() => _currentPage--),
+        ),
         ..._pageNums(),
-        _pageBtn("Next",
-            enabled: _currentPage < _totalPages,
-            onTap: () => setState(() => _currentPage++)),
+        _pageBtn(
+          "Next",
+          enabled: _currentPage < _totalPages,
+          onTap: () => setState(() => _currentPage++),
+        ),
       ],
     );
 
@@ -994,11 +1316,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
               width: double.infinity,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  showingText,
-                  const SizedBox(height: 10),
-                  pagination,
-                ],
+                children: [showingText, const SizedBox(height: 10), pagination],
               ),
             )
           : Row(
@@ -1019,16 +1337,20 @@ class _ScheduleListViewState extends State<ScheduleListView> {
     }
     return List.generate(visibleCount, (i) {
       final p = windowStart + i;
-      return _pageBtn(p.toString(),
-          active: p == _currentPage,
-          onTap: () => setState(() => _currentPage = p));
+      return _pageBtn(
+        p.toString(),
+        active: p == _currentPage,
+        onTap: () => setState(() => _currentPage = p),
+      );
     });
   }
 
-  Widget _pageBtn(String label,
-      {bool active = false,
-      bool enabled = true,
-      VoidCallback? onTap}) {
+  Widget _pageBtn(
+    String label, {
+    bool active = false,
+    bool enabled = true,
+    VoidCallback? onTap,
+  }) {
     return InkWell(
       onTap: (enabled && onTap != null) ? onTap : null,
       borderRadius: BorderRadius.zero,

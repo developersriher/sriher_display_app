@@ -1,3 +1,4 @@
+import 'dart:ui';
 import '../../api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -37,12 +38,14 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   String _entriesValue = "10";
   String _searchQuery = "";
   int _currentPage = 1;
-  
+
   // Sort State
   int _sortColumnIndex = -1;
   bool _sortAscending = false;
 
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _hScroll = ScrollController();
+  final ScrollController _vScroll = ScrollController();
 
   @override
   void initState() {
@@ -67,6 +70,8 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   @override
   void dispose() {
     _searchController.dispose();
+    _hScroll.dispose();
+    _vScroll.dispose();
     super.dispose();
   }
 
@@ -116,7 +121,10 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     }
   }
 
-  List<dynamic> _enrichTableData(List<dynamic> templates, List<dynamic> devices) {
+  List<dynamic> _enrichTableData(
+    List<dynamic> templates,
+    List<dynamic> devices,
+  ) {
     if (templates.isEmpty && devices.isEmpty) return [];
 
     final List<Map<String, dynamic>> enriched = [];
@@ -124,11 +132,16 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
     // 1. Process templates first and match with devices
     for (int i = 0; i < templates.length; i++) {
-      final t = Map<String, dynamic>.from(templates[i] is Map ? templates[i] : {});
+      final t = Map<String, dynamic>.from(
+        templates[i] is Map ? templates[i] : {},
+      );
       final tId = t['id']?.toString() ?? '';
-      final tName = (t['temp_name'] ?? t['template_name'] ?? '').toString().trim();
+      final tName = (t['temp_name'] ?? t['template_name'] ?? '')
+          .toString()
+          .trim();
 
-      String? devId = (t['device_id'] ?? t['device_ids'] ?? t['Device_id'])?.toString();
+      String? devId = (t['device_id'] ?? t['device_ids'] ?? t['Device_id'])
+          ?.toString();
       Map<String, dynamic>? matchedDev;
 
       if (devId != null && devId.isNotEmpty) {
@@ -146,14 +159,19 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       }
 
       if (matchedDev == null && tName.isNotEmpty) {
-        matchedDev = devices.firstWhere(
-          (d) {
-            final dName = (d['device_name'] ?? d['device_code'] ?? d['type_of_device'] ?? '').toString().trim().toLowerCase();
-            final tn = tName.toLowerCase();
-            return dName.isNotEmpty && (dName == tn || dName.contains(tn) || tn.contains(dName));
-          },
-          orElse: () => null,
-        );
+        matchedDev = devices.firstWhere((d) {
+          final dName =
+              (d['device_name'] ??
+                      d['device_code'] ??
+                      d['type_of_device'] ??
+                      '')
+                  .toString()
+                  .trim()
+                  .toLowerCase();
+          final tn = tName.toLowerCase();
+          return dName.isNotEmpty &&
+              (dName == tn || dName.contains(tn) || tn.contains(dName));
+        }, orElse: () => null);
       }
 
       if (matchedDev == null && i < devices.length) {
@@ -162,8 +180,12 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
       if (matchedDev != null) {
         t['device_id'] = matchedDev['id']?.toString();
-        t['device_name'] = matchedDev['device_name'] ?? matchedDev['type_of_device'] ?? matchedDev['device_code'];
-        t['type_of_device'] = matchedDev['type_of_device'] ?? matchedDev['device_name'];
+        t['device_name'] =
+            matchedDev['device_name'] ??
+            matchedDev['type_of_device'] ??
+            matchedDev['device_code'];
+        t['type_of_device'] =
+            matchedDev['type_of_device'] ?? matchedDev['device_name'];
         processedDeviceIds.add(matchedDev['id'].toString());
       }
 
@@ -177,20 +199,26 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       final dId = d['id']?.toString() ?? '';
       if (processedDeviceIds.contains(dId)) continue;
 
-      final dName = (d['device_name'] ?? d['type_of_device'] ?? d['device_code'] ?? '').toString().trim();
+      final dName =
+          (d['device_name'] ?? d['type_of_device'] ?? d['device_code'] ?? '')
+              .toString()
+              .trim();
 
-      Map<String, dynamic>? matchedTemp = templates.firstWhere(
-        (t) {
-          final tName = (t['temp_name'] ?? t['template_name'] ?? '').toString().trim().toLowerCase();
-          final dn = dName.toLowerCase();
-          return tName.isNotEmpty && dn.isNotEmpty && (tName == dn || tName.contains(dn) || dn.contains(tName));
-        },
-        orElse: () => null,
-      );
+      Map<String, dynamic>? matchedTemp = templates.firstWhere((t) {
+        final tName = (t['temp_name'] ?? t['template_name'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        final dn = dName.toLowerCase();
+        return tName.isNotEmpty &&
+            dn.isNotEmpty &&
+            (tName == dn || tName.contains(dn) || dn.contains(tName));
+      }, orElse: () => null);
 
       if (matchedTemp != null) {
         d['temp_id'] = matchedTemp['id']?.toString();
-        d['temp_name'] = matchedTemp['temp_name'] ?? matchedTemp['template_name'];
+        d['temp_name'] =
+            matchedTemp['temp_name'] ?? matchedTemp['template_name'];
       } else if (i < templates.length) {
         final t = templates[i];
         d['temp_id'] = t['id']?.toString();
@@ -227,7 +255,8 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
         if (resDevice.statusCode == 200) {
           final devParsed = jsonDecode(resDevice.body)['data'];
           if (devParsed is Map) {
-            devList = devParsed['DeviceMasters'] ?? devParsed.values.first ?? [];
+            devList =
+                devParsed['DeviceMasters'] ?? devParsed.values.first ?? [];
           } else if (devParsed is List) {
             devList = devParsed;
           }
@@ -282,7 +311,9 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
       if (response.statusCode == 200) {
         _showSnackBar(
-          _editingId == null ? "Submitted successfully" : "Updated successfully",
+          _editingId == null
+              ? "Submitted successfully"
+              : "Updated successfully",
         );
         _resetForm();
         _fetchTableData();
@@ -331,13 +362,20 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   List<String> _parseDeviceIds(dynamic raw) {
     if (raw == null) return [];
     if (raw is List) {
-      return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+      return raw
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
     }
     final str = raw.toString().trim();
     if (str.isEmpty) return [];
     // Handle "[1, 2, 3]" string format
     final cleaned = str.replaceAll('[', '').replaceAll(']', '');
-    return cleaned.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    return cleaned
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
   }
 
   /// Resolves a list of device IDs to their display names from _deviceDropdownList.
@@ -350,7 +388,14 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
         orElse: () => null,
       );
       if (dev != null) {
-        names.add((dev['device_name'] ?? dev['type_of_device'] ?? dev['device_code'] ?? dev['Device_name'] ?? id).toString());
+        names.add(
+          (dev['device_name'] ??
+                  dev['type_of_device'] ??
+                  dev['device_code'] ??
+                  dev['Device_name'] ??
+                  id)
+              .toString(),
+        );
       } else {
         names.add(id);
       }
@@ -366,7 +411,10 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     String? matchedDeviceId;
 
     // 1. Direct device_id in item
-    final rawDeviceId = (item['device_id'] ?? item['device_ids'] ?? item['Device_id'])?.toString().trim();
+    final rawDeviceId =
+        (item['device_id'] ?? item['device_ids'] ?? item['Device_id'])
+            ?.toString()
+            .trim();
     if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
       final parsed = _parseDeviceIds(rawDeviceId);
       for (final id in parsed) {
@@ -387,11 +435,27 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
     // 3. Match by device_name / type_of_device
     if (matchedDeviceId == null) {
-      final itemDeviceName = (item['device_name'] ?? item['Device_name'] ?? item['device_code'] ?? item['type_of_device'] ?? item['device_type'] ?? '').toString().trim();
+      final itemDeviceName =
+          (item['device_name'] ??
+                  item['Device_name'] ??
+                  item['device_code'] ??
+                  item['type_of_device'] ??
+                  item['device_type'] ??
+                  '')
+              .toString()
+              .trim();
       if (itemDeviceName.isNotEmpty) {
         for (var d in _deviceDropdownList) {
-          final dName = (d['device_name'] ?? d['device_code'] ?? d['type_of_device'] ?? d['Device_name'] ?? '').toString().trim();
-          if (dName.isNotEmpty && dName.toLowerCase() == itemDeviceName.toLowerCase()) {
+          final dName =
+              (d['device_name'] ??
+                      d['device_code'] ??
+                      d['type_of_device'] ??
+                      d['Device_name'] ??
+                      '')
+                  .toString()
+                  .trim();
+          if (dName.isNotEmpty &&
+              dName.toLowerCase() == itemDeviceName.toLowerCase()) {
             matchedDeviceId = d['id'].toString();
             break;
           }
@@ -401,7 +465,9 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
     // Resolve template ID
     String? matchedTemplateId;
-    final rawTempId = (item['temp_id'] ?? item['template_id'])?.toString().trim();
+    final rawTempId = (item['temp_id'] ?? item['template_id'])
+        ?.toString()
+        .trim();
     if (rawTempId != null && rawTempId.isNotEmpty) {
       if (_templateDropdownList.any((t) => t['id']?.toString() == rawTempId)) {
         matchedTemplateId = rawTempId;
@@ -416,11 +482,15 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     }
 
     if (matchedTemplateId == null) {
-      final String itemTempName = (item['temp_name'] ?? item['template_name'] ?? '').toString().trim();
+      final String itemTempName =
+          (item['temp_name'] ?? item['template_name'] ?? '').toString().trim();
       if (itemTempName.isNotEmpty) {
         for (var t in _templateDropdownList) {
-          final tName = (t['temp_name'] ?? t['template_name'] ?? '').toString().trim();
-          if (tName.isNotEmpty && tName.toLowerCase() == itemTempName.toLowerCase()) {
+          final tName = (t['temp_name'] ?? t['template_name'] ?? '')
+              .toString()
+              .trim();
+          if (tName.isNotEmpty &&
+              tName.toLowerCase() == itemTempName.toLowerCase()) {
             matchedTemplateId = t['id']?.toString();
             break;
           }
@@ -428,7 +498,9 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       }
     }
 
-    debugPrint("Parsed deviceId: $matchedDeviceId, templateId: $matchedTemplateId");
+    debugPrint(
+      "Parsed deviceId: $matchedDeviceId, templateId: $matchedTemplateId",
+    );
 
     setState(() {
       _editingId = int.tryParse(item['id'].toString());
@@ -478,14 +550,18 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       builder: (dialogContext, setDialogState) {
         String? safeDeviceId;
         if (dialogDeviceId != null && dialogDeviceId!.isNotEmpty) {
-          if (_deviceDropdownList.any((i) => i['id']?.toString() == dialogDeviceId)) {
+          if (_deviceDropdownList.any(
+            (i) => i['id']?.toString() == dialogDeviceId,
+          )) {
             safeDeviceId = dialogDeviceId;
           }
         }
 
         String? safeTemplateId;
         if (dialogCategoryId != null && dialogCategoryId!.isNotEmpty) {
-          if (_templateDropdownList.any((i) => i['id']?.toString() == dialogCategoryId)) {
+          if (_templateDropdownList.any(
+            (i) => i['id']?.toString() == dialogCategoryId,
+          )) {
             safeTemplateId = dialogCategoryId;
           }
         }
@@ -510,12 +586,15 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                 isExpanded: true,
                 menuMaxHeight: 250,
                 dropdownColor: Colors.white,
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Please select a Device Type' : null,
+                validator: (v) => (v == null || v.isEmpty)
+                    ? 'Please select a Device Type'
+                    : null,
                 decoration: InputDecoration(
                   hintText: "Select Device Type",
-                  hintStyle:
-                      const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                  hintStyle: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
+                  ),
                   filled: true,
                   fillColor: const Color(0xFFF8FAFC),
                   border: OutlineInputBorder(
@@ -538,16 +617,19 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                     borderRadius: BorderRadius.circular(4),
                     borderSide: const BorderSide(color: Colors.red),
                   ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 12,
+                  ),
                 ),
                 style: const TextStyle(color: Colors.black87, fontSize: 13),
                 items: _deviceDropdownList.map((item) {
-                  final name = (item['device_name'] ??
-                          item['device_code'] ??
-                          item['Device_name'] ??
-                          '')
-                      .toString();
+                  final name =
+                      (item['device_name'] ??
+                              item['device_code'] ??
+                              item['Device_name'] ??
+                              '')
+                          .toString();
                   return DropdownMenuItem<String>(
                     value: item['id'].toString(),
                     child: Text(name),
@@ -576,12 +658,15 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                 isExpanded: true,
                 menuMaxHeight: 250,
                 dropdownColor: Colors.white,
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Please select a Template Name' : null,
+                validator: (v) => (v == null || v.isEmpty)
+                    ? 'Please select a Template Name'
+                    : null,
                 decoration: InputDecoration(
                   hintText: "Select Template Name",
-                  hintStyle:
-                      const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                  hintStyle: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
+                  ),
                   filled: true,
                   fillColor: const Color(0xFFF8FAFC),
                   border: OutlineInputBorder(
@@ -604,8 +689,10 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                     borderRadius: BorderRadius.circular(4),
                     borderSide: const BorderSide(color: Colors.red),
                   ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 12,
+                  ),
                 ),
                 style: const TextStyle(color: Colors.black87, fontSize: 13),
                 items: _templateDropdownList.map((item) {
@@ -662,11 +749,13 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                                   _selectedDeviceId!.isEmpty ||
                                   _selectedCategoryId == null ||
                                   _selectedCategoryId!.isEmpty) {
-                                ScaffoldMessenger.of(dialogContext)
-                                    .showSnackBar(
+                                ScaffoldMessenger.of(
+                                  dialogContext,
+                                ).showSnackBar(
                                   const SnackBar(
                                     content: Text(
-                                        'Please fill in all required fields'),
+                                      'Please fill in all required fields',
+                                    ),
                                     behavior: SnackBarBehavior.floating,
                                   ),
                                 );
@@ -721,7 +810,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth <= 1100;
 
     final heading = const AnimatedHeading(
       text: "Default Templates",
@@ -796,9 +885,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       resizeToAvoidBottomInset: true,
       body: SelectionArea(
         child: isMobile
-            ? SingleChildScrollView(
-                child: bodyContent,
-              )
+            ? SingleChildScrollView(child: bodyContent)
             : bodyContent,
       ),
     );
@@ -806,14 +893,20 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
   Widget _buildRightListContent({bool isMobile = false, Widget? createBtn}) {
     if (_isLoading && _templateList.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.blue),
-      );
+      return const Center(child: CircularProgressIndicator(color: Colors.blue));
     }
 
     List<dynamic> filtered = _templateList.where((item) {
-      final devName = (item['device_name'] ?? item['type_of_device'] ?? item['device_code'] ?? "").toString().toLowerCase();
-      final tempName = (item['temp_name'] ?? item['template_name'] ?? "").toString().toLowerCase();
+      final devName =
+          (item['device_name'] ??
+                  item['type_of_device'] ??
+                  item['device_code'] ??
+                  "")
+              .toString()
+              .toLowerCase();
+      final tempName = (item['temp_name'] ?? item['template_name'] ?? "")
+          .toString()
+          .toLowerCase();
       final q = _searchQuery.toLowerCase();
       return devName.contains(q) || tempName.contains(q);
     }).toList();
@@ -827,17 +920,33 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           final idsA = _parseDeviceIds(a['device_id']);
           aVal = idsA.isNotEmpty
               ? _resolveDeviceNames(idsA).toLowerCase()
-              : (a['device_name'] ?? a['type_of_device'] ?? a['Device_name'] ?? a['device_code'] ?? "").toString().toLowerCase();
+              : (a['device_name'] ??
+                        a['type_of_device'] ??
+                        a['Device_name'] ??
+                        a['device_code'] ??
+                        "")
+                    .toString()
+                    .toLowerCase();
 
           final idsB = _parseDeviceIds(b['device_id']);
           bVal = idsB.isNotEmpty
               ? _resolveDeviceNames(idsB).toLowerCase()
-              : (b['device_name'] ?? b['type_of_device'] ?? b['Device_name'] ?? b['device_code'] ?? "").toString().toLowerCase();
+              : (b['device_name'] ??
+                        b['type_of_device'] ??
+                        b['Device_name'] ??
+                        b['device_code'] ??
+                        "")
+                    .toString()
+                    .toLowerCase();
           break;
 
         case 1:
-          aVal = (a['temp_name'] ?? a['template_name'] ?? "").toString().toLowerCase();
-          bVal = (b['temp_name'] ?? b['template_name'] ?? "").toString().toLowerCase();
+          aVal = (a['temp_name'] ?? a['template_name'] ?? "")
+              .toString()
+              .toLowerCase();
+          bVal = (b['temp_name'] ?? b['template_name'] ?? "")
+              .toString()
+              .toLowerCase();
           break;
       }
 
@@ -850,81 +959,113 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
     final dataTableWidget = LayoutBuilder(
       builder: (context, constraints) {
-        return SingleChildScrollView(
-          scrollDirection: Axis.vertical,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: constraints.maxWidth,
-              ),
-              child: DataTable(
-                headingRowHeight: 45,
-                headingRowColor: WidgetStateProperty.all(
-                  Colors.blue.shade50,
+        final double minWidth = constraints.maxWidth > 1100
+            ? constraints.maxWidth
+            : 1100.0;
+        return ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+          ),
+          child: Scrollbar(
+            controller: _hScroll,
+            thumbVisibility: true,
+            thickness: 8.0,
+            trackVisibility: true,
+            interactive: true,
+            child: SingleChildScrollView(
+              controller: _hScroll,
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: minWidth),
+                child: Scrollbar(
+                  controller: _vScroll,
+                  thumbVisibility: true,
+                  thickness: 8.0,
+                  trackVisibility: true,
+                  interactive: true,
+                  child: SingleChildScrollView(
+                    controller: _vScroll,
+                    scrollDirection: Axis.vertical,
+                    child: DataTable(
+                      headingRowHeight: 45,
+                      headingRowColor: WidgetStateProperty.all(
+                        Colors.blue.shade50,
+                      ),
+                      columns: [
+                        _buildTableCol('Device Name', 0),
+                        _buildTableCol('Template Name', 1),
+                        _buildTableCol('Edit', -1),
+                      ],
+                      rows: paginated.map((item) {
+                        // Resolve device name
+                        final deviceIds = _parseDeviceIds(item['device_id']);
+                        String resolvedName;
+                        if (deviceIds.isNotEmpty) {
+                          resolvedName = _resolveDeviceNames(deviceIds);
+                        } else {
+                          resolvedName =
+                              (item['device_name'] ??
+                                      item['type_of_device'] ??
+                                      item['Device_name'] ??
+                                      item['device_code'] ??
+                                      "-")
+                                  .toString();
+                        }
+
+                        // Resolve template name
+                        String resolvedTempName =
+                            (item['temp_name'] ?? item['template_name'] ?? "-")
+                                .toString();
+                        if (resolvedTempName == "-") {
+                          final tempId =
+                              (item['temp_id'] ?? item['template_id'])
+                                  ?.toString();
+                          if (tempId != null) {
+                            final matchedTemp = _templateDropdownList
+                                .firstWhere(
+                                  (t) => t['id']?.toString() == tempId,
+                                  orElse: () => null,
+                                );
+                            if (matchedTemp != null) {
+                              resolvedTempName =
+                                  (matchedTemp['temp_name'] ??
+                                          matchedTemp['template_name'] ??
+                                          "-")
+                                      .toString();
+                            }
+                          }
+                        }
+
+                        return DataRow(
+                          cells: [
+                            DataCell(
+                              Text(
+                                resolvedName,
+                                style: const TextStyle(fontSize: 12.0),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                resolvedTempName,
+                                style: const TextStyle(fontSize: 12.0),
+                              ),
+                            ),
+                            DataCell(
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.edit,
+                                  color: Colors.blue,
+                                  size: 20,
+                                ),
+                                onPressed: () => _editItem(item),
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 ),
-                columns: [
-                  _buildTableCol('Device Name', 0),
-                  _buildTableCol('Template Name', 1),
-                  _buildTableCol('Edit', -1),
-                ],
-                rows: paginated.map((item) {
-                  // Resolve device name
-                  final deviceIds = _parseDeviceIds(item['device_id']);
-                  String resolvedName;
-                  if (deviceIds.isNotEmpty) {
-                    resolvedName = _resolveDeviceNames(deviceIds);
-                  } else {
-                    resolvedName = (item['device_name'] ??
-                            item['type_of_device'] ??
-                            item['Device_name'] ??
-                            item['device_code'] ??
-                            "-")
-                        .toString();
-                  }
-
-                  // Resolve template name
-                  String resolvedTempName = (item['temp_name'] ?? item['template_name'] ?? "-").toString();
-                  if (resolvedTempName == "-") {
-                    final tempId = (item['temp_id'] ?? item['template_id'])?.toString();
-                    if (tempId != null) {
-                      final matchedTemp = _templateDropdownList.firstWhere(
-                        (t) => t['id']?.toString() == tempId,
-                        orElse: () => null,
-                      );
-                      if (matchedTemp != null) {
-                        resolvedTempName = (matchedTemp['temp_name'] ?? matchedTemp['template_name'] ?? "-").toString();
-                      }
-                    }
-                  }
-
-                  return DataRow(
-                    cells: [
-                      DataCell(
-                        Text(
-                          resolvedName,
-                          style: const TextStyle(fontSize: 12.0),
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                          resolvedTempName,
-                          style: const TextStyle(fontSize: 12.0),
-                        ),
-                      ),
-                      DataCell(
-                        IconButton(
-                          icon: const Icon(
-                            Icons.edit,
-                            color: Colors.blue,
-                            size: 20,
-                          ),
-                          onPressed: () => _editItem(item),
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
               ),
             ),
           ),
@@ -1047,7 +1188,9 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     Function(String?) onChanged, {
     String? Function(String?)? validator,
   }) {
-    String? validValue = items.any((i) => i[idKey].toString() == value) ? value : null;
+    String? validValue = items.any((i) => i[idKey].toString() == value)
+        ? value
+        : null;
 
     return DropdownButtonFormField<String>(
       value: validValue,
@@ -1081,11 +1224,19 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           borderRadius: BorderRadius.circular(4),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 12,
+        ),
       ),
       style: const TextStyle(color: Colors.black87, fontSize: 13),
       items: items.map((item) {
-        final displayName = item[nameKey] ?? item['device_code'] ?? item['temp_name'] ?? item['Device_name'] ?? "";
+        final displayName =
+            item[nameKey] ??
+            item['device_code'] ??
+            item['temp_name'] ??
+            item['Device_name'] ??
+            "";
         return DropdownMenuItem<String>(
           value: item[idKey].toString(),
           child: Text(displayName.toString()),
@@ -1136,9 +1287,12 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                 vertical: 8,
               ),
             ),
-            items: ["10", "25", "50", "100"]
-                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                .toList(),
+            items: [
+              "10",
+              "25",
+              "50",
+              "100",
+            ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
             onChanged: (v) => setState(() {
               _entriesValue = v!;
               _currentPage = 1;
@@ -1172,10 +1326,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           style: const TextStyle(color: Colors.black87, fontSize: 12),
           decoration: InputDecoration(
             hintText: "Search devices...",
-            hintStyle: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF94A3B8),
-            ),
+            hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
             prefixIcon: const Icon(Icons.search, size: 16),
             isDense: true,
             filled: true,
@@ -1233,17 +1384,19 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   DataColumn _buildTableCol(String label, int colIndex) {
     return DataColumn(
       label: InkWell(
-        onTap: colIndex < 0 ? null : () {
-          setState(() {
-            if (_sortColumnIndex == colIndex) {
-              _sortAscending = !_sortAscending;
-            } else {
-              _sortColumnIndex = colIndex;
-              _sortAscending = true;
-            }
-            _currentPage = 1;
-          });
-        },
+        onTap: colIndex < 0
+            ? null
+            : () {
+                setState(() {
+                  if (_sortColumnIndex == colIndex) {
+                    _sortAscending = !_sortAscending;
+                  } else {
+                    _sortColumnIndex = colIndex;
+                    _sortAscending = true;
+                  }
+                  _currentPage = 1;
+                });
+              },
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1331,11 +1484,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
               width: double.infinity,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  showingText,
-                  const SizedBox(height: 10),
-                  pagination,
-                ],
+                children: [showingText, const SizedBox(height: 10), pagination],
               ),
             )
           : Row(
@@ -1356,7 +1505,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       windowStart = totalPages - visibleCount + 1;
       if (windowStart < 1) windowStart = 1;
     }
-    
+
     List<Widget> widgets = [];
     for (int i = windowStart; i < windowStart + visibleCount; i++) {
       final idx = i;

@@ -3,7 +3,7 @@
 // Usage: dart run cors_proxy.dart
 //
 // This proxy listens on http://localhost:8888 and forwards
-// all requests to https://display.sriher.com, adding the
+// all requests to ${baseUrl}, adding the
 // necessary CORS headers so Chrome allows the requests.
 
 import 'dart:io';

@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 void main() async {
-  final url = 'https://display.sriher.com/schedulerange_scheduleNamesview';
-  final apiKey = '933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2';
-  
+  final url = '${baseUrl}/schedulerange_scheduleNamesview';
+  final apiKey =
+      '933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2';
+
   try {
     final response = await http.post(
       Uri.parse(url),

@@ -677,31 +677,33 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                   ),
                 ),
                 const SizedBox(width: 12),
-               ElevatedButton(
-  onPressed: () {
-    final name = _scheduleNameController.text.trim();
-    if (name.isNotEmpty) {
-      Navigator.pop(context);
-      _addNewSchedule(name);
-    }
-  },
-  style: ElevatedButton.styleFrom(
-    backgroundColor: const Color(0xFF0F172A),
-    foregroundColor: Colors.white,
-    padding: const EdgeInsets.symmetric(
-      vertical: 12,
-      horizontal: 20,
-    ),
-    elevation: 0,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(4), // 👈 Changed from 16 to 4 for a sharp square look with a tiny curve
-    ),
-  ),
-  child: const Text(
-    "Create Schedule",
-    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-  ),
-),
+                ElevatedButton(
+                  onPressed: () {
+                    final name = _scheduleNameController.text.trim();
+                    if (name.isNotEmpty) {
+                      Navigator.pop(context);
+                      _addNewSchedule(name);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 20,
+                    ),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        4,
+                      ), // 👈 Changed from 16 to 4 for a sharp square look with a tiny curve
+                    ),
+                  ),
+                  child: const Text(
+                    "Create Schedule",
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                  ),
+                ),
               ],
             ),
           ],
@@ -748,7 +750,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                         );
                       }
                     },
-                    validator: (v) => (v == null) ? 'Select the Schedule' : null,
+                    validator: (v) =>
+                        (v == null) ? 'Select the Schedule' : null,
                     isMobile: true,
                   ),
                   const SizedBox(height: 8),
@@ -769,7 +772,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                         );
                       }
                     },
-                    validator: (v) => (v == null) ? 'Select the Template' : null,
+                    validator: (v) =>
+                        (v == null) ? 'Select the Template' : null,
                     isMobile: true,
                   ),
                   const SizedBox(height: 10),
@@ -779,7 +783,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                         child: _buildDateField(
                           "From Date",
                           _fromDateController,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Enter the from date' : null,
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Enter the from date'
+                              : null,
                           isMobile: true,
                         ),
                       ),
@@ -788,13 +794,15 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                         child: _buildDateField(
                           "To Date",
                           _toDateController,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Enter the to date' : null,
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Enter the to date'
+                              : null,
                           isMobile: true,
                         ),
                       ),
                     ],
                   ),
-                  
+
                   _buildCheckboxRow(isMobile: true),
                   const SizedBox(height: 10),
                   Center(
@@ -874,7 +882,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                               );
                             }
                           },
-                          validator: (v) => (v == null) ? 'Select the Schedule' : null,
+                          validator: (v) =>
+                              (v == null) ? 'Select the Schedule' : null,
                           isMobile: false,
                         ),
                       ),
@@ -897,7 +906,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                               );
                             }
                           },
-                          validator: (v) => (v == null) ? 'Select the Template' : null,
+                          validator: (v) =>
+                              (v == null) ? 'Select the Template' : null,
                           isMobile: false,
                         ),
                       ),
@@ -914,7 +924,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                         child: _buildDateField(
                           "From Date",
                           _fromDateController,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Enter the from date' : null,
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Enter the from date'
+                              : null,
                           isMobile: false,
                         ),
                       ),
@@ -925,7 +937,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                         child: _buildDateField(
                           "To Date",
                           _toDateController,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Enter the to date' : null,
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Enter the to date'
+                              : null,
                           isMobile: false,
                         ),
                       ),
@@ -956,7 +970,10 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(flex: 4, child: _buildSlotsPanel(isMobile: false)),
+                        Expanded(
+                          flex: 4,
+                          child: _buildSlotsPanel(isMobile: false),
+                        ),
                         const SizedBox(width: 32),
                         Expanded(
                           flex: 6,
@@ -980,9 +997,10 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     return SelectionArea(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final bool isNarrow = constraints.maxWidth < 1000;
+          final bool isNarrow = constraints.maxWidth <= 1100;
 
-          final bool isSelectionComplete = selectedScheduleId != null &&
+          final bool isSelectionComplete =
+              selectedScheduleId != null &&
               selectedTemplateId != null &&
               _fromDateController.text.isNotEmpty &&
               _toDateController.text.isNotEmpty;
@@ -1105,7 +1123,8 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                 String slot = _generateTimeSlots()[index];
                 bool isSelected = slotSelection[index] ?? false;
                 return InkWell(
-                  onTap: () => setState(() => slotSelection[index] = !isSelected),
+                  onTap: () =>
+                      setState(() => slotSelection[index] = !isSelected),
                   child: Container(
                     decoration: BoxDecoration(
                       color: isSelected ? Colors.blue : Colors.white,
@@ -1223,7 +1242,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 border: Border(
-                                  bottom: BorderSide(color: Colors.grey.shade100),
+                                  bottom: BorderSide(
+                                    color: Colors.grey.shade100,
+                                  ),
                                 ),
                               ),
                               child: Row(
@@ -1244,16 +1265,20 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                     flex: 2,
                                     child: Center(
                                       child: Container(
-                                        width: 60,
-                                        height: 60,
+                                        width: 100,
+                                        height: 65,
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(4),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                           border: Border.all(
                                             color: Colors.grey.shade200,
                                           ),
                                         ),
                                         child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(4),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                           child: _buildFilePreview(file),
                                         ),
                                       ),
@@ -1262,7 +1287,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                   Expanded(
                                     flex: 5,
                                     child: Text(
-                                      file['user_filename'] ?? file['file_name'] ?? '-',
+                                      file['user_filename'] ??
+                                          file['file_name'] ??
+                                          '-',
                                       style: const TextStyle(fontSize: 12),
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -1277,7 +1304,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: Colors.blue.shade50,
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                         ),
                                         child: Text(
                                           "${file['duration'] ?? '30'}s",
@@ -1411,16 +1440,22 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                borderSide: const BorderSide(
+                  color: Color(0xFF334155),
+                  width: 1.5,
+                ),
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 8,
                 vertical: 8,
               ),
             ),
-            items: ["10", "25", "50", "100"]
-                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                .toList(),
+            items: [
+              "10",
+              "25",
+              "50",
+              "100",
+            ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
             onChanged: (v) => setState(() {
               entriesValue = v!;
               currentFilePage = 1;
@@ -1469,7 +1504,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
         );
 
         final searchBox = SizedBox(
-          width: isMobile ? constraints.maxWidth * 0.5 : constraints.maxWidth * 0.45,
+          width: isMobile
+              ? constraints.maxWidth * 0.5
+              : constraints.maxWidth * 0.45,
           height: 38,
           child: TextField(
             controller: _searchController,
@@ -1478,7 +1515,11 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
             }),
             style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF64748B)),
+              prefixIcon: const Icon(
+                Icons.search,
+                size: 16,
+                color: Color(0xFF64748B),
+              ),
               hintText: "Search files...",
               hintStyle: const TextStyle(
                 fontSize: 12.0,
@@ -1487,19 +1528,25 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
               isDense: true,
               filled: true,
               fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 8,
+                horizontal: 10,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
                 borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                
+
                 borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                borderSide: const BorderSide(
+                  color: Color(0xFF334155),
+                  width: 1.5,
+                ),
               ),
             ),
           ),
@@ -1558,7 +1605,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth < 600;
+          final isNarrow = constraints.maxWidth <= 1100;
           final paginationText = Text(
             "Showing $start to $end of $total entries",
             style: const TextStyle(
@@ -1598,10 +1645,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      paginationText,
-                      paginationControls,
-                    ],
+                    children: [paginationText, paginationControls],
                   ),
           );
         },
@@ -1715,24 +1759,32 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
               ),
             ),
             if (showAdd) ...[
-               const SizedBox(width: 8),
-               Padding(
-                 padding: const EdgeInsets.only(top: 6.0),
-                 child: SizedBox(
-                   width: 36,
-                   height: 36,
-                   child: Material(
-                       color: Colors.blue.shade300,
-                     borderRadius: isMobile ? BorderRadius.zero : BorderRadius.circular(6),
-                     child: InkWell(
-                       borderRadius: isMobile ? BorderRadius.zero : BorderRadius.circular(6),
-                       onTap: () => _showAddSchedulePopup(context),
-                       child: const Icon(Icons.add, color: Colors.white, size: 20),
-                     ),
-                   ),
-                 ),
-               ),
-             ],
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 6.0),
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: Material(
+                    color: Colors.blue.shade300,
+                    borderRadius: isMobile
+                        ? BorderRadius.zero
+                        : BorderRadius.circular(6),
+                    child: InkWell(
+                      borderRadius: isMobile
+                          ? BorderRadius.zero
+                          : BorderRadius.circular(6),
+                      onTap: () => _showAddSchedulePopup(context),
+                      child: const Icon(
+                        Icons.add,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ],
@@ -1802,7 +1854,10 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                   )
                 : OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF334155), width: 1.6),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF334155),
+                      width: 1.6,
+                    ),
                   ),
             errorBorder: isMobile
                 ? const OutlineInputBorder(
@@ -1832,7 +1887,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
             );
             if (picked != null) {
               // Ensure you have the intl package for DateFormat
-              controller.text = DateFormat(isMobile ? 'dd-MM-yyyy' : 'yyyy-MM-dd').format(picked);
+              controller.text = DateFormat(
+                isMobile ? 'dd-MM-yyyy' : 'yyyy-MM-dd',
+              ).format(picked);
               setState(() {});
             }
           },
@@ -1842,9 +1899,16 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
   }
 
   bool _isFileVideo(dynamic file) {
-    String fn = (file['file_name'] ?? file['fileName'] ?? file['user_filename'] ?? '').toString().toLowerCase();
-    String fType = (file['file_type'] ?? file['type'] ?? '').toString().toLowerCase();
-    String fFormat = (file['format'] ?? file['file_format'] ?? '').toString().toLowerCase();
+    String fn =
+        (file['file_name'] ?? file['fileName'] ?? file['user_filename'] ?? '')
+            .toString()
+            .toLowerCase();
+    String fType = (file['file_type'] ?? file['type'] ?? '')
+        .toString()
+        .toLowerCase();
+    String fFormat = (file['format'] ?? file['file_format'] ?? '')
+        .toString()
+        .toLowerCase();
     return fn.endsWith('.mp4') ||
         fn.endsWith('.webm') ||
         fn.endsWith('.avi') ||
@@ -1856,10 +1920,18 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
   }
 
   Widget _buildFilePreview(dynamic file) {
-    String fileName = (file['file_name'] ?? file['fileName'] ?? '').toString().trim();
-    String userFileName = (file['user_filename'] ?? file['userFileName'] ?? '').toString().trim();
+    String fileName = (file['file_name'] ?? file['fileName'] ?? '')
+        .toString()
+        .trim();
+    String userFileName = (file['user_filename'] ?? file['userFileName'] ?? '')
+        .toString()
+        .trim();
     if (fileName.isEmpty) {
-      return const Icon(Icons.image_not_supported_rounded, size: 24, color: Colors.grey);
+      return const Icon(
+        Icons.image_not_supported_rounded,
+        size: 24,
+        color: Colors.grey,
+      );
     }
     bool isVideo = _isFileVideo(file);
     final encodedName = Uri.encodeFull(fileName);
@@ -1874,6 +1946,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
       return WebCompatImage(
         url: fileUrl,
         fit: BoxFit.cover,
+        showFullScreenIcon: true,
       );
     }
   }
