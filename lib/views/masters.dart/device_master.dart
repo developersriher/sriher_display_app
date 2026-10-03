@@ -432,8 +432,11 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             key: dialogFormKey,
             autovalidateMode:
                 AutovalidateMode.disabled, // ← no validation until submit
-            child: SingleChildScrollView(
-              child: Column(
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+              child: SingleChildScrollView(
+                primary: false,
+                child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -735,7 +738,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
               ),
             ),
           ),
-        );
+        ),
+      );
       },
     );
   }
@@ -974,12 +978,12 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
         final Map<int, TableColumnWidth> colWidths = const {
           0: FlexColumnWidth(4.2), // TYPE OF DEVICE
           1: FlexColumnWidth(2.5), // DEVICE ID
-          2: FlexColumnWidth(3.0), // NAME
-          3: FlexColumnWidth(2.5), // MODEL
-          4: FlexColumnWidth(1.8), // OS
-          5: FlexColumnWidth(3.5), // YEAR OF MODEL
-          6: FlexColumnWidth(2.5), // WARRANTY
-          7: FlexColumnWidth(2.5), // SERIAL NO
+          2: FlexColumnWidth(2.5), // SERIAL NO
+          3: FlexColumnWidth(3.0), // NAME
+          4: FlexColumnWidth(2.5), // MODEL
+          5: FlexColumnWidth(1.8), // OS
+          6: FlexColumnWidth(3.5), // YEAR OF MODEL
+          7: FlexColumnWidth(2.5), // WARRANTY
           8: FlexColumnWidth(3.5), // MANUFACTURE
           9: FlexColumnWidth(1.4), // EDIT
           10: FlexColumnWidth(1.6), // ACTION
@@ -1047,15 +1051,15 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                                       colIndex: 0,
                                     ),
                                     _buildHeaderCell("DEVICE ID", colIndex: 1),
-                                    _buildHeaderCell("NAME", colIndex: 2),
-                                    _buildHeaderCell("MODEL", colIndex: 3),
-                                    _buildHeaderCell("OS", colIndex: 4),
+                                    _buildHeaderCell("SERIAL NO", colIndex: 2),
+                                    _buildHeaderCell("NAME", colIndex: 3),
+                                    _buildHeaderCell("MODEL", colIndex: 4),
+                                    _buildHeaderCell("OS", colIndex: 5),
                                     _buildHeaderCell(
                                       "YEAR OF MODEL",
-                                      colIndex: 5,
+                                      colIndex: 6,
                                     ),
-                                    _buildHeaderCell("WARRANTY", colIndex: 6),
-                                    _buildHeaderCell("SERIAL NO", colIndex: 7),
+                                    _buildHeaderCell("WARRANTY", colIndex: 7),
                                     _buildHeaderCell(
                                       "MANUFACTURE",
                                       colIndex: 8,
@@ -1187,6 +1191,29 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                                         ),
                                         child: Text(
                                           val([
+                                            'device_s_no',
+                                            'deviceSNo',
+                                            'serial_number',
+                                            'serial',
+                                          ]),
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          val([
                                             'device_name',
                                             'deviceName',
                                             'name',
@@ -1275,29 +1302,6 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                                             'device_warranty',
                                             'deviceWarranty',
                                             'warranty',
-                                          ]),
-                                          style: const TextStyle(
-                                            fontSize: 12.0,
-                                            color: Colors.black87,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ),
-                                    Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6.0,
-                                          vertical: 10.0,
-                                        ),
-                                        child: Text(
-                                          val([
-                                            'device_s_no',
-                                            'deviceSNo',
-                                            'serial_number',
-                                            'serial',
                                           ]),
                                           style: const TextStyle(
                                             fontSize: 12.0,

@@ -497,9 +497,10 @@ class _ScheduleListViewState extends State<ScheduleListView> {
           );
 
     return SelectionArea(
-      child: Padding(
-        padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
-        child: Container(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
+          child: Container(
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -514,12 +515,12 @@ class _ScheduleListViewState extends State<ScheduleListView> {
           ),
           child: Padding(
             padding: EdgeInsets.all(isMobile ? 10.0 : 20.0),
-            child: Column(
-              children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isNarrow = constraints.maxWidth <= 1100;
-                    return isNarrow
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth <= 1100;
+                return Column(
+                  children: [
+                    isNarrow
                         ? SizedBox(
                             width: double.infinity,
                             child: Stack(
@@ -541,17 +542,12 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                                           });
                                           _fetchSchedules();
                                         },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF0F172A),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          child: const Icon(
+                                        child: const Padding(
+                                          padding: EdgeInsets.all(8.0),
+                                          child: Icon(
                                             Icons.arrow_back_rounded,
-                                            color: Colors.white,
-                                            size: 20,
+                                            color: Color.fromARGB(255, 33, 150, 243),
+                                            size: 24,
                                           ),
                                         ),
                                       ),
@@ -576,18 +572,12 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                                       });
                                       _fetchSchedules();
                                     },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF0F172A),
-                                        borderRadius: BorderRadius.circular(
-                                          8,
-                                        ),
-                                      ),
-                                      child: const Icon(
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: Icon(
                                         Icons.arrow_back_rounded,
-                                        color: Colors.white,
-                                        size: 20,
+                                        color: Color.fromARGB(255, 33, 150, 243),
+                                        size: 24,
                                       ),
                                     ),
                                   ),
@@ -598,22 +588,24 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                               const SizedBox(width: 12),
                               actionBtn,
                             ],
-                          );
-                  },
-                ),
+                          ),
                 const SizedBox(height: 16),
-                _buildListHeader(isMobile: isMobile, actionBtn: actionBtn),
+                _buildListHeader(isMobile: isNarrow, actionBtn: actionBtn),
 
-                Expanded(
-                  child: isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _buildTableContainer(),
-                ),
+                isLoading
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 60),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    : _buildTableContainer(),
 
-                _buildFooter(isMobile: isMobile),
-              ],
+                _buildFooter(isMobile: isNarrow),
+                  ],
+                );
+              },
             ),
           ),
+        ),
         ),
       ),
     );
@@ -630,7 +622,6 @@ class _ScheduleListViewState extends State<ScheduleListView> {
             : 1100.0;
         return Container(
           width: double.infinity,
-          height: double.infinity,
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade200, width: 1.0),
             borderRadius: BorderRadius.circular(8),
@@ -641,19 +632,12 @@ class _ScheduleListViewState extends State<ScheduleListView> {
               dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
             ),
             child: Scrollbar(
-              controller: _vScroll,
+              controller: _hScroll,
               thickness: 8.0,
               interactive: true,
               child: SingleChildScrollView(
-                controller: _vScroll,
-                scrollDirection: Axis.vertical,
-                child: Scrollbar(
-                  controller: _hScroll,
-                  thickness: 8.0,
-                  interactive: true,
-                  child: SingleChildScrollView(
-                    controller: _hScroll,
-                    scrollDirection: Axis.horizontal,
+                controller: _hScroll,
+                scrollDirection: Axis.horizontal,
                     child: ConstrainedBox(
                       constraints: BoxConstraints(minWidth: minWidth),
                       child: Container(
@@ -749,8 +733,6 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                   ),
                 ),
               ),
-            ),
-          ),
         );
       },
     );
@@ -1284,7 +1266,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
     final showingText = Text(
       _filteredData.isEmpty
           ? "Showing 0 entries"
-          : "Showing $start–$end of ${_filteredData.length} entries",
+          : "Showing $start to$end of ${_filteredData.length} entries",
       style: const TextStyle(
         color: Colors.black54,
         fontWeight: FontWeight.bold,

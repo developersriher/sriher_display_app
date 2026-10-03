@@ -948,16 +948,16 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
           )
         : Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               showEntries,
-              Row(
+              Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  if (createBtn != null) createBtn,
+                  const SizedBox(height: 10),
                   searchBox,
-                  if (createBtn != null) ...[
-                    const SizedBox(width: 12),
-                    createBtn,
-                  ],
                 ],
               ),
             ],

@@ -760,9 +760,9 @@ class _MappingViewState extends State<MappingView> {
                             horizontal: 32,
                           ),
                           elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4),
-                          ),
+                        shape: RoundedRectangleBorder(
+  borderRadius: BorderRadius.circular(8),
+),
                         ),
                         child: _submitting
                             ? const SizedBox(

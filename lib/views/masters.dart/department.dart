@@ -553,8 +553,6 @@ class _DepartmentViewState extends State<DepartmentView> {
     final int start = safePage * rowsPerPage;
     final int end = (start + rowsPerPage).clamp(0, totalRows);
     final int currentItemCount = totalRows == 0 ? 1 : (end - start);
-    final double tableHeight =
-        (isTabletOrMobile ? 180.0 : 250.0) + (currentItemCount * 48.0);
 
     final bodyContent = Padding(
       padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
@@ -578,7 +576,7 @@ class _DepartmentViewState extends State<DepartmentView> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 600;
+                  final isNarrow = constraints.maxWidth <= 1100;
                   final heading = const AnimatedHeading(
                     text: "Department List",
                     style: TextStyle(
@@ -603,9 +601,8 @@ class _DepartmentViewState extends State<DepartmentView> {
                 },
               ),
               const SizedBox(height: 20),
-              isMobile
-                  ? SizedBox(height: tableHeight, child: _buildTableCard())
-                  : Expanded(child: _buildTableCard()),
+              const SizedBox(height: 20),
+              _buildTableCard(),
             ],
           ),
         ),
@@ -616,9 +613,14 @@ class _DepartmentViewState extends State<DepartmentView> {
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
       body: SelectionArea(
-        child: isMobile
-            ? SingleChildScrollView(child: bodyContent)
-            : bodyContent,
+        child: Scrollbar(
+          thumbVisibility: true,
+          interactive: true,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: bodyContent,
+          ),
+        ),
       ),
     );
   }
@@ -691,12 +693,10 @@ class _DepartmentViewState extends State<DepartmentView> {
       children: [
         _buildListHeader(),
         const SizedBox(height: 16),
-        Expanded(
-          child: isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                  child: Container(
-                    width: double.infinity,
+        isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Container(
+                width: double.infinity,
                     decoration: BoxDecoration(
                       border: Border.all(
                         color: Colors.grey.shade200,
@@ -951,8 +951,6 @@ class _DepartmentViewState extends State<DepartmentView> {
                       ],
                     ),
                   ),
-                ),
-        ),
         SizedBox(height: MediaQuery.of(context).size.width < 950 ? 4 : 16),
         _buildTableFooter(),
       ],
@@ -994,7 +992,7 @@ class _DepartmentViewState extends State<DepartmentView> {
   Widget _buildListHeader() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final isNarrow = constraints.maxWidth <= 1100;
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,

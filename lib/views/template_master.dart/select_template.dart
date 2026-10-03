@@ -514,24 +514,31 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
 
     // Filter categoryFiles and masterFiles by requested file type (videos vs images/docs)
+    // Filter categoryFiles and masterFiles by requested file type using API category_id
     final filteredCategory = categoryFiles.where((f) {
       if (f == null) return false;
+      final catId = f['category_id']?.toString();
+      if (catId != null && catId.isNotEmpty) {
+        return catId == categoryId.toString();
+      }
       if (wantVideos) {
-        // Videos tab: exclude any explicit images, accept videos or category 2 files
         if (_hasImageExtension(f)) return false;
-        return true;
+        return _isFileVideo(f) || _hasVideoExtension(f);
       } else {
-        // Images tab: exclude any explicit videos, accept images or category 1 files
         if (_hasVideoExtension(f)) return false;
-        return true;
+        return !_isFileVideo(f);
       }
     }).toList();
 
     final filteredMaster = masterFiles.where((f) {
       if (f == null) return false;
+      final catId = f['category_id']?.toString();
+      if (catId != null && catId.isNotEmpty) {
+        return catId == categoryId.toString();
+      }
       if (wantVideos) {
         if (_hasImageExtension(f)) return false;
-        return _isFileVideo(f);
+        return _isFileVideo(f) || _hasVideoExtension(f);
       } else {
         if (_hasVideoExtension(f)) return false;
         return !_isFileVideo(f);
@@ -1419,7 +1426,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   ),
                 ],
               ),
-              backgroundColor: const Color.fromARGB(255, 149, 21, 4),
+              backgroundColor: Colors.green.shade700,
               duration: const Duration(seconds: 4),
               behavior: SnackBarBehavior.floating,
               margin: const EdgeInsets.all(24),
@@ -1783,6 +1790,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             (v) {
               setState(() {
                 selectedTemplateId = v;
+                selectedCategoryId = null; // Reset Department selection
                 fileType = null;
                 _displayedFiles.clear();
                 assignedFiles.clear();
@@ -1845,32 +1853,54 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   value: "images",
                   groupValue: fileType,
                   activeColor: Colors.blue,
-                  onChanged: (v) {
-                    if (v == fileType) return;
-                    setState(() => fileType = v!);
-                    // Re-fetch from server with category_id=1 (Images)
-                    _fetchAvailableFiles();
-                  },
+                  onChanged:
+                      (selectedTemplateId == null || selectedCategoryId == null)
+                      ? null
+                      : (v) {
+                          if (v == fileType) return;
+                          setState(() => fileType = v!);
+                          // Re-fetch from server with category_id=1 (Images)
+                          _fetchAvailableFiles();
+                        },
                 ),
-                const Text(
+                Text(
                   "Images",
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color:
+                        (selectedTemplateId == null ||
+                            selectedCategoryId == null)
+                        ? Colors.grey
+                        : Colors.black87,
+                  ),
                 ),
                 const SizedBox(width: 20),
                 Radio<String>(
                   value: "videos",
                   groupValue: fileType,
                   activeColor: Colors.blue,
-                  onChanged: (v) {
-                    if (v == fileType) return;
-                    setState(() => fileType = v!);
-                    // Re-fetch from server with category_id=2 (Videos)
-                    _fetchAvailableFiles();
-                  },
+                  onChanged:
+                      (selectedTemplateId == null || selectedCategoryId == null)
+                      ? null
+                      : (v) {
+                          if (v == fileType) return;
+                          setState(() => fileType = v!);
+                          // Re-fetch from server with category_id=2 (Videos)
+                          _fetchAvailableFiles();
+                        },
                 ),
-                const Text(
+                Text(
                   "Videos",
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color:
+                        (selectedTemplateId == null ||
+                            selectedCategoryId == null)
+                        ? Colors.grey
+                        : Colors.black87,
+                  ),
                 ),
               ],
             ),
@@ -1970,7 +2000,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 configCard,
-                if (selectedCategoryId != null) ...[
+                if (selectedCategoryId != null && fileType != null) ...[
                   const SizedBox(height: 20),
                   _buildAvailableFilesTable(),
                 ],
@@ -2001,7 +2031,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   child: Column(
                     children: [
                       configCard,
-                      if (selectedCategoryId != null) ...[
+                      if (selectedCategoryId != null && fileType != null) ...[
                         const SizedBox(height: 32),
                         _buildAvailableFilesTable(),
                       ],
@@ -2049,7 +2079,11 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     final bool wantVideos = fileType == 'videos';
     final filteredFiles = _displayedFiles.where((f) {
       if (f == null) return false;
-      final bool isVid = _isFileVideo(f);
+      final catId = f['category_id']?.toString();
+      if (catId != null && catId.isNotEmpty) {
+        return wantVideos ? catId == '2' : catId == '1';
+      }
+      final bool isVid = _isFileVideo(f) || _hasVideoExtension(f);
       return wantVideos ? isVid : !isVid;
     }).toList();
     final screenWidth = MediaQuery.of(context).size.width;
@@ -2231,12 +2265,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         ),
       );
     } else {
-      // ── Lazy ListView.builder — renders only visible rows instantly ─────────
+      // ── Lazy ListView.builder — renders visible rows ─────────────────────────
       body = ListView.builder(
-        shrinkWrap: !isDesktop,
-        physics: !isDesktop
-            ? const NeverScrollableScrollPhysics()
-            : const AlwaysScrollableScrollPhysics(),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         itemCount: paginatedFiles.length,
         itemBuilder: (context, i) {
           if (i < 0 || i >= paginatedFiles.length) {
@@ -2302,7 +2334,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                     const SizedBox(width: 8),
                     // ── File name ─────────────────────────────────────────
                     Expanded(
-                      flex: 3,
+                      flex: 4,
                       child: Text(
                         file['user_filename'] ?? file['file_name'] ?? '',
                         style: const TextStyle(
@@ -2313,7 +2345,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Spacer(flex: 1),
                     // ── File Type Badge ──────────────────────────────────
                     Expanded(
                       flex: 2,
@@ -2673,13 +2704,66 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         title: userFileName.isNotEmpty ? userFileName : fileName,
       );
     } else {
-      return WebCompatImage(
-        url: fileUrl,
-        fit: BoxFit.cover,
-        cacheWidth: 300,
-        cacheHeight: 300,
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          WebCompatImage(
+            url: fileUrl,
+            fit: BoxFit.cover,
+            cacheWidth: 300,
+            cacheHeight: 300,
+          ),
+          Positioned(
+            bottom: 4,
+            right: 4,
+            child: InkWell(
+              onTap: () => _showFullScreenImage(fileUrl),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.fullscreen,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     }
+  }
+
+  void _showFullScreenImage(String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              child: WebCompatImage(
+                url: imageUrl,
+                fit: BoxFit.contain,
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildFallbackThumbnail({bool isVideo = false}) {
@@ -2878,7 +2962,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                     const SizedBox(width: 8),
                                     // ── File name column — expanded & scrollable ──
                                     Expanded(
-                                      flex: 3,
+                                      flex: 5,
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
@@ -2899,7 +2983,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                         ],
                                       ),
                                     ),
-                                    const Spacer(flex: 1),
                                     Expanded(
                                       flex: 2,
                                       child: Align(
@@ -2928,12 +3011,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
                                     Expanded(
                                       flex: 2,
                                       child: Align(
                                         alignment: Alignment.centerLeft,
-
                                         child: IconButton(
                                           icon:
                                               _removingFileIds.contains(fileId)
@@ -2974,7 +3055,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                         ),
                                       ),
                                     ),
-                                    const Spacer(flex: 3),
                                   ],
                                 ),
                               );
@@ -3006,46 +3086,36 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           // Preview header — SAME fixed width as the thumbnail SizedBox in the row
           SizedBox(
             width: previewColW,
-            child: Text("Preview", style: _headerStyle()),
+            child: Text("File Name", style: _headerStyle()),
           ),
           const SizedBox(width: 8),
-          Expanded(flex: 3, child: Text("File Name", style: _headerStyle())),
-          const Spacer(flex: 1),
+          Expanded(flex: 5, child: Text("File", style: _headerStyle())),
           Expanded(
             flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8.0),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "File Type",
-                  style: _headerStyle(),
-                  maxLines: 1,
-                  softWrap: false,
-                ),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                "File Type",
+                style: _headerStyle(),
+                maxLines: 1,
+                softWrap: false,
               ),
             ),
           ),
-          const SizedBox(width: 8),
           Expanded(
             flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8.0),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "Action",
-                  textAlign: TextAlign.left,
-                  style: _headerStyle(),
-                  maxLines: 1,
-                  softWrap: false,
-                ),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                "Action",
+                style: _headerStyle(),
+                maxLines: 1,
+                softWrap: false,
               ),
             ),
           ),
-          const Spacer(flex: 3),
         ],
       ),
     );

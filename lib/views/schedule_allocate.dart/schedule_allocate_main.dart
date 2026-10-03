@@ -967,10 +967,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           _buildSlotSelectionCard(),
           const SizedBox(height: 30),
           Align(
-            alignment: Alignment.centerRight,
+            alignment: Alignment.center,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade600,
+                backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 40,
@@ -1044,9 +1044,10 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           _buildListHeader(),
 
           const SizedBox(height: 16),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
+          Builder(
+            builder: (context) {
+              final tableContent = LayoutBuilder(
+                builder: (context, constraints) {
                 if (isLoadingFiles) {
                   return const SizedBox(
                     height: 300,
@@ -1098,9 +1099,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   );
                 }
 
-                final double newMinWidth = constraints.maxWidth > 1100
-                    ? constraints.maxWidth
-                    : 1100.0;
+                final double newMinWidth = constraints.maxWidth;
                 return ScrollConfiguration(
                   behavior: ScrollConfiguration.of(context).copyWith(
                     dragDevices: {
@@ -1129,8 +1128,8 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                             controller: _vScroll,
                             scrollDirection: Axis.vertical,
                             child: DataTable(
-                              columnSpacing: 25,
-                              horizontalMargin: 20,
+                              columnSpacing: 10,
+                              horizontalMargin: 12,
                               dataRowMinHeight: 70,
                               dataRowMaxHeight: 85,
                               headingRowHeight: 45,
@@ -1223,7 +1222,12 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   ),
                 );
               },
-            ),
+            );
+
+            return isMobile
+                ? tableContent
+                : Expanded(child: tableContent);
+            },
           ),
 
           _buildPagination(),

@@ -235,41 +235,42 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                               },
                             ),
                             const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 10,
+                            Center(
+                              child: SizedBox(
+                                height: 48,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 40,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    elevation: 0,
                                   ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  elevation: 0,
+                                  onPressed:
+                                      (isSubmittingCopy || isCheckingConflicts)
+                                      ? null
+                                      : _copySchedule,
+                                  child: isSubmittingCopy
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Text(
+                                          "Submit",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
                                 ),
-                                onPressed:
-                                    (isSubmittingCopy || isCheckingConflicts)
-                                    ? null
-                                    : _copySchedule,
-                                child: isSubmittingCopy
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Text(
-                                        "Submit",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                        ),
-                                      ),
                               ),
                             ),
                           ],
@@ -310,38 +311,40 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                               ),
                             ),
                             const SizedBox(width: 24),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 40,
-                                  vertical: 20,
+                            SizedBox(
+                              height: 48,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 40,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  elevation: 0,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                elevation: 0,
+                                onPressed:
+                                    (isSubmittingCopy || isCheckingConflicts)
+                                    ? null
+                                    : _copySchedule,
+                                child: isSubmittingCopy
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text(
+                                        "Submit",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                               ),
-                              onPressed:
-                                  (isSubmittingCopy || isCheckingConflicts)
-                                  ? null
-                                  : _copySchedule,
-                              child: isSubmittingCopy
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text(
-                                      "Submit",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
                             ),
                           ],
                         ),
@@ -556,34 +559,39 @@ class _CopyWipeoffViewState extends State<CopyWipeoffView> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 40,
-                              vertical: 18,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 0,
-                          ),
-                          onPressed: () {
-                            if (selectedWipeDeviceId == null) {
-                              _showSnackBar("Please select device name");
-                              return;
-                            }
-                            _showSnackBar("Submitted successfully");
-                            setState(() {
-                              selectedWipeDeviceId = null;
-                            });
-                          },
-                          child: const Text(
-                            "Submit",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                        Align(
+                          alignment: isNarrow ? Alignment.center : Alignment.centerLeft,
+                          child: SizedBox(
+                            height: 48,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 40,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 0,
+                              ),
+                              onPressed: () {
+                                if (selectedWipeDeviceId == null) {
+                                  _showSnackBar("Please select device name");
+                                  return;
+                                }
+                                _showSnackBar("Submitted successfully");
+                                setState(() {
+                                  selectedWipeDeviceId = null;
+                                });
+                              },
+                              child: const Text(
+                                "Submit",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
                             ),
                           ),
                         ),

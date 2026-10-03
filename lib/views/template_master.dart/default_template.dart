@@ -959,9 +959,16 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
     final dataTableWidget = LayoutBuilder(
       builder: (context, constraints) {
-        final double minWidth = constraints.maxWidth > 1100
+        final double minWidth = constraints.maxWidth > (isMobile ? 500.0 : 600.0)
             ? constraints.maxWidth
-            : 1100.0;
+            : (isMobile ? 500.0 : 600.0);
+        
+        // Flex constraints for standard gaps
+        final double availableW = minWidth - 40; // Approx margins
+        final double devColW = availableW * 0.55;
+        final double tempColW = availableW * 0.35;
+        final double editColW = availableW * 0.10;
+
         return ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(
             dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
@@ -987,14 +994,16 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                     controller: _vScroll,
                     scrollDirection: Axis.vertical,
                     child: DataTable(
+                      horizontalMargin: 10,
+                      columnSpacing: 10,
                       headingRowHeight: 45,
                       headingRowColor: WidgetStateProperty.all(
                         Colors.blue.shade50,
                       ),
                       columns: [
-                        _buildTableCol('Device Name', 0),
-                        _buildTableCol('Template Name', 1),
-                        _buildTableCol('Edit', -1),
+                        _buildTableCol('Device Name', 0, devColW),
+                        _buildTableCol('Template Name', 1, tempColW),
+                        _buildTableCol('Edit', -1, editColW),
                       ],
                       rows: paginated.map((item) {
                         // Resolve device name
@@ -1039,25 +1048,37 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
                         return DataRow(
                           cells: [
                             DataCell(
-                              Text(
-                                resolvedName,
-                                style: const TextStyle(fontSize: 12.0),
-                              ),
-                            ),
-                            DataCell(
-                              Text(
-                                resolvedTempName,
-                                style: const TextStyle(fontSize: 12.0),
-                              ),
-                            ),
-                            DataCell(
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.edit,
-                                  color: Colors.blue,
-                                  size: 20,
+                              SizedBox(
+                                width: devColW,
+                                child: Text(
+                                  resolvedName,
+                                  style: const TextStyle(fontSize: 12.0),
                                 ),
-                                onPressed: () => _editItem(item),
+                              ),
+                            ),
+                            DataCell(
+                              SizedBox(
+                                width: tempColW,
+                                child: Text(
+                                  resolvedTempName,
+                                  style: const TextStyle(fontSize: 12.0),
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              SizedBox(
+                                width: editColW,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.blue,
+                                      size: 20,
+                                    ),
+                                    onPressed: () => _editItem(item),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -1365,82 +1386,85 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           )
         : Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               showEntries,
-              Row(
+              Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  if (createBtn != null) createBtn,
+                  const SizedBox(height: 10),
                   searchBox,
-                  if (createBtn != null) ...[
-                    const SizedBox(width: 12),
-                    createBtn,
-                  ],
                 ],
               ),
             ],
           );
   }
 
-  DataColumn _buildTableCol(String label, int colIndex) {
+  DataColumn _buildTableCol(String label, int colIndex, [double? width]) {
     return DataColumn(
-      label: InkWell(
-        onTap: colIndex < 0
-            ? null
-            : () {
-                setState(() {
-                  if (_sortColumnIndex == colIndex) {
-                    _sortAscending = !_sortAscending;
-                  } else {
-                    _sortColumnIndex = colIndex;
-                    _sortAscending = true;
-                  }
-                  _currentPage = 1;
-                });
-              },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                label.toUpperCase(),
-                style: const TextStyle(
-                  color: Color.fromRGBO(33, 150, 243, 1),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16.0,
+      label: SizedBox(
+        width: width,
+        child: InkWell(
+          onTap: colIndex < 0
+              ? null
+              : () {
+                  setState(() {
+                    if (_sortColumnIndex == colIndex) {
+                      _sortAscending = !_sortAscending;
+                    } else {
+                      _sortColumnIndex = colIndex;
+                      _sortAscending = true;
+                    }
+                    _currentPage = 1;
+                  });
+                },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  label.toUpperCase(),
+                  style: const TextStyle(
+                    color: Color.fromRGBO(33, 150, 243, 1),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16.0,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            if (colIndex >= 0) ...[
-              const SizedBox(width: 4),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Align(
-                    heightFactor: 0.4,
-                    child: Icon(
-                      Icons.arrow_drop_up,
-                      size: 18,
-                      color: _sortColumnIndex == colIndex && _sortAscending
-                          ? Colors.blue
-                          : Colors.grey.withOpacity(0.5),
+              if (colIndex >= 0) ...[
+                const SizedBox(width: 4),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Align(
+                      heightFactor: 0.4,
+                      child: Icon(
+                        Icons.arrow_drop_up,
+                        size: 18,
+                        color: _sortColumnIndex == colIndex && _sortAscending
+                            ? Colors.blue
+                            : Colors.grey.withOpacity(0.5),
+                      ),
                     ),
-                  ),
-                  Align(
-                    heightFactor: 0.4,
-                    child: Icon(
-                      Icons.arrow_drop_down,
-                      size: 18,
-                      color: _sortColumnIndex == colIndex && !_sortAscending
-                          ? Colors.blue
-                          : Colors.grey.withOpacity(0.5),
+                    Align(
+                      heightFactor: 0.4,
+                      child: Icon(
+                        Icons.arrow_drop_down,
+                        size: 18,
+                        color: _sortColumnIndex == colIndex && !_sortAscending
+                            ? Colors.blue
+                            : Colors.grey.withOpacity(0.5),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

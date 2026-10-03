@@ -1780,6 +1780,7 @@ class _FileUploadViewState extends State<FileUploadView> {
         Container(
           width: double.infinity,
           decoration: BoxDecoration(
+            color: Colors.white,
             border: Border.all(color: Colors.grey.shade200, width: 1.0),
             borderRadius: BorderRadius.circular(8),
           ),
@@ -2093,6 +2094,7 @@ class _FileUploadViewState extends State<FileUploadView> {
     final String imageUrl = '$_baseUrl/uploads/$fileName';
 
     return DataRow(
+      color: WidgetStateProperty.all(Colors.white),
       cells: [
         DataCell(
           Text(

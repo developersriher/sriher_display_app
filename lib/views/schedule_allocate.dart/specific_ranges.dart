@@ -44,6 +44,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
   final TextEditingController _toDateController = TextEditingController();
   final TextEditingController _scheduleNameController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _tableScrollController = ScrollController();
 
   @override
   void dispose() {
@@ -51,6 +52,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     _toDateController.dispose();
     _scheduleNameController.dispose();
     _searchController.dispose();
+    _tableScrollController.dispose();
     super.dispose();
   }
 
@@ -1064,7 +1066,208 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     );
     return isFullWidth ? SizedBox(width: double.infinity, child: btn) : btn;
   }
+Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildPanelHeader("TEMPLATE PREVIEW", Icons.visibility_outlined),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(12),
+            ),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildListHeader(isMobile: isMobile),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  double maxFileNameLength = 0;
+                  for (var file in _pagedTemplateFiles) {
+                    final String name = (file['user_filename'] ?? file['file_name'] ?? '-').toString();
+                    if (name.length > maxFileNameLength) {
+                      maxFileNameLength = name.length.toDouble();
+                    }
+                  }
+                  
+                  double requiredTableWidth = 350 + (maxFileNameLength * 7.5);
+                  final double tableWidth = constraints.maxWidth > requiredTableWidth
+                      ? constraints.maxWidth
+                      : requiredTableWidth < 600 ? 600.0 : requiredTableWidth;
 
+                  Widget tableContent = Container(
+                    width: tableWidth,
+                    child: Column(
+                      children: [
+                        _buildTableHeader(),
+                      if (isLoadingFiles)
+                        const SizedBox(
+                          height: 200,
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (templateFiles.isEmpty)
+                        const SizedBox(
+                          height: 200,
+                          child: Center(
+                            child: Text(
+                              "No files in this template",
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (_filteredTemplateFiles.isEmpty)
+                        const SizedBox(
+                          height: 200,
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.search_off_rounded,
+                                  size: 40,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  "No matching files found",
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontWeight: FontWeight.bold,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _pagedTemplateFiles.length,
+                          itemBuilder: (context, index) {
+                            final file = _pagedTemplateFiles[index];
+                            return Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: Colors.grey.shade100,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 1,
+                                    child: Center(
+                                      child: Text(
+                                        "${file['play_order'] ?? file['order_no'] ?? file['file_order'] ?? index + 1}",
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Center(
+                                      child: Container(
+                                        width: 100,
+                                        height: 65,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.grey.shade200,
+                                          ),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          child: _buildFilePreview(file),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 3,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(left: 12.0),
+                                      child: Text(
+                                        file['user_filename'] ??
+                                            file['file_name'] ??
+                                            '-',
+                                        style: const TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade50,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          "${file['duration'] ?? '30'}s",
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                );
+
+                  return Scrollbar(
+                    thumbVisibility: true,
+                    controller: _tableScrollController,
+                    child: SingleChildScrollView(
+                      controller: _tableScrollController,
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: tableWidth),
+                        child: tableContent,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              _buildTableFooter(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
   Widget _buildSlotsPanel({bool isMobile = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1164,177 +1367,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     );
   }
 
-  Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildPanelHeader("TEMPLATE PREVIEW", Icons.visibility_outlined),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(
-              bottom: Radius.circular(12),
-            ),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildListHeader(isMobile: isMobile),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: isMobile ? 480 : null,
-                  child: Column(
-                    children: [
-                      _buildTableHeader(),
-                      if (isLoadingFiles)
-                        const SizedBox(
-                          height: 200,
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      else if (templateFiles.isEmpty)
-                        const SizedBox(
-                          height: 200,
-                          child: Center(
-                            child: Text(
-                              "No files in this template",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ),
-                        )
-                      else if (_filteredTemplateFiles.isEmpty)
-                        const SizedBox(
-                          height: 200,
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.search_off_rounded,
-                                  size: 40,
-                                  color: Colors.grey,
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  "No matching files found",
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    fontWeight: FontWeight.bold,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _pagedTemplateFiles.length,
-                          itemBuilder: (context, index) {
-                            final file = _pagedTemplateFiles[index];
-                            return Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: Colors.grey.shade100,
-                                  ),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    flex: 1,
-                                    child: Center(
-                                      child: Text(
-                                        "${file['play_order'] ?? file['order_no'] ?? file['file_order'] ?? index + 1}",
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Center(
-                                      child: Container(
-                                        width: 100,
-                                        height: 65,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.grey.shade200,
-                                          ),
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          child: _buildFilePreview(file),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 5,
-                                    child: Text(
-                                      file['user_filename'] ??
-                                          file['file_name'] ??
-                                          '-',
-                                      style: const TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 1,
-                                    child: Center(
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.shade50,
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          "${file['duration'] ?? '30'}s",
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue.shade900,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              _buildTableFooter(),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+   
 
   Widget _buildPanelHeader(String title, IconData icon, {Widget? trailing}) {
     return Container(
@@ -1378,7 +1411,13 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
             child: Center(
               child: Text(
                 "PLAY ORDER",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                style: TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+                maxLines: 1,
+                softWrap: false,
               ),
             ),
           ),
@@ -1387,23 +1426,45 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
             child: Center(
               child: Text(
                 "FILE",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                style: TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+                maxLines: 1,
+                softWrap: false,
               ),
             ),
           ),
           Expanded(
-            flex: 5,
-            child: Text(
-              "FILE NAME",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+            flex: 3,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12.0),
+              child: Text(
+                "FILE NAME",
+                style: TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+                maxLines: 1,
+                softWrap: false,
+              ),
             ),
           ),
           Expanded(
-            flex: 1,
-            child: Center(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
               child: Text(
                 "DURATION",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                style: TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+                maxLines: 1,
+                softWrap: false,
               ),
             ),
           ),
@@ -1552,8 +1613,9 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           ),
         );
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 16.0, bottom: 8.0),
           child: isMobile
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -1565,15 +1627,10 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
                 )
               : Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     showEntries,
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: searchBox,
-                      ),
-                    ),
+                    searchBox,
                   ],
                 ),
         );
@@ -1800,11 +1857,21 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
     final border = isMobile
         ? const OutlineInputBorder(
             borderRadius: BorderRadius.zero,
-            borderSide: BorderSide(color: Colors.grey, width: 1.2),
+            borderSide: BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
           )
         : OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+            borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
+          );
+
+    final focusedBorder = isMobile
+        ? const OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
+          )
+        : OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
           );
 
     return Column(
@@ -1847,18 +1914,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
 
             border: border,
             enabledBorder: border,
-            focusedBorder: isMobile
-                ? const OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(color: Colors.blue, width: 2),
-                  )
-                : OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF334155),
-                      width: 1.6,
-                    ),
-                  ),
+            focusedBorder: focusedBorder,
             errorBorder: isMobile
                 ? const OutlineInputBorder(
                     borderRadius: BorderRadius.zero,

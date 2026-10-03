@@ -485,6 +485,7 @@ class _RoleViewState extends State<RoleView>
 
   void _showRoleDialog() {
     final screenWidth = MediaQuery.of(context).size.width;
+    final ScrollController dialogScrollController = ScrollController();
     StylishDialog.show(
       context: context,
       title: editingId == null ? "Create Roles" : "Edit Role Details",
@@ -500,7 +501,7 @@ class _RoleViewState extends State<RoleView>
       builder: (context, setDialogState) {
         _dialogSetState = setDialogState;
         // Use the main set directly for perfect sync
-        return _buildRoleFormDialog(setDialogState, _selectedPrivs);
+        return _buildRoleFormDialog(setDialogState, _selectedPrivs, dialogScrollController);
       },
     );
   }
@@ -989,6 +990,7 @@ class _RoleViewState extends State<RoleView>
   Widget _buildRoleFormDialog(
     StateSetter setDialogState,
     Set<String> localPrivs,
+    ScrollController scrollController,
   ) {
     final bool allSelected = localPrivs.length == _allPrivileges.length;
 
@@ -1097,9 +1099,9 @@ class _RoleViewState extends State<RoleView>
       child: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1224,8 +1226,7 @@ class _RoleViewState extends State<RoleView>
               ),
               const Divider(),
 
-              SizedBox(
-                height: tableHeight,
+              Flexible(
                 child: isFetchingDetails
                     ? const Center(
                         child: Column(
@@ -1243,9 +1244,15 @@ class _RoleViewState extends State<RoleView>
                           ],
                         ),
                       )
-                    : SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        child: SizedBox(
+                    : Scrollbar(
+                        controller: scrollController,
+                        thumbVisibility: true,
+                        thickness: 6.0,
+                        radius: const Radius.circular(8),
+                        child: SingleChildScrollView(
+                          controller: scrollController,
+                          scrollDirection: Axis.vertical,
+                          child: SizedBox(
                           width: double.infinity,
                           child: Table(
                             border: TableBorder.all(
@@ -1280,6 +1287,7 @@ class _RoleViewState extends State<RoleView>
                           ),
                         ),
                       ),
+                    ),
               ),
               const SizedBox(height: 24),
 
@@ -1353,7 +1361,6 @@ class _RoleViewState extends State<RoleView>
               ),
             ],
           ),
-        ),
       ),
     );
   }

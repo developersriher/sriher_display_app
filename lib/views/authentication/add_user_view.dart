@@ -822,7 +822,11 @@ class _AddUserViewState extends State<AddUserView> {
   }
 
   Widget _buildListHeader({bool isMobile = false, Widget? addUserBtn}) {
-    final showEntries = Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth <= 1100;
+
+        final showEntries = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
@@ -878,7 +882,7 @@ class _AddUserViewState extends State<AddUserView> {
             },
           ),
         ),
-        if (!isMobile) ...[
+        if (!isNarrow) ...[
           const SizedBox(width: 6),
           const Text(
             " entries",
@@ -893,7 +897,7 @@ class _AddUserViewState extends State<AddUserView> {
     );
 
     final searchBox = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: isMobile ? 180 : 250),
+      constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
       child: SizedBox(
         height: 38,
         child: TextField(
@@ -932,7 +936,7 @@ class _AddUserViewState extends State<AddUserView> {
       ),
     );
 
-    return isMobile
+    return isNarrow
         ? SizedBox(
             width: double.infinity,
             child: Column(
@@ -950,6 +954,8 @@ class _AddUserViewState extends State<AddUserView> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [showEntries, searchBox],
           );
+      },
+    );
   }
 
   Widget _buildPagination(int showing, int total, {bool isMobile = false}) {
