@@ -512,6 +512,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   }
 
   void _resetForm() {
+    _formKey.currentState?.reset();
     setState(() {
       _editingId = null;
       _selectedDeviceId = null;
@@ -822,7 +823,10 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     );
 
     final createBtn = ElevatedButton.icon(
-      onPressed: _showDefaultTemplateDialog,
+      onPressed: () {
+        _resetForm();
+        _showDefaultTemplateDialog();
+      },
       icon: Icon(Icons.settings_applications, size: isMobile ? 14 : 20),
       style: isMobile
           ? ElevatedButton.styleFrom(

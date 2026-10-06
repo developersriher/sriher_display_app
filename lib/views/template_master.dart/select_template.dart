@@ -274,6 +274,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       TextEditingController();
   final TextEditingController _newDepartmentNameController =
       TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   // Map to store controllers for each available file to prevent recreation
   final Map<int, TextEditingController> _availableFileControllers = {};
@@ -343,6 +344,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     _popupNameController.dispose();
     _newTemplateNameController.dispose();
     _newDepartmentNameController.dispose();
+    _searchController.dispose();
     for (var controller in _availableFileControllers.values) {
       controller.dispose();
     }
@@ -2079,104 +2081,196 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     final bool wantVideos = fileType == 'videos';
     final filteredFiles = _displayedFiles.where((f) {
       if (f == null) return false;
+
+      bool matchesType = false;
       final catId = f['category_id']?.toString();
       if (catId != null && catId.isNotEmpty) {
-        return wantVideos ? catId == '2' : catId == '1';
+        matchesType = wantVideos ? catId == '2' : catId == '1';
+      } else {
+        final bool isVid = _isFileVideo(f) || _hasVideoExtension(f);
+        matchesType = wantVideos ? isVid : !isVid;
       }
-      final bool isVid = _isFileVideo(f) || _hasVideoExtension(f);
-      return wantVideos ? isVid : !isVid;
+      if (!matchesType) return false;
+
+      if (searchQuery.isNotEmpty) {
+        final fileName =
+            (f['file_name'] ?? f['user_filename'] ?? f['name'] ?? '')
+                .toString()
+                .toLowerCase();
+        if (!fileName.contains(searchQuery.toLowerCase())) {
+          return false;
+        }
+      }
+      return true;
     }).toList();
     final screenWidth = MediaQuery.of(context).size.width;
     final bool isDesktop = screenWidth >= 600;
 
     final String entriesString = availableEntriesValue.toString();
 
-    // ── 1. Top-Right Entries Selector Header ─────────────────────────
-    final entriesHeader = Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            fileType == 'videos'
-                ? "AVAILABLE VIDEOS (${filteredFiles.length})"
-                : "AVAILABLE IMAGES (${filteredFiles.length})",
-            style: const TextStyle(
+    // ── 1. Top-Right Entries Selector Header & Search ─────────────────────────
+    final showEntries = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          "Show ",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: Color(0xFF334155),
+          ),
+        ),
+        SizedBox(
+          width: 75,
+          height: 35,
+          child: DropdownButtonFormField<String>(
+            value: ["10", "25", "50", "100"].contains(entriesString)
+                ? entriesString
+                : "10",
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Colors.black87, fontSize: 13),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 8,
+              ),
+            ),
+            items: [
+              "10",
+              "25",
+              "50",
+              "100",
+            ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+            onChanged: (v) {
+              if (v != null) {
+                setState(() {
+                  availableEntriesValue = int.tryParse(v) ?? 10;
+                  availableCurrentPage = 1;
+                });
+              }
+            },
+          ),
+        ),
+        if (isDesktop) ...[
+          const SizedBox(width: 6),
+          const Text(
+            " entries",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
               fontSize: 13,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF1E293B),
-              letterSpacing: 0.5,
+              color: Color(0xFF334155),
             ),
           ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Show ",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Color(0xFF334155),
-                ),
-              ),
-              SizedBox(
-                width: 75,
-                height: 35,
-                child: DropdownButtonFormField<String>(
-                  value: ["10", "25", "50", "100"].contains(entriesString)
-                      ? entriesString
-                      : "10",
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Colors.black87, fontSize: 13),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                  ),
-                  items: ["10", "25", "50", "100"]
-                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) {
-                      setState(() {
-                        availableEntriesValue = int.tryParse(v) ?? 10;
-                        availableCurrentPage = 1;
-                      });
-                    }
-                  },
-                ),
-              ),
-              if (isDesktop) ...[
-                const SizedBox(width: 6),
-                const Text(
-                  " entries",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
+        ],
+      ],
+    );
+
+    final searchBox = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: isDesktop ? 250 : 180),
+      child: SizedBox(
+        height: 38,
+        child: TextField(
+          controller: _searchController,
+          onChanged: (val) => setState(() {
+            searchQuery = val;
+            availableCurrentPage = 1;
+          }),
+          style: const TextStyle(fontSize: 12, color: Colors.black87),
+          decoration: InputDecoration(
+            hintText: 'Search files...',
+            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+            prefixIcon: const Icon(
+              Icons.search,
+              size: 16,
+              color: Color(0xFF94A3B8),
+            ),
+            isDense: true,
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final entriesHeader = Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: isDesktop
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  fileType == 'videos'
+                      ? "AVAILABLE VIDEOS (${filteredFiles.length})"
+                      : "AVAILABLE IMAGES (${filteredFiles.length})",
+                  style: const TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF334155),
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF1E293B),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [showEntries, const SizedBox(width: 10), searchBox],
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fileType == 'videos'
+                      ? "AVAILABLE VIDEOS (${filteredFiles.length})"
+                      : "AVAILABLE IMAGES (${filteredFiles.length})",
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF1E293B),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      showEntries,
+                      const SizedBox(height: 10),
+                      searchBox,
+                    ],
                   ),
                 ),
               ],
-            ],
-          ),
-        ],
-      ),
+            ),
     );
 
     // ── 2. Pagination Calculations ────────────────────────────────────
@@ -2747,10 +2841,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           alignment: Alignment.center,
           children: [
             InteractiveViewer(
-              child: WebCompatImage(
-                url: imageUrl,
-                fit: BoxFit.contain,
-              ),
+              child: WebCompatImage(url: imageUrl, fit: BoxFit.contain),
             ),
             Positioned(
               top: 10,
