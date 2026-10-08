@@ -461,10 +461,27 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   /// Helper that fetches template-scoped available files and merges them
   /// with master uploaded files from `/fileview` so that all old and new
   /// videos/images uploaded via `file_upload.dart` are available.
+  /// Resolves the category_name string for the currently selected department
+  /// by looking up [selectedCategoryId] inside [categories].
+  /// Returns null when no department is selected or the id is not found.
+  String? _selectedDepartmentName() {
+    if (selectedCategoryId == null) return null;
+    try {
+      final cat = categories.firstWhere(
+        (c) => int.tryParse(c['id']?.toString() ?? '') == selectedCategoryId,
+        orElse: () => null,
+      );
+      return cat?['category_name']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<List<dynamic>> _fetchMergedAvailableFilesList(
     int categoryId,
-    bool wantVideos,
-  ) async {
+    bool wantVideos, {
+    String? departmentName,
+  }) async {
     final List<dynamic> categoryFiles = [];
     final ts = DateTime.now().millisecondsSinceEpoch;
     final url = '$_baseUrl/selectTemplate_availableFilesview?_t=$ts';
@@ -474,7 +491,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       'category_id': categoryId,
     };
 
-    // 1. Fetch template-scoped available files
+    // 1. Fetch template-scoped available files from selectTemplate_availableFilesview
     try {
       final response = await http
           .post(
@@ -515,14 +532,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       debugPrint('[AvailableFiles] master fileview fetch error: $e');
     }
 
-    // Filter categoryFiles and masterFiles by requested file type (videos vs images/docs)
-    // Filter categoryFiles and masterFiles by requested file type using API category_id
+    // 3. Filter categoryFiles strictly by file type (wantVideos ? video : image).
+    // Preserves the EXACT raw API sequence index order 0 to N-1 as returned by selectTemplate_availableFilesview.
     final filteredCategory = categoryFiles.where((f) {
       if (f == null) return false;
-      final catId = f['category_id']?.toString();
-      if (catId != null && catId.isNotEmpty) {
-        return catId == categoryId.toString();
-      }
       if (wantVideos) {
         if (_hasImageExtension(f)) return false;
         return _isFileVideo(f) || _hasVideoExtension(f);
@@ -530,13 +543,18 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         if (_hasVideoExtension(f)) return false;
         return !_isFileVideo(f);
       }
+    }).map((f) {
+      return {...(f as Map<String, dynamic>), '_source': 'template_api'};
     }).toList();
 
+    // 4. Filter masterFiles by department (if departmentName is set) and file type.
     final filteredMaster = masterFiles.where((f) {
       if (f == null) return false;
-      final catId = f['category_id']?.toString();
-      if (catId != null && catId.isNotEmpty) {
-        return catId == categoryId.toString();
+      if (departmentName != null && departmentName.isNotEmpty) {
+        final fileCatName = f['category_name']?.toString() ?? '';
+        if (fileCatName.toLowerCase() != departmentName.toLowerCase()) {
+          return false;
+        }
       }
       if (wantVideos) {
         if (_hasImageExtension(f)) return false;
@@ -545,33 +563,53 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         if (_hasVideoExtension(f)) return false;
         return !_isFileVideo(f);
       }
+    }).map((f) {
+      return {...(f as Map<String, dynamic>), '_source': 'master'};
     }).toList();
 
-    // 3. Merge filteredCategory and filteredMaster by ID
-    final Map<String, dynamic> mergedMap = {};
+    // Sort master files ascending by ID so their order matches 0 to N-1 sequence
+    filteredMaster.sort((a, b) {
+      final idA = int.tryParse((a['id'] ?? a['file_id'])?.toString() ?? '') ?? 0;
+      final idB = int.tryParse((b['id'] ?? b['file_id'])?.toString() ?? '') ?? 0;
+      return idA.compareTo(idB);
+    });
+
+    // 5. Merge filteredCategory (index 0..N-1 from API) and extra master files without altering raw API sequence
+    final List<dynamic> resultList = [];
+    final Set<String> seenIds = {};
+
     for (var f in filteredCategory) {
       if (f == null) continue;
       final idStr = (f['id'] ?? f['file_id'])?.toString();
       if (idStr != null && idStr.isNotEmpty) {
-        mergedMap[idStr] = f;
+        if (!seenIds.contains(idStr)) {
+          seenIds.add(idStr);
+          resultList.add(f);
+        }
+      } else {
+        resultList.add(f);
       }
     }
 
     for (var f in filteredMaster) {
       if (f == null) continue;
       final idStr = (f['id'] ?? f['file_id'])?.toString();
-      if (idStr != null && idStr.isNotEmpty && !mergedMap.containsKey(idStr)) {
-        mergedMap[idStr] = f;
+      if (idStr != null && idStr.isNotEmpty) {
+        if (!seenIds.contains(idStr)) {
+          seenIds.add(idStr);
+          resultList.add(f);
+        }
+      } else {
+        resultList.add(f);
       }
     }
 
-    return mergedMap.values.toList();
+    return resultList;
   }
 
   /// Fetches files available for the current template, scoped by file-type
   /// category: category_id=1 (Images) or category_id=2 (Videos).
-  /// Results are sorted descending by [id] — newest uploads appear first.
-  /// Merges all uploaded videos from master file repository.
+  /// Results preserve raw API response order (index 0 to N - 1).
   Future<void> _fetchAvailableFiles() async {
     if (selectedTemplateId == null || fileType == null) {
       if (mounted) {
@@ -594,10 +632,12 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
     try {
       final bool wantVideos = fileType == 'videos';
-      final int categoryId = wantVideos ? 2 : 1;
+      final int categoryId = selectedCategoryId ?? (wantVideos ? 2 : 1);
+      final String? deptName = _selectedDepartmentName();
       final List<dynamic> merged = await _fetchMergedAvailableFilesList(
         categoryId,
         wantVideos,
+        departmentName: deptName,
       );
 
       if (mounted) {
@@ -621,10 +661,12 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     if (selectedTemplateId == null || fileType == null || !mounted) return;
     try {
       final bool wantVideos = fileType == 'videos';
-      final int categoryId = wantVideos ? 2 : 1;
+      final int categoryId = selectedCategoryId ?? (wantVideos ? 2 : 1);
+      final String? deptName = _selectedDepartmentName();
       final List<dynamic> merged = await _fetchMergedAvailableFilesList(
         categoryId,
         wantVideos,
+        departmentName: deptName,
       );
 
       if (!mounted) return;
@@ -824,22 +866,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
         }
 
         return item;
-      }).toList()
-      // Sort newest uploads first (descending id) — guaranteed in both the
-      // full-fetch and background silent-refresh paths.
-      ..sort((a, b) {
-        final idA =
-            int.tryParse(
-              a['id']?.toString() ?? a['file_id']?.toString() ?? '',
-            ) ??
-            0;
-        final idB =
-            int.tryParse(
-              b['id']?.toString() ?? b['file_id']?.toString() ?? '',
-            ) ??
-            0;
-        return idB.compareTo(idA);
-      });
+      }).toList();
+      // Order preserved as-is from the API response — the first file returned
+      // by the server appears first in the Images / Videos slot.
   }
 
   /// Helper to merge fresh server data with any optimistic items that have not yet been reflected in the server response.
@@ -2004,12 +2033,12 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                 configCard,
                 if (selectedCategoryId != null && fileType != null) ...[
                   const SizedBox(height: 20),
-                  _buildAvailableFilesTable(),
+                  SizedBox(height: 500, child: _buildAvailableFilesTable()),
                 ],
                 if (selectedTemplateId != null &&
                     selectedCategoryId != null) ...[
                   const SizedBox(height: 20),
-                  rightCard,
+                  SizedBox(height: 500, child: rightCard),
                 ],
               ],
             ),
@@ -2029,16 +2058,14 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               // LEFT PANEL: Configuration Card & Available Files Table
               Expanded(
                 flex: 5,
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      configCard,
-                      if (selectedCategoryId != null && fileType != null) ...[
-                        const SizedBox(height: 32),
-                        _buildAvailableFilesTable(),
-                      ],
+                child: Column(
+                  children: [
+                    configCard,
+                    if (selectedCategoryId != null && fileType != null) ...[
+                      const SizedBox(height: 32),
+                      Expanded(child: _buildAvailableFilesTable()),
                     ],
-                  ),
+                  ],
                 ),
               ),
               const SizedBox(width: 32),
@@ -2082,15 +2109,19 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     final filteredFiles = _displayedFiles.where((f) {
       if (f == null) return false;
 
+      // ── File-type filter ──────────────────────────────────────────────────
+      // Rely purely on file extension or file_format/file_type properties
+      // instead of category_id since the API can mis-tag files.
       bool matchesType = false;
-      final catId = f['category_id']?.toString();
-      if (catId != null && catId.isNotEmpty) {
-        matchesType = wantVideos ? catId == '2' : catId == '1';
-      } else {
-        final bool isVid = _isFileVideo(f) || _hasVideoExtension(f);
-        matchesType = wantVideos ? isVid : !isVid;
-      }
+      final bool isVid = _isFileVideo(f) || _hasVideoExtension(f);
+      matchesType = wantVideos ? isVid : !isVid;
       if (!matchesType) return false;
+
+      // ── Search filter ─────────────────────────────────────────────────────
+      // NOTE: Department filtering is intentionally NOT applied here.
+      // Template-scoped files (from selectTemplate_availableFilesview) have no
+      // category_name field, so department filtering happens exclusively at
+      // fetch time inside _fetchMergedAvailableFilesList for master files.
 
       if (searchQuery.isNotEmpty) {
         final fileName =
@@ -2108,87 +2139,15 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
     final String entriesString = availableEntriesValue.toString();
 
-    // ── 1. Top-Right Entries Selector Header & Search ─────────────────────────
-    final showEntries = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text(
-          "Show ",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-            color: Color(0xFF334155),
-          ),
-        ),
-        SizedBox(
-          width: 75,
-          height: 35,
-          child: DropdownButtonFormField<String>(
-            value: ["10", "25", "50", "100"].contains(entriesString)
-                ? entriesString
-                : "10",
-            dropdownColor: Colors.white,
-            style: const TextStyle(color: Colors.black87, fontSize: 13),
-            decoration: InputDecoration(
-              isDense: true,
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 8,
-              ),
-            ),
-            items: [
-              "10",
-              "25",
-              "50",
-              "100",
-            ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-            onChanged: (v) {
-              if (v != null) {
-                setState(() {
-                  availableEntriesValue = int.tryParse(v) ?? 10;
-                  availableCurrentPage = 1;
-                });
-              }
-            },
-          ),
-        ),
-        if (isDesktop) ...[
-          const SizedBox(width: 6),
-          const Text(
-            " entries",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-              color: Color(0xFF334155),
-            ),
-          ),
-        ],
-      ],
-    );
-
+    // ── 1. Search Box ────────────────────────────────────────────────────────
     final searchBox = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: isDesktop ? 250 : 180),
+      constraints: const BoxConstraints(maxWidth: 300),
       child: SizedBox(
         height: 38,
         child: TextField(
           controller: _searchController,
           onChanged: (val) => setState(() {
             searchQuery = val;
-            availableCurrentPage = 1;
           }),
           style: const TextStyle(fontSize: 12, color: Colors.black87),
           decoration: InputDecoration(
@@ -2222,72 +2181,30 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
     final entriesHeader = Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
-      child: isDesktop
-          ? Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  fileType == 'videos'
-                      ? "AVAILABLE VIDEOS (${filteredFiles.length})"
-                      : "AVAILABLE IMAGES (${filteredFiles.length})",
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF1E293B),
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [showEntries, const SizedBox(width: 10), searchBox],
-                ),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  fileType == 'videos'
-                      ? "AVAILABLE VIDEOS (${filteredFiles.length})"
-                      : "AVAILABLE IMAGES (${filteredFiles.length})",
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF1E293B),
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      showEntries,
-                      const SizedBox(height: 10),
-                      searchBox,
-                    ],
-                  ),
-                ),
-              ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            fileType == 'videos'
+                ? "AVAILABLE VIDEOS (${filteredFiles.length})"
+                : "AVAILABLE IMAGES (${filteredFiles.length})",
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF1E293B),
+              letterSpacing: 0.5,
             ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: searchBox,
+          ),
+        ],
+      ),
     );
 
-    // ── 2. Pagination Calculations ────────────────────────────────────
-    final int perPage = availableEntriesValue > 0 ? availableEntriesValue : 10;
-    final int totalCount = filteredFiles.length;
-    final int totalPages = (totalCount / perPage).ceil().clamp(1, 999999);
-    if (availableCurrentPage > totalPages) availableCurrentPage = totalPages;
-    if (availableCurrentPage < 1) availableCurrentPage = 1;
-    final int startIndex = ((availableCurrentPage - 1) * perPage).clamp(
-      0,
-      totalCount,
-    );
-    final int endIndex = (startIndex + perPage).clamp(0, totalCount);
-    final List<dynamic> paginatedFiles =
-        (startIndex < totalCount && startIndex >= 0)
-        ? filteredFiles.sublist(startIndex, endIndex)
-        : [];
+    final List<dynamic> displayedFilesList = filteredFiles;
 
     // ── Table header ──────────────────────────────────────────────────────────
     final header = Container(
@@ -2300,39 +2217,33 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       ),
       child: Row(
         children: [
-          Expanded(flex: 2, child: Text("File", style: _headerStyle())),
-          const SizedBox(width: 8),
-          Expanded(flex: 3, child: Text("File Name", style: _headerStyle())),
-          const Spacer(flex: 1),
           Expanded(
-            flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8.0),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "File Type",
-                  textAlign: TextAlign.left,
-                  style: _headerStyle(),
-                  maxLines: 1,
-                ),
-              ),
+            flex: 3,
+            child: Text(
+              fileType == 'videos' ? 'File Name / Video' : 'File Name / Image',
+              style: _headerStyle(),
+              textAlign: TextAlign.left,
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8.0),
-              child: Text(
-                "Action",
-                textAlign: TextAlign.left,
-                style: _headerStyle(),
-              ),
+            child: Text(
+              "Duration",
+              style: _headerStyle(),
+              textAlign: TextAlign.left,
             ),
           ),
-          const Spacer(flex: 2),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 90,
+            child: Text(
+              "Action",
+              style: _headerStyle(),
+              textAlign: TextAlign.left,
+            ),
+          ),
+          const SizedBox(width: 16),
         ],
       ),
     );
@@ -2340,9 +2251,12 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     // ── Body ─────────────────────────────────────────────────────────────────
     Widget body;
     if (isLoadingAvailableFiles) {
-      body = const Padding(
-        padding: EdgeInsets.symmetric(vertical: 32),
-        child: LinearProgressIndicator(),
+      body = const Align(
+        alignment: Alignment.topCenter,
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 32),
+          child: LinearProgressIndicator(),
+        ),
       );
     } else if (filteredFiles.isEmpty) {
       body = const Padding(
@@ -2361,14 +2275,14 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     } else {
       // ── Lazy ListView.builder — renders visible rows ─────────────────────────
       body = ListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: paginatedFiles.length,
+        shrinkWrap: false,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: displayedFilesList.length,
         itemBuilder: (context, i) {
-          if (i < 0 || i >= paginatedFiles.length) {
+          if (i < 0 || i >= displayedFilesList.length) {
             return const SizedBox.shrink();
           }
-          final file = paginatedFiles[i];
+          final file = displayedFilesList[i];
           if (file == null) return const SizedBox.shrink();
           // Resolve ID from either 'id' or 'file_id' — both field names
           // are used depending on which endpoint returned this file.
@@ -2406,40 +2320,40 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                 ),
                 child: Row(
                   children: [
-                    // ── Thumbnail ─────────────────────────────────────────
+                    // ── Thumbnail & File Name (Combined) ─────────────────────────
                     Expanded(
-                      flex: 2,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          width: isMobile
-                              ? (isVideo ? 85 : 65)
-                              : (isVideo ? 120 : 75),
-                          height: isMobile ? 65 : 75,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.grey.shade200),
+                      flex: 3,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: isMobile ? 85 : 120,
+                            height: isMobile ? 65 : 75,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: _buildFilePreview(file, staticOnly: false),
                           ),
-                          clipBehavior: Clip.antiAlias,
-                          child: _buildFilePreview(file),
-                        ),
+                          const SizedBox(height: 6),
+                          Text(
+                            file['user_filename'] ?? file['file_name'] ?? '',
+                            textAlign: TextAlign.left,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textScaler: const TextScaler.linear(1.0),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // ── File name ─────────────────────────────────────────
-                    Expanded(
-                      flex: 4,
-                      child: Text(
-                        file['user_filename'] ?? file['file_name'] ?? '',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    // ── File Type Badge ──────────────────────────────────
+                    // ── Duration ──────────────────────────────────
                     Expanded(
                       flex: 2,
                       child: Align(
@@ -2447,20 +2361,20 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
-                            vertical: 4,
+                            vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.white,
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            file['file_type']?.toString() ??
-                                (isVideo ? 'Video' : 'Image'),
+                            controller.text,
                             textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 11,
+                            style: const TextStyle(
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: Colors.blue.shade700,
+                              color: Colors.black87,
                             ),
                           ),
                         ),
@@ -2468,8 +2382,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                     ),
                     const SizedBox(width: 8),
                     // ── Add button ────────────────────────────────────────
-                    Expanded(
-                      flex: 2,
+                    SizedBox(
+                      width: 90,
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: ElevatedButton(
@@ -2508,8 +2422,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue.shade600,
                             foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isMobile ? 10 : 16,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
                               vertical: 10,
                             ),
                             shape: RoundedRectangleBorder(
@@ -2538,7 +2452,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                         ),
                       ),
                     ),
-                    const Spacer(flex: 2),
+                    const SizedBox(width: 16),
                   ],
                 ),
               ),
@@ -2548,69 +2462,37 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       );
     }
 
-    final int startItem = totalCount == 0 ? 0 : startIndex + 1;
-    final int endItem = endIndex;
-
-    final footer = Padding(
-      padding: const EdgeInsets.only(top: 12.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            "Showing $startItem to $endItem of $totalCount entries",
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          if (totalPages > 1)
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left, size: 20),
-                  onPressed: availableCurrentPage > 1
-                      ? () => setState(() => availableCurrentPage--)
-                      : null,
-                ),
-                Text(
-                  "$availableCurrentPage / $totalPages",
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right, size: 20),
-                  onPressed: availableCurrentPage < totalPages
-                      ? () => setState(() => availableCurrentPage++)
-                      : null,
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         entriesHeader,
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: Colors.grey.shade200),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [header, body],
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final double minWidth = 450;
+              final double tableWidth = constraints.maxWidth > minWidth
+                  ? constraints.maxWidth
+                  : minWidth;
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Container(
+                  width: tableWidth,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [header, Expanded(child: body)],
+                  ),
+                ),
+              );
+            },
           ),
         ),
-        footer,
       ],
     );
   }
@@ -2791,57 +2673,71 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
     if (isVideo) {
       if (staticOnly) {
-        return _buildFallbackThumbnail(isVideo: true);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildFallbackThumbnail(isVideo: true),
+            Positioned(
+              bottom: 2,
+              right: 2,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _showFullScreenVideo(
+                    fileUrl,
+                    userFileName.isNotEmpty ? userFileName : fileName,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.fullscreen,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
       }
       return VideoThumbnail(
         url: fileUrl,
         title: userFileName.isNotEmpty ? userFileName : fileName,
       );
     } else {
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          WebCompatImage(
-            url: fileUrl,
-            fit: BoxFit.cover,
-            cacheWidth: 300,
-            cacheHeight: 300,
-          ),
-          Positioned(
-            bottom: 4,
-            right: 4,
-            child: InkWell(
-              onTap: () => _showFullScreenImage(fileUrl),
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.fullscreen,
-                  color: Colors.white,
-                  size: 16,
-                ),
-              ),
-            ),
-          ),
-        ],
+      return WebCompatImage(
+        url: fileUrl,
+        fit: BoxFit.cover,
+        cacheWidth: 300,
+        cacheHeight: 300,
+        showFullScreenIcon: true,
       );
     }
   }
 
-  void _showFullScreenImage(String imageUrl) {
+  void _showFullScreenVideo(String videoUrl, String title) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         child: Stack(
           alignment: Alignment.center,
           children: [
-            InteractiveViewer(
-              child: WebCompatImage(url: imageUrl, fit: BoxFit.contain),
+            SizedBox(
+              width: double.infinity,
+              height: double.infinity,
+              child: VideoThumbnail(
+                url: videoUrl,
+                title: title,
+                fit: BoxFit.contain,
+              ),
             ),
             Positioned(
               top: 10,
@@ -3044,7 +2940,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                             child: ClipRRect(
                                               borderRadius:
                                                   BorderRadius.circular(6),
-                                              child: _buildFilePreview(file),
+                                              child: _buildFilePreview(file, staticOnly: true),
                                             ),
                                           ),
                                         ],

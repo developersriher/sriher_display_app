@@ -78,7 +78,10 @@ class WebCompatImage extends StatelessWidget {
                     builder: (BuildContext context) {
                       return Dialog(
                         backgroundColor: Colors.black,
-                        insetPadding: const EdgeInsets.all(10),
+                        insetPadding: EdgeInsets.zero,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
                         child: Stack(
                           clipBehavior: Clip.none,
                           alignment: Alignment.center,
@@ -92,15 +95,39 @@ class WebCompatImage extends StatelessWidget {
                                 minScale: 1.0,
                                 child: kIsWeb
                                     ? buildWebImage(url: url, fit: BoxFit.contain)
-                                    : Image.network(url, fit: BoxFit.contain),
+                                    : Image.network(
+                                        url,
+                                        fit: BoxFit.contain,
+                                        loadingBuilder: (context, child, progress) {
+                                          if (progress == null) return child;
+                                          return const Center(
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2,
+                                            ),
+                                          );
+                                        },
+                                        errorBuilder: (context, error, stack) =>
+                                            _ErrorPlaceholder(url: url),
+                                      ),
                               ),
                             ),
                             Positioned(
-                              top: 10,
-                              right: 10,
-                              child: IconButton(
-                                icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                                onPressed: () => Navigator.of(context).pop(),
+                              top: 20,
+                              left: 20,
+                              child: Container(
+                                decoration: const BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.arrow_back,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                  onPressed: () => Navigator.of(context).pop(),
+                                ),
                               ),
                             ),
                           ],

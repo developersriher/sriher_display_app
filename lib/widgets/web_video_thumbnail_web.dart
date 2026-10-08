@@ -9,8 +9,8 @@ final _registeredVideoIds = <String>{};
 /// Web implementation: native HTML <video> element with preload="metadata".
 /// The browser automatically shows the first frame without needing JS/canvas.
 Widget buildWebVideoThumbnail({required String url, required BoxFit fit}) {
-  // Unique ID per URL (same pattern as web_compat_image_web.dart)
-  final viewId = 'web-vid-thumb-${url.hashCode.abs()}';
+  // Unique ID per URL and fit
+  final viewId = 'web-vid-thumb-${url.hashCode.abs()}-${fit.name}';
 
   if (!_registeredVideoIds.contains(viewId)) {
     _registeredVideoIds.add(viewId);

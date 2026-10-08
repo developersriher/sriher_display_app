@@ -1,14 +1,23 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
+import 'package:video_player/video_player.dart' as vp;
+import 'package:media_kit/media_kit.dart' as mk;
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'web_video_thumbnail.dart';
 import '../../api_config.dart';
 
 class VideoThumbnail extends StatefulWidget {
   final String url;
   final String? title;
+  final BoxFit fit;
 
-  const VideoThumbnail({super.key, required this.url, this.title});
+  const VideoThumbnail({
+    super.key,
+    required this.url,
+    this.title,
+    this.fit = BoxFit.cover,
+  });
 
   @override
   State<VideoThumbnail> createState() => _VideoThumbnailState();
@@ -16,7 +25,10 @@ class VideoThumbnail extends StatefulWidget {
 
 class _VideoThumbnailState extends State<VideoThumbnail> {
   String _normalizedUrl = '';
-  VideoPlayerController? _controller;
+  vp.VideoPlayerController? _vpController;
+  mk.Player? _mkPlayer;
+  mkv.VideoController? _mkController;
+
   bool _isInitializing = false;
   bool _isPlayingInline = false;
   bool _hasError = false;
@@ -32,14 +44,20 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.url != widget.url) {
       _normalizedUrl = _normalizeUrl(widget.url);
-      _disposeController();
+      _disposeControllers();
     }
   }
 
-  void _disposeController() {
-    _controller?.pause();
-    _controller?.dispose();
-    _controller = null;
+  void _disposeControllers() {
+    _vpController?.pause();
+    _vpController?.dispose();
+    _vpController = null;
+
+    _mkPlayer?.pause();
+    _mkPlayer?.dispose();
+    _mkPlayer = null;
+    _mkController = null;
+
     _isPlayingInline = false;
     _isInitializing = false;
     _hasError = false;
@@ -47,7 +65,7 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
 
   @override
   void dispose() {
-    _disposeController();
+    _disposeControllers();
     super.dispose();
   }
 
@@ -57,62 +75,110 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
       return url;
     }
     if (url.startsWith('/uploads/')) {
-      return '${baseUrl}$url';
+      return '$baseUrl$url';
     }
     if (url.startsWith('uploads/')) {
-      return '${baseUrl}/$url';
+      return '$baseUrl/$url';
     }
-    return '${baseUrl}/uploads/${Uri.encodeFull(url)}';
+    return '$baseUrl/uploads/${Uri.encodeFull(url)}';
   }
 
   Future<void> _toggleInlinePlay() async {
     if (_normalizedUrl.isEmpty) return;
 
-    if (_controller == null) {
-      setState(() {
-        _isInitializing = true;
-        _hasError = false;
-      });
-      try {
-        final controller = VideoPlayerController.networkUrl(
-          Uri.parse(_normalizedUrl),
-        );
-        _controller = controller;
-        await controller.initialize();
-        if (mounted) {
-          controller.setLooping(true);
-          controller.play();
-          setState(() {
-            _isInitializing = false;
-            _isPlayingInline = true;
-          });
+    if (!kIsWeb) {
+      // ── Desktop (Linux / Windows) using media_kit ──
+      if (_mkPlayer == null) {
+        setState(() {
+          _isInitializing = true;
+          _hasError = false;
+        });
+        try {
+          final player = mk.Player();
+          final controller = mkv.VideoController(player);
+          _mkPlayer = player;
+          _mkController = controller;
+
+          await player.open(mk.Media(_normalizedUrl));
+          await player.setPlaylistMode(mk.PlaylistMode.loop);
+          await player.play();
+
+          if (mounted) {
+            setState(() {
+              _isInitializing = false;
+              _isPlayingInline = true;
+            });
+          }
+        } catch (e) {
+          debugPrint("Desktop MediaKit error: $e");
+          if (mounted) {
+            setState(() {
+              _isInitializing = false;
+              _hasError = true;
+            });
+          }
         }
-      } catch (e) {
-        debugPrint("Inline VideoPlayer error: $e");
-        if (mounted) {
-          setState(() {
-            _isInitializing = false;
-            _hasError = true;
-          });
+      } else {
+        if (_isPlayingInline) {
+          await _mkPlayer?.pause();
+          if (mounted) setState(() => _isPlayingInline = false);
+        } else {
+          await _mkPlayer?.play();
+          if (mounted) setState(() => _isPlayingInline = true);
         }
       }
     } else {
-      if (_controller!.value.isPlaying) {
-        _controller!.pause();
+      // ── Web (Chrome) using video_player ──
+      if (_vpController == null) {
         setState(() {
-          _isPlayingInline = false;
+          _isInitializing = true;
+          _hasError = false;
         });
+        try {
+          final controller = vp.VideoPlayerController.networkUrl(
+            Uri.parse(_normalizedUrl),
+          );
+          _vpController = controller;
+          await controller.initialize();
+          if (mounted) {
+            controller.setLooping(true);
+            controller.play();
+            setState(() {
+              _isInitializing = false;
+              _isPlayingInline = true;
+            });
+          }
+        } catch (e) {
+          debugPrint("Web VideoPlayer error: $e");
+          if (mounted) {
+            setState(() {
+              _isInitializing = false;
+              _hasError = true;
+            });
+          }
+        }
       } else {
-        _controller!.play();
-        setState(() {
-          _isPlayingInline = true;
-        });
+        if (_vpController!.value.isPlaying) {
+          _vpController!.pause();
+          setState(() {
+            _isPlayingInline = false;
+          });
+        } else {
+          _vpController!.play();
+          setState(() {
+            _isPlayingInline = true;
+          });
+        }
       }
     }
   }
 
   void _openFullScreen() {
-    _controller?.pause();
+    if (!kIsWeb) {
+      _mkPlayer?.pause();
+    } else {
+      _vpController?.pause();
+    }
     setState(() {
       _isPlayingInline = false;
     });
@@ -134,22 +200,33 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
         fit: StackFit.expand,
         children: [
           // ── Video layer (when initialized) or Static / Web Thumbnail ──
-          if (_controller != null && _controller!.value.isInitialized)
+          if (!kIsWeb && _mkController != null && _isPlayingInline)
+            ClipRect(
+              child: SizedOverflowBox(
+                size: Size.infinite,
+                child: mkv.Video(
+                  controller: _mkController!,
+                  controls: mkv.NoVideoControls,
+                  fill: Colors.black,
+                ),
+              ),
+            )
+          else if (kIsWeb && _vpController != null && _vpController!.value.isInitialized)
             FittedBox(
               fit: BoxFit.cover,
               clipBehavior: Clip.antiAlias,
               child: SizedBox(
-                width: _controller!.value.size.width > 0
-                    ? _controller!.value.size.width
+                width: _vpController!.value.size.width > 0
+                    ? _vpController!.value.size.width
                     : 100,
-                height: _controller!.value.size.height > 0
-                    ? _controller!.value.size.height
+                height: _vpController!.value.size.height > 0
+                    ? _vpController!.value.size.height
                     : 60,
-                child: VideoPlayer(_controller!),
+                child: vp.VideoPlayer(_vpController!),
               ),
             )
           else if (kIsWeb && _normalizedUrl.isNotEmpty)
-            WebVideoThumbnail(url: _normalizedUrl, fit: BoxFit.cover)
+            WebVideoThumbnail(url: _normalizedUrl, fit: widget.fit)
           else
             Container(
               decoration: const BoxDecoration(
@@ -211,9 +288,11 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          _isPlayingInline
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
+                          _hasError
+                              ? Icons.warning_amber_rounded
+                              : (_isPlayingInline
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded),
                           color: Colors.white,
                           size: 22,
                         ),
@@ -233,8 +312,8 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
                   padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.65),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -267,10 +346,24 @@ class FullScreenVideoPlayer extends StatefulWidget {
 }
 
 class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
-  VideoPlayerController? _controller;
+  // Web controller
+  vp.VideoPlayerController? _vpController;
+
+  // Desktop media_kit controller
+  mk.Player? _mkPlayer;
+  mkv.VideoController? _mkController;
+
   bool _initialized = false;
   bool _hasError = false;
   String _normalizedUrl = '';
+
+  bool _isPlaying = true;
+  bool _isMuted = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  StreamSubscription? _posSub;
+  StreamSubscription? _durSub;
+  StreamSubscription? _playSub;
 
   @override
   void initState() {
@@ -285,12 +378,12 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       return url;
     }
     if (url.startsWith('/uploads/')) {
-      return '${baseUrl}$url';
+      return '$baseUrl$url';
     }
     if (url.startsWith('uploads/')) {
-      return '${baseUrl}/$url';
+      return '$baseUrl/$url';
     }
-    return '${baseUrl}/uploads/${Uri.encodeFull(url)}';
+    return '$baseUrl/uploads/${Uri.encodeFull(url)}';
   }
 
   Future<void> _initializePlayer() async {
@@ -299,40 +392,94 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       _initialized = false;
       _hasError = false;
     });
-    try {
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(_normalizedUrl),
-      );
-      _controller = controller;
-      await controller.initialize();
-      if (mounted) {
-        setState(() {
-          _initialized = true;
+
+    if (!kIsWeb) {
+      // ── Desktop (Linux / Windows) ──
+      try {
+        final player = mk.Player();
+        final controller = mkv.VideoController(player);
+        _mkPlayer = player;
+        _mkController = controller;
+
+        _posSub = player.stream.position.listen((pos) {
+          if (mounted) setState(() => _position = pos);
         });
-        controller.play();
-        controller.setLooping(true);
+        _durSub = player.stream.duration.listen((dur) {
+          if (mounted) setState(() => _duration = dur);
+        });
+        _playSub = player.stream.playing.listen((playing) {
+          if (mounted) setState(() => _isPlaying = playing);
+        });
+
+        await player.open(mk.Media(_normalizedUrl));
+        await player.setPlaylistMode(mk.PlaylistMode.loop);
+        await player.play();
+
+        if (mounted) {
+          setState(() {
+            _initialized = true;
+            _isPlaying = true;
+          });
+        }
+      } catch (e) {
+        debugPrint("FullScreen Desktop MediaKit error: $e");
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+          });
+        }
       }
-    } catch (e) {
-      debugPrint("FullScreenVideoPlayer initialization error: $e");
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-        });
+    } else {
+      // ── Web (Chrome) ──
+      try {
+        final controller = vp.VideoPlayerController.networkUrl(
+          Uri.parse(_normalizedUrl),
+        );
+        _vpController = controller;
+        await controller.initialize();
+        if (mounted) {
+          setState(() {
+            _initialized = true;
+          });
+          controller.play();
+          controller.setLooping(true);
+        }
+      } catch (e) {
+        debugPrint("FullScreen Web VideoPlayer error: $e");
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+          });
+        }
       }
     }
   }
 
   @override
   void deactivate() {
-    _controller?.pause();
+    if (!kIsWeb) {
+      _mkPlayer?.pause();
+    } else {
+      _vpController?.pause();
+    }
     super.deactivate();
   }
 
   @override
   void dispose() {
-    _controller?.pause();
-    _controller?.dispose();
-    _controller = null;
+    _posSub?.cancel();
+    _durSub?.cancel();
+    _playSub?.cancel();
+
+    _vpController?.pause();
+    _vpController?.dispose();
+    _vpController = null;
+
+    _mkPlayer?.pause();
+    _mkPlayer?.dispose();
+    _mkPlayer = null;
+    _mkController = null;
+
     super.dispose();
   }
 
@@ -343,11 +490,31 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       body: Stack(
         children: [
           Center(
-            child: _initialized && _controller != null
-                ? AspectRatio(
-                    aspectRatio: _controller!.value.aspectRatio,
-                    child: VideoPlayer(_controller!),
-                  )
+            child: _initialized
+                ? (!kIsWeb && _mkController != null
+                    ? SizedBox.expand(
+                        child: mkv.Video(
+                          controller: _mkController!,
+                          controls: mkv.NoVideoControls,
+                          fill: Colors.black,
+                        ),
+                      )
+                    : (_vpController != null
+                        ? SizedBox.expand(
+                            child: FittedBox(
+                              fit: BoxFit.contain,
+                              child: SizedBox(
+                                width: _vpController!.value.size.width > 0
+                                    ? _vpController!.value.size.width
+                                    : 1920,
+                                height: _vpController!.value.size.height > 0
+                                    ? _vpController!.value.size.height
+                                    : 1080,
+                                child: vp.VideoPlayer(_vpController!),
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink()))
                 : _hasError
                 ? Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -426,7 +593,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
               ],
             ),
           ),
-          if (_initialized && _controller != null)
+          if (_initialized)
             Positioned(
               bottom: 20,
               left: 20,
@@ -434,7 +601,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.75),
+                  color: const Color(0xC0000000),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: Colors.white24),
                 ),
@@ -442,18 +609,28 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                   children: [
                     IconButton(
                       icon: Icon(
-                        _controller!.value.isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
+                        !kIsWeb
+                            ? (_isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded)
+                            : (_vpController != null && _vpController!.value.isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded),
                         color: Colors.white,
                         size: 32,
                       ),
                       onPressed: () {
                         setState(() {
-                          if (_controller!.value.isPlaying) {
-                            _controller!.pause();
+                          if (!kIsWeb) {
+                            _mkPlayer?.playOrPause();
                           } else {
-                            _controller!.play();
+                            if (_vpController != null) {
+                              if (_vpController!.value.isPlaying) {
+                                _vpController!.pause();
+                              } else {
+                                _vpController!.play();
+                              }
+                            }
                           }
                         });
                       },
@@ -461,32 +638,74 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: VideoProgressIndicator(
-                          _controller!,
-                          allowScrubbing: true,
-                          colors: const VideoProgressColors(
-                            playedColor: Colors.blueAccent,
-                            bufferedColor: Colors.white38,
-                            backgroundColor: Colors.white24,
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 24),
-                        ),
+                        child: !kIsWeb
+                            ? SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  trackHeight: 3,
+                                  thumbShape: const RoundSliderThumbShape(
+                                    enabledThumbRadius: 6,
+                                  ),
+                                ),
+                                child: Slider(
+                                  value: _position.inMilliseconds.toDouble().clamp(
+                                        0.0,
+                                        _duration.inMilliseconds.toDouble() > 0
+                                            ? _duration.inMilliseconds.toDouble()
+                                            : 1.0,
+                                      ),
+                                  max: _duration.inMilliseconds.toDouble() > 0
+                                      ? _duration.inMilliseconds.toDouble()
+                                      : 1.0,
+                                  onChanged: (val) {
+                                    _mkPlayer?.seek(
+                                      Duration(milliseconds: val.toInt()),
+                                    );
+                                  },
+                                  activeColor: Colors.blueAccent,
+                                  inactiveColor: Colors.white24,
+                                ),
+                              )
+                            : (_vpController != null
+                                ? vp.VideoProgressIndicator(
+                                    _vpController!,
+                                    allowScrubbing: true,
+                                    colors: const vp.VideoProgressColors(
+                                      playedColor: Colors.blueAccent,
+                                      bufferedColor: Colors.white38,
+                                      backgroundColor: Colors.white24,
+                                    ),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 24),
+                                  )
+                                : const SizedBox.shrink()),
                       ),
                     ),
                     IconButton(
                       icon: Icon(
-                        _controller!.value.volume == 0
-                            ? Icons.volume_off_rounded
-                            : Icons.volume_up_rounded,
+                        !kIsWeb
+                            ? (_isMuted
+                                ? Icons.volume_off_rounded
+                                : Icons.volume_up_rounded)
+                            : (_vpController != null &&
+                                    _vpController!.value.volume == 0
+                                ? Icons.volume_off_rounded
+                                : Icons.volume_up_rounded),
                         color: Colors.white,
                         size: 28,
                       ),
                       onPressed: () {
                         setState(() {
-                          if (_controller!.value.volume == 0) {
-                            _controller!.setVolume(1.0);
+                          if (!kIsWeb) {
+                            _isMuted = !_isMuted;
+                            _mkPlayer?.setVolume(_isMuted ? 0.0 : 100.0);
                           } else {
-                            _controller!.setVolume(0.0);
+                            if (_vpController != null) {
+                              if (_vpController!.value.volume == 0) {
+                                _vpController!.setVolume(1.0);
+                              } else {
+                                _vpController!.setVolume(0.0);
+                              }
+                            }
                           }
                         });
                       },

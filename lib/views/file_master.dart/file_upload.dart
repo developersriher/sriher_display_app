@@ -2106,9 +2106,8 @@ class _FileUploadViewState extends State<FileUploadView> {
           Align(
             alignment: Alignment.centerLeft,
             child: Container(
-              // Videos get a landscape rectangle; images stay compact
-              width: isVideo ? 160 : 100,
-              height: isVideo ? 100 : 65,
+              width: 160,
+              height: 100,
               margin: const EdgeInsets.symmetric(vertical: 6),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey.shade200),

@@ -15,8 +15,8 @@ Widget buildWebImage({
   int? cacheWidth,
   int? cacheHeight,
 }) {
-  // Create a unique view ID per URL
-  final viewId = 'web-img-${url.hashCode.abs()}';
+  // Create a unique view ID per URL and fit
+  final viewId = 'web-img-${url.hashCode.abs()}-${fit.name}';
 
   // Register the factory only once per unique viewId
   if (!_registeredViewIds.contains(viewId)) {
