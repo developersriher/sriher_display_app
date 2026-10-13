@@ -41,7 +41,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
   // Sort State
   int _sortColumnIndex = -1;
-  bool _sortAscending = false;
+  bool _sortAscending = true;
 
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _hScroll = ScrollController();
@@ -811,7 +811,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth <= 1100;
+    final isMobile = screenWidth < 1000;
 
     final heading = const AnimatedHeading(
       text: "Default Templates",
@@ -846,6 +846,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     final bodyContent = Padding(
       padding: EdgeInsets.all(isMobile ? 6.0 : 16.0),
       child: Container(
+        width: double.infinity,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -863,22 +864,21 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
           children: [
             // ── Responsive heading row ──
-            Align(
-              alignment: isMobile ? Alignment.center : Alignment.centerLeft,
-              child: heading,
-            ),
-            const SizedBox(height: 16),
             isMobile
-                ? _buildRightListContent(
-                    isMobile: isMobile,
-                    createBtn: createBtn,
-                  )
-                : Expanded(
-                    child: _buildRightListContent(
-                      isMobile: isMobile,
-                      createBtn: createBtn,
-                    ),
+                ? Align(alignment: Alignment.center, child: heading)
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+                    children: [heading, createBtn],
                   ),
+            const SizedBox(height: 16),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 300),
+              child: _buildRightListContent(
+                isMobile: isMobile,
+                createBtn: createBtn,
+              ),
+            ),
           ],
         ),
       ),
@@ -888,9 +888,14 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
       body: SelectionArea(
-        child: isMobile
-            ? SingleChildScrollView(child: bodyContent)
-            : bodyContent,
+        child: Scrollbar(
+          controller: _vScroll,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _vScroll,
+            child: bodyContent,
+          ),
+        ),
       ),
     );
   }
@@ -916,6 +921,12 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     }).toList();
 
     filtered.sort((a, b) {
+      if (_sortColumnIndex == -1) {
+        int idA = int.tryParse(a['id']?.toString() ?? '0') ?? 0;
+        int idB = int.tryParse(b['id']?.toString() ?? '0') ?? 0;
+        return idA.compareTo(idB);
+      }
+
       String aVal = "";
       String bVal = "";
 
@@ -961,142 +972,379 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     final int startIdx = (_currentPage - 1) * perPage;
     final paginated = filtered.skip(startIdx).take(perPage).toList();
 
-    final dataTableWidget = LayoutBuilder(
-      builder: (context, constraints) {
-        final double minWidth = constraints.maxWidth > (isMobile ? 500.0 : 600.0)
-            ? constraints.maxWidth
-            : (isMobile ? 500.0 : 600.0);
-        
-        // Flex constraints for standard gaps
-        final double availableW = minWidth - 40; // Approx margins
-        final double devColW = availableW * 0.55;
-        final double tempColW = availableW * 0.35;
-        final double editColW = availableW * 0.10;
-
-        return ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(
-            dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
-          ),
-          child: Scrollbar(
-            controller: _hScroll,
-            thumbVisibility: true,
-            thickness: 8.0,
-            trackVisibility: true,
-            interactive: true,
-            child: SingleChildScrollView(
-              controller: _hScroll,
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: minWidth),
-                child: Scrollbar(
-                  controller: _vScroll,
-                  thumbVisibility: true,
-                  thickness: 8.0,
-                  trackVisibility: true,
-                  interactive: true,
-                  child: SingleChildScrollView(
-                    controller: _vScroll,
-                    scrollDirection: Axis.vertical,
-                    child: DataTable(
-                      horizontalMargin: 10,
-                      columnSpacing: 10,
-                      headingRowHeight: 45,
-                      headingRowColor: WidgetStateProperty.all(
-                        Colors.blue.shade50,
-                      ),
-                      columns: [
-                        _buildTableCol('Device Name', 0, devColW),
-                        _buildTableCol('Template Name', 1, tempColW),
-                        _buildTableCol('Edit', -1, editColW),
-                      ],
-                      rows: paginated.map((item) {
-                        // Resolve device name
-                        final deviceIds = _parseDeviceIds(item['device_id']);
-                        String resolvedName;
-                        if (deviceIds.isNotEmpty) {
-                          resolvedName = _resolveDeviceNames(deviceIds);
-                        } else {
-                          resolvedName =
-                              (item['device_name'] ??
-                                      item['type_of_device'] ??
-                                      item['Device_name'] ??
-                                      item['device_code'] ??
-                                      "-")
-                                  .toString();
-                        }
-
-                        // Resolve template name
-                        String resolvedTempName =
-                            (item['temp_name'] ?? item['template_name'] ?? "-")
-                                .toString();
-                        if (resolvedTempName == "-") {
-                          final tempId =
-                              (item['temp_id'] ?? item['template_id'])
-                                  ?.toString();
-                          if (tempId != null) {
-                            final matchedTemp = _templateDropdownList
-                                .firstWhere(
-                                  (t) => t['id']?.toString() == tempId,
-                                  orElse: () => null,
-                                );
-                            if (matchedTemp != null) {
-                              resolvedTempName =
-                                  (matchedTemp['temp_name'] ??
-                                          matchedTemp['template_name'] ??
-                                          "-")
-                                      .toString();
-                            }
-                          }
-                        }
-
-                        return DataRow(
-                          cells: [
-                            DataCell(
-                              SizedBox(
-                                width: devColW,
-                                child: Text(
-                                  resolvedName,
-                                  style: const TextStyle(fontSize: 12.0),
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              SizedBox(
-                                width: tempColW,
-                                child: Text(
-                                  resolvedTempName,
-                                  style: const TextStyle(fontSize: 12.0),
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              SizedBox(
-                                width: editColW,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: IconButton(
-                                    icon: const Icon(
-                                      Icons.edit,
-                                      color: Colors.blue,
-                                      size: 20,
-                                    ),
-                                    onPressed: () => _editItem(item),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
+    // ── Row-based flex table (no horizontal scroll) ───────────────────────────
+    final tableHeader = Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 1.0),
+        ),
+      ),
+      child: Row(
+        children: [
+          // S.NO – flex 1, left
+          Expanded(
+            flex: 1,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12.0),
+                child: const Text(
+                  'S/NO',
+                  style: TextStyle(
+                    color: Color.fromRGBO(33, 150, 243, 1),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
                   ),
                 ),
               ),
             ),
           ),
-        );
-      },
+          // DEVICE NAME – flex 4, left
+          Expanded(
+            flex: 4,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'DEVICE NAME',
+                      style: TextStyle(
+                        color: Color.fromRGBO(33, 150, 243, 1),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(width: 4),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 0;
+                            _sortAscending = true;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(
+                              Icons.arrow_drop_up,
+                              size: 14,
+                              color: _sortColumnIndex == 0 && _sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 0;
+                            _sortAscending = false;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(
+                              Icons.arrow_drop_down,
+                              size: 14,
+                              color: _sortColumnIndex == 0 && !_sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // TEMPLATE NAME – flex 4, left
+          Expanded(
+            flex: 4,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'TEMPLATE NAME',
+                      style: TextStyle(
+                        color: Color.fromRGBO(33, 150, 243, 1),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(width: 4),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 1;
+                            _sortAscending = true;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(
+                              Icons.arrow_drop_up,
+                              size: 14,
+                              color: _sortColumnIndex == 1 && _sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 1;
+                            _sortAscending = false;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(
+                              Icons.arrow_drop_down,
+                              size: 14,
+                              color: _sortColumnIndex == 1 && !_sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // EDIT – flex 1, right-aligned
+          Expanded(
+            flex: 1,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: const Text(
+                  'EDIT',
+                  style: TextStyle(
+                    color: Color.fromRGBO(33, 150, 243, 1),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
+
+    Widget buildTableBody() {
+      if (paginated.isEmpty) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final double minW = constraints.maxWidth > 1000 ? constraints.maxWidth : 1000.0;
+            return Scrollbar(
+              controller: _hScroll,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _hScroll,
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: minW, maxWidth: minW),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+          children: [
+            tableHeader,
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 36.0),
+              alignment: Alignment.center,
+              child: Column(
+                children: [
+                  Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No matching devices found',
+                    style: TextStyle(
+                      color: Colors.blue.shade900,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Try a different search term',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final double minW = constraints.maxWidth > 1000 ? constraints.maxWidth : 1000.0;
+          return Scrollbar(
+            controller: _hScroll,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _hScroll,
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: minW, maxWidth: minW),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+        children: [
+          tableHeader,
+          ...paginated.asMap().entries.map((entry) {
+            final index = entry.key;
+            final item = entry.value;
+            final sNo = startIdx + index + 1;
+            // Resolve device name
+            final deviceIds = _parseDeviceIds(item['device_id']);
+            String resolvedName;
+            if (deviceIds.isNotEmpty) {
+              resolvedName = _resolveDeviceNames(deviceIds);
+            } else {
+              resolvedName = (item['device_name'] ??
+                      item['type_of_device'] ??
+                      item['Device_name'] ??
+                      item['device_code'] ??
+                      '-')
+                  .toString();
+            }
+            // Resolve template name
+            String resolvedTempName =
+                (item['temp_name'] ?? item['template_name'] ?? '-').toString();
+            if (resolvedTempName == '-') {
+              final tempId =
+                  (item['temp_id'] ?? item['template_id'])?.toString();
+              if (tempId != null) {
+                final matchedTemp = _templateDropdownList.firstWhere(
+                  (t) => t['id']?.toString() == tempId,
+                  orElse: () => null,
+                );
+                if (matchedTemp != null) {
+                  resolvedTempName = (matchedTemp['temp_name'] ??
+                          matchedTemp['template_name'] ??
+                          '-')
+                      .toString();
+                }
+              }
+            }
+
+            return Container(
+              height: 48,
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey.shade200, width: 1.0),
+                ),
+              ),
+              child: Row(
+                children: [
+                  // S.NO cell – flex 1
+                  Expanded(
+                    flex: 1,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12.0),
+                        child: Text(
+                          sNo.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12.0),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // DEVICE NAME – flex 4
+                  Expanded(
+                    flex: 4,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                        child: Text(
+                          resolvedName,
+                          style: const TextStyle(fontSize: 12.0),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // TEMPLATE NAME – flex 4
+                  Expanded(
+                    flex: 4,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Text(
+                          resolvedTempName,
+                          style: const TextStyle(fontSize: 12.0),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // EDIT – flex 1, right-aligned
+                  Expanded(
+                    flex: 1,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 16.0),
+                        child: IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                          onPressed: () => _editItem(item),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    final dataTableWidget = Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: buildTableBody(),
+    );
+
 
     return Column(
       mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
@@ -1104,88 +1352,47 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
       children: [
         _buildTableControls(isMobile: isMobile, createBtn: createBtn),
         const SizedBox(height: 15),
-        isMobile
-            ? SizedBox(
-                height: 300,
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade200),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: (_templateList.isNotEmpty && filtered.isEmpty)
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.search_off_rounded,
-                                size: 48,
-                                color: Colors.blue.shade200,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                "No matching devices found",
-                                style: TextStyle(
-                                  color: Colors.blue.shade900,
-                                  fontSize: 16.0,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                "Try a different search term",
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 13.0,
-                                ),
-                              ),
-                            ],
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade200),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: (_templateList.isNotEmpty && filtered.isEmpty)
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 48.0),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: 48,
+                          color: Colors.blue.shade200,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "No matching devices found",
+                          style: TextStyle(
+                            color: Colors.blue.shade900,
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.bold,
                           ),
-                        )
-                      : dataTableWidget,
-                ),
-              )
-            : Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade200),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: (_templateList.isNotEmpty && filtered.isEmpty)
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.search_off_rounded,
-                                size: 48,
-                                color: Colors.blue.shade200,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                "No matching devices found",
-                                style: TextStyle(
-                                  color: Colors.blue.shade900,
-                                  fontSize: 16.0,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                "Try a different search term",
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 13.0,
-                                ),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          "Try a different search term",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 13.0,
                           ),
-                        )
-                      : dataTableWidget,
-                ),
-              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : dataTableWidget,
+        ),
         const SizedBox(height: 15),
         _buildTableFooter(filtered.length, isMobile: isMobile),
       ],
@@ -1351,7 +1558,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           style: const TextStyle(color: Colors.black87, fontSize: 12),
           decoration: InputDecoration(
             hintText: "Search devices...",
-            hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+            hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
             prefixIcon: const Icon(Icons.search, size: 16),
             isDense: true,
             filled: true,
@@ -1390,19 +1597,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
           )
         : Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              showEntries,
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (createBtn != null) createBtn,
-                  const SizedBox(height: 10),
-                  searchBox,
-                ],
-              ),
-            ],
+            children: [showEntries, searchBox],
           );
   }
 

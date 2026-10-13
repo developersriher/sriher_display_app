@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
@@ -76,11 +77,29 @@ class _RoleViewState extends State<RoleView>
   // ── workaround for backend dropping exact privilege pairs ──
   final Map<int, Set<String>> _exactPrivilegesCache = {};
   final Map<String, Set<String>> _exactPrivilegesCacheByName = {};
+  final Map<int, int> _statusOverrides = {};
 
   @override
   void initState() {
     super.initState();
-    fetchRoles();
+    _initData();
+  }
+
+  Future<void> _initData() async {
+    // Clear stale persisted overrides on startup so live data from roleview is loaded
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('role_status_overrides');
+    } catch (_) {}
+    await fetchRoleList();
+  }
+
+  Future<void> _persistStatuses() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stringKeyMap = _statusOverrides.map((k, v) => MapEntry(k.toString(), v));
+      await prefs.setString('role_status_overrides', jsonEncode(stringKeyMap));
+    } catch (_) {}
   }
 
   @override
@@ -94,9 +113,11 @@ class _RoleViewState extends State<RoleView>
 
   // ──────────────────────────── API CALLS ──────────────────────────────────
 
-  /// GET /roleview — fetch all roles
-  Future<void> fetchRoles() async {
-    setState(() => isLoading = true);
+  /// POST /roleview — fetch all roles
+  Future<void> fetchRoleList({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() => isLoading = true);
+    }
     try {
       final res = await http
           .post(
@@ -107,17 +128,26 @@ class _RoleViewState extends State<RoleView>
           .timeout(const Duration(seconds: 15));
 
       if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        final payload = data is Map && data.containsKey('data')
-            ? data['data']
-            : data;
+        final resJson = jsonDecode(res.body);
+        // Explicitly unwrap {"data": {"roles": [...], "mainMenu": [...]}}
+        // Priority: res['data']['roles'] → res['data']['data'] → res['roles']
+        final dynamic outerData = (resJson is Map && resJson.containsKey('data'))
+            ? resJson['data']
+            : resJson;
+        final dynamic rawRoles = (outerData is Map && outerData.containsKey('roles'))
+            ? outerData['roles']
+            : (outerData is Map && outerData.containsKey('data'))
+                ? outerData['data']
+                : (resJson is Map && resJson.containsKey('roles'))
+                    ? resJson['roles']
+                    : null;
+        final List<dynamic> parsedRoles = (rawRoles is List ? rawRoles : [])
+            .map((r) => r is Map ? Map<String, dynamic>.from(r) : r)
+            .toList();
+
         if (!mounted) return;
         setState(() {
-          allRoles =
-              (payload is List
-                      ? payload
-                      : (payload['roles'] ?? payload['data'] ?? []))
-                  as List;
+          allRoles = parsedRoles;
 
           for (var r in allRoles) {
             final name = r['role_name']?.toString().trim();
@@ -127,6 +157,11 @@ class _RoleViewState extends State<RoleView>
                 _exactPrivilegesCacheByName.containsKey(name)) {
               _exactPrivilegesCache[id] = _exactPrivilegesCacheByName[name]!;
               _exactPrivilegesCacheByName.remove(name);
+            }
+            if (id != null && _statusOverrides.containsKey(id)) {
+              r['status'] = _statusOverrides[id];
+              r['Status'] = _statusOverrides[id];
+              r['active_status'] = _statusOverrides[id];
             }
           }
 
@@ -143,6 +178,8 @@ class _RoleViewState extends State<RoleView>
       _showServiceUnavailable();
     }
   }
+
+  Future<void> fetchRoles() => fetchRoleList();
 
   void _showServiceUnavailable() {
     if (!mounted) return;
@@ -356,7 +393,7 @@ class _RoleViewState extends State<RoleView>
         if (!mounted) return;
         _snack(isUpdate ? "Role updated!" : "Role created!");
         _resetForm();
-        fetchRoles();
+        fetchRoleList();
       } else {
         if (!mounted) return;
         final resData = jsonDecode(res.body);
@@ -450,8 +487,10 @@ class _RoleViewState extends State<RoleView>
 
       if (res.statusCode == 200) {
         if (!mounted) return;
+        _statusOverrides.remove(id);
+        await _persistStatuses();
         _snack("Role deleted.");
-        fetchRoles();
+        fetchRoleList();
       } else {
         if (!mounted) return;
         _snack("Delete failed (${res.statusCode}).", isError: true);
@@ -459,6 +498,199 @@ class _RoleViewState extends State<RoleView>
     } catch (_) {
       if (!mounted) return;
       _snack("Connection failed.", isError: true);
+    }
+  }
+
+  Future<void> toggleStatus(dynamic idOrRole, [dynamic currentStatus]) async {
+    try {
+      dynamic id;
+      dynamic rawStatus;
+
+      if (idOrRole is Map) {
+        id = idOrRole['id'] ?? idOrRole['role_id'];
+        rawStatus = idOrRole['status'] ?? idOrRole['Status'] ?? idOrRole['active_status'] ?? currentStatus;
+      } else {
+        id = idOrRole;
+        rawStatus = currentStatus;
+      }
+
+      // Active = 1, Inactive = 0 for roles
+      final int parsedStatus = int.tryParse(rawStatus?.toString() ?? '0') ?? 0;
+      final int newStatus = (parsedStatus == 1) ? 0 : 1;
+
+      final confirm = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text("Confirm Action", textAlign: TextAlign.center),
+            content: Text(
+              newStatus == 1
+                  ? "Do you want to set this item as active?"
+                  : "Do you want to set this item as inactive?",
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("OK"),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm != true) return;
+
+      final int roleId = int.tryParse(id?.toString() ?? '0') ?? 0;
+
+      // Find the full role item so we can mirror handleSubmit's payload exactly
+      final roleItem = allRoles.firstWhere(
+        (r) => r['id']?.toString() == id?.toString(),
+        orElse: () => null,
+      );
+      final roleName = roleItem is Map ? (roleItem['role_name']?.toString() ?? '') : '';
+      final roleGrade = roleItem is Map ? (roleItem['role_grade'] ?? 0) : 0;
+
+      // Retrieve cached privileges (same as handleSubmit's _selectedPrivs)
+      final List<String> privsList = _exactPrivilegesCache.containsKey(roleId)
+          ? _exactPrivilegesCache[roleId]!.toList()
+          : [];
+
+      // Mirror the exact payload structure that the working Edit Modal uses
+      // (see handleSubmit). All required fields must be present.
+      final Map<String, dynamic> body = {
+        "api_key": _apiKey,
+        "id": roleId,
+        "role_name": roleName,
+        "role_grade": roleGrade,
+        "previliges": privsList,
+        "status": newStatus,
+      };
+
+      // ── DEBUG: Log request details before API call ──
+      final String targetUrl = '${getBaseUrl()}/roleview';
+      final String payloadJson = jsonEncode(body);
+      debugPrint('═══════════════════════════════════════════════════');
+      debugPrint('▶ TOGGLE STATUS — REQUEST');
+      debugPrint('  URL:     $targetUrl');
+      debugPrint('  PAYLOAD: $payloadJson');
+      debugPrint('  (parsedStatus=$parsedStatus → newStatus=$newStatus)');
+      debugPrint('═══════════════════════════════════════════════════');
+
+      final response = await http.post(
+        Uri.parse(targetUrl),
+        headers: {"Content-Type": "application/json"},
+        body: payloadJson,
+      );
+
+      // ── DEBUG: Log response details after API call ──
+      debugPrint('═══════════════════════════════════════════════════');
+      debugPrint('◀ TOGGLE STATUS — RESPONSE');
+      debugPrint('  HTTP STATUS CODE: ${response.statusCode}');
+      debugPrint('  RAW BODY: ${response.body}');
+      debugPrint('═══════════════════════════════════════════════════');
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        // Validate backend response body for actual success
+        bool backendSuccess = false;
+        String backendMsg = '';
+        try {
+          final resJson = jsonDecode(response.body);
+          if (resJson is Map) {
+            backendSuccess = resJson['status'] == true ||
+                resJson['status'] == 'true' ||
+                resJson['status'] == 'Success' ||
+                (resJson['message']?.toString().toLowerCase().contains('success') ?? false) ||
+                (resJson['Message']?.toString().toLowerCase().contains('success') ?? false) ||
+                resJson['success'] == true;
+            backendMsg = (resJson['message'] ?? resJson['Message'])?.toString() ?? '';
+          }
+          // If backend doesn't include a status/message field, treat HTTP 200 as success
+          if (!backendSuccess && backendMsg.isEmpty) {
+            backendSuccess = true;
+          }
+        } catch (_) {
+          // If body isn't JSON, treat HTTP 200 as success
+          backendSuccess = true;
+        }
+
+        debugPrint('  backendSuccess=$backendSuccess  backendMsg="$backendMsg"');
+
+        if (backendSuccess) {
+          // Update local state after server confirms
+          setState(() {
+            _statusOverrides[roleId] = newStatus;
+            final idx = allRoles.indexWhere((r) => r['id']?.toString() == id?.toString());
+            if (idx != -1) {
+              allRoles[idx]['status'] = newStatus;
+              allRoles[idx]['Status'] = newStatus;
+              allRoles[idx]['active_status'] = newStatus;
+            }
+          });
+          await _persistStatuses();
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(newStatus == 1
+                  ? "Role has been successfully activated."
+                  : "Role has been successfully deactivated."),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          // Re-fetch to ensure UI is fully in sync with server
+          fetchRoleList(showLoading: false);
+        } else {
+          // Backend returned 200 but indicated failure
+          debugPrint('  ⚠ Backend indicated failure despite HTTP 200');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(backendMsg.isNotEmpty
+                  ? "Update failed: $backendMsg"
+                  : "Update failed. Please try again."),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        // HTTP error
+        debugPrint('  ✖ HTTP error ${response.statusCode}');
+        String errorMsg = 'Server error (${response.statusCode})';
+        try {
+          final errJson = jsonDecode(response.body);
+          if (errJson is Map && (errJson['message'] ?? errJson['Message']) != null) {
+            errorMsg = (errJson['message'] ?? errJson['Message']).toString();
+          }
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Toggle Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Connection failed: $e"),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -485,23 +717,132 @@ class _RoleViewState extends State<RoleView>
 
   void _showRoleDialog() {
     final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     final ScrollController dialogScrollController = ScrollController();
-    StylishDialog.show(
+    showDialog(
       context: context,
-      title: editingId == null ? "Create Roles" : "Edit Role Details",
-      titleStyle: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.bold,
-        color: Colors.white,
-      ),
-      subtitle: "Configure system permissions and access levels",
-      subtitleStyle: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
-      icon: editingId == null ? Icons.add_moderator : Icons.edit_note_rounded,
-      width: screenWidth < 1100 ? screenWidth * 0.95 : 550,
-      builder: (context, setDialogState) {
-        _dialogSetState = setDialogState;
-        // Use the main set directly for perfect sync
-        return _buildRoleFormDialog(setDialogState, _selectedPrivs, dialogScrollController);
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            _dialogSetState = setDialogState;
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isMobile ? screenWidth * 0.95 : 550,
+                  maxHeight: MediaQuery.of(context).size.height * 0.85,
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header background: Primary Blue (0xFF0D47A1) with top rounded corners (Radius.circular(12))
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isMobile ? 16 : 24,
+                          vertical: isMobile ? 14 : 18,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF0D47A1),
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(12),
+                            topRight: Radius.circular(12),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            // Header content: White icon inside a translucent box (Colors.white.withOpacity(0.2))
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                editingId == null
+                                    ? Icons.add_moderator
+                                    : Icons.edit_note_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            // Bold white title, and white subtitle
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    editingId == null
+                                        ? "Create Roles"
+                                        : "Edit Role Details",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  const Text(
+                                    "Configure system permissions and access levels",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Action: Include a white close IconButton (Icons.close) at top-right to dismiss the modal
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.white),
+                              tooltip: "Close",
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () {
+                                _resetForm();
+                                Navigator.pop(dialogCtx);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Form Body
+                      Flexible(
+                        child: Padding(
+                          padding: EdgeInsets.all(isMobile ? 16 : 24),
+                          child: _buildRoleFormDialog(
+                            setDialogState,
+                            _selectedPrivs,
+                            dialogScrollController,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
       },
     );
   }
@@ -570,7 +911,7 @@ class _RoleViewState extends State<RoleView>
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth <= 1100;
+                  final isNarrow = constraints.maxWidth < 600;
                   final heading = const AnimatedHeading(
                     text: "Roles List",
                     style: TextStyle(
@@ -629,333 +970,300 @@ class _RoleViewState extends State<RoleView>
     int totalFiltered,
     int limit,
   ) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double tableWidth = constraints.maxWidth > 600
-            ? constraints.maxWidth
-            : 600.0;
-        return ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(
-            dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
-          ),
-          child: Scrollbar(
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade200, width: 1.0),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double minW = constraints.maxWidth > 1000 ? constraints.maxWidth : 1000.0;
+          return Scrollbar(
             controller: _hScroll,
             thumbVisibility: true,
-            thickness: 8.0,
-            trackVisibility: true,
-            interactive: true,
             child: SingleChildScrollView(
               controller: _hScroll,
               scrollDirection: Axis.horizontal,
               child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: tableWidth),
-                child: Container(
-                  width: tableWidth,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade200, width: 1.0),
-                    borderRadius: BorderRadius.circular(8),
+                constraints: BoxConstraints(minWidth: minW, maxWidth: minW),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+          // Table Header Row
+          Container(
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade200, width: 1.0),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      child: const Text(
+                        "S/NO",
+                        style: TextStyle(
+                          color: Color.fromRGBO(33, 150, 243, 1),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Table Header Row
-                      Container(
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.grey.shade200,
-                              width: 1.0,
+                ),
+                Expanded(
+                  flex: 5,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          const Flexible(
+                            child: Text(
+                              "ROLE",
+                              style: TextStyle(
+                                color: Color.fromRGBO(33, 150, 243, 1),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 1,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12.0,
-                                  ),
-                                  child: const Text(
-                                    "#",
-                                    style: TextStyle(
-                                      color: Color.fromRGBO(33, 150, 243, 1),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 5,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4.0,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    children: [
-                                      const Flexible(
-                                        child: Text(
-                                          "ROLE",
-                                          style: TextStyle(
-                                            color: Color.fromRGBO(
-                                              33,
-                                              150,
-                                              243,
-                                              1,
-                                            ),
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                _sortColumnIndex = 1;
-                                                _sortAscending = true;
-                                              });
-                                            },
-                                            child: Align(
-                                              heightFactor: 0.5,
-                                              child: Icon(
-                                                Icons.arrow_drop_up,
-                                                size: 14,
-                                                color:
-                                                    _sortColumnIndex == 1 &&
-                                                        _sortAscending
-                                                    ? Colors.blue
-                                                    : const Color(0xFF94A3B8),
-                                              ),
-                                            ),
-                                          ),
-                                          GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                _sortColumnIndex = 1;
-                                                _sortAscending = false;
-                                              });
-                                            },
-                                            child: Align(
-                                              heightFactor: 0.5,
-                                              child: Icon(
-                                                Icons.arrow_drop_down,
-                                                size: 14,
-                                                color:
-                                                    _sortColumnIndex == 1 &&
-                                                        !_sortAscending
-                                                    ? Colors.blue
-                                                    : const Color(0xFF94A3B8),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: const Text(
-                                  "EDIT",
-                                  style: TextStyle(
-                                    color: Color.fromRGBO(33, 150, 243, 1),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: const Text(
-                                  "ACTION",
-                                  style: TextStyle(
-                                    color: Color.fromRGBO(33, 150, 243, 1),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Data Rows or Empty State
-                      if (paged.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(vertical: 36.0),
-                          alignment: Alignment.center,
-                          child: Column(
+                          const SizedBox(width: 4),
+                          Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.search_off_rounded,
-                                size: 36,
-                                color: Colors.blue.shade200,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                "No matching roles found",
-                                style: TextStyle(
-                                  color: Colors.blue.shade900,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _sortColumnIndex = 1;
+                                    _sortAscending = true;
+                                  });
+                                },
+                                child: Align(
+                                  heightFactor: 0.5,
+                                  child: Icon(
+                                    Icons.arrow_drop_up,
+                                    size: 14,
+                                    color:
+                                        _sortColumnIndex == 1 && _sortAscending
+                                        ? Colors.blue
+                                        : const Color(0xFF94A3B8),
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                "Try a different search term",
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _sortColumnIndex = 1;
+                                    _sortAscending = false;
+                                  });
+                                },
+                                child: Align(
+                                  heightFactor: 0.5,
+                                  child: Icon(
+                                    Icons.arrow_drop_down,
+                                    size: 14,
+                                    color:
+                                        _sortColumnIndex == 1 && !_sortAscending
+                                        ? Colors.blue
+                                        : const Color(0xFF94A3B8),
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                        )
-                      else
-                        ...paged.asMap().entries.map((e) {
-                          final idx = currentPage * limit + e.key + 1;
-                          final role = e.value;
-                          return Container(
-                            height: 48,
-                            decoration: BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(
-                                  color: Colors.grey.shade200,
-                                  width: 1.0,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 1,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12.0,
-                                      ),
-                                      child: Text(
-                                        "$idx",
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.black87,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 1,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  flex: 5,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 4.0,
-                                      ),
-                                      child: Text(
-                                        role['role_name']?.toString() ?? "-",
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.black87,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 1,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  flex: 2,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: IconButton(
-                                      icon: const Icon(
-                                        Icons.edit,
-                                        color: Colors.blue,
-                                        size: 18,
-                                      ),
-                                      tooltip: "Edit",
-                                      onPressed: () => loadForEdit(role),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  flex: 2,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Transform.scale(
-                                      scale: 0.7,
-                                      child: Switch(
-                                        value: _isItemActive(role),
-                                        activeColor: Colors.green,
-                                        onChanged: (v) {
-                                          setState(() {
-                                            role['active_status'] = v ? 1 : 0;
-                                            role['status'] = v ? 1 : 0;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: const Text(
+                      "EDIT",
+                      style: TextStyle(
+                        color: Color.fromRGBO(33, 150, 243, 1),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: EdgeInsets.only(right: 16.0),
+                      child: const Text(
+                        "ACTION",
+                        style: TextStyle(
+                          color: Color.fromRGBO(33, 150, 243, 1),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Data Rows or Empty State
+          if (paged.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 36.0),
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.search_off_rounded,
+                    size: 36,
+                    color: Colors.blue.shade200,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "No matching roles found",
+                    style: TextStyle(
+                      color: Colors.blue.shade900,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    "Try a different search term",
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...paged.asMap().entries.map((e) {
+              final idx = currentPage * limit + e.key + 1;
+              final role = e.value;
+              return Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade200, width: 1.0),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                          child: Text(
+                            "$idx",
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 5,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                          child: Text(
+                            role['role_name']?.toString() ?? "-",
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.edit,
+                            color: Colors.blue,
+                            size: 18,
+                          ),
+                          tooltip: "Edit",
+                          onPressed: () => loadForEdit(role),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Transform.scale(
+                            scale: 0.7,
+                            child: Switch(
+                              // Active = 1 (green/on), Inactive = 0 (grey/off)
+                              value: (int.tryParse(role['status']?.toString() ?? '0') ?? 0) == 1,
+                              activeColor: Colors.green,
+                              onChanged: (v) => toggleStatus(role),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+        ],
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
   Widget _buildFooter(int pagedCount, int totalCount, int limit) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth <= 1100;
+        final isNarrow = constraints.maxWidth < 600;
 
         final showingText = Text(
           "Showing ${totalCount == 0 ? 0 : currentPage * limit + 1} to ${currentPage * limit + pagedCount} of $totalCount entries",
@@ -1091,168 +1399,163 @@ class _RoleViewState extends State<RoleView>
       );
     }
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: 550,
-        maxHeight: MediaQuery.of(context).size.height * 0.85,
-      ),
-      child: Form(
-        key: _formKey,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: Column(
+    return Form(
+      key: _formKey,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Padding(
-                    padding: const EdgeInsets.only(bottom: 6.0),
-                    child: Text(
-                      "Role Name",
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: const EdgeInsets.only(bottom: 6.0),
+                  child: Text(
+                    "Role Name",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                ),
+                TextFormField(
+                  controller: _roleNameController,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                  ],
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return "Please enter the Role Name";
+                    }
+                    if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
+                      return "Numeric values and special characters are not allowed";
+                    }
+                    final cleanName = v.trim().toLowerCase();
+                    final exists = allRoles.any((r) {
+                      final name = (r['role_name']?.toString() ?? '')
+                          .trim()
+                          .toLowerCase();
+                      final id = int.tryParse(r['id']?.toString() ?? '');
+                      if (editingId != null && id == editingId) return false;
+                      return name == cleanName;
+                    });
+                    if (exists) {
+                      return "This role name already exists.";
+                    }
+                    return null;
+                  },
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF1E293B),
+                  ),
+                  decoration: InputDecoration(
+                    errorStyle: const TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                    hintText: 'Enter Role Name',
+                    hintStyle: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFCBD5E1),
+                        width: 1.2,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
                         color: Color(0xFF334155),
+                        width: 1.6,
                       ),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFCBD5E1),
+                        width: 1.2,
+                      ),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF334155),
+                        width: 1.6,
+                      ),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFCBD5E1),
+                        width: 1.2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
                     ),
                   ),
-                  TextFormField(
-                    controller: _roleNameController,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
-                    ],
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return "Please enter the Role Name";
-                      }
-                      if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
-                        return "Numeric values and special characters are not allowed";
-                      }
-                      final cleanName = v.trim().toLowerCase();
-                      final exists = allRoles.any((r) {
-                        final name = (r['role_name']?.toString() ?? '')
-                            .trim()
-                            .toLowerCase();
-                        final id = int.tryParse(r['id']?.toString() ?? '');
-                        if (editingId != null && id == editingId) return false;
-                        return name == cleanName;
-                      });
-                      if (exists) {
-                        return "This role name already exists.";
-                      }
-                      return null;
-                    },
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF1E293B),
-                    ),
-                    decoration: InputDecoration(
-                      errorStyle: const TextStyle(
-                        color: Colors.red,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                      hintText: 'Enter Role Name',
-                      hintStyle: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF94A3B8),
-                      ),
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFCBD5E1),
-                          width: 1.2,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF334155),
-                          width: 1.6,
-                        ),
-                      ),
-                      errorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFCBD5E1),
-                          width: 1.2,
-                        ),
-                      ),
-                      focusedErrorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF334155),
-                          width: 1.6,
-                        ),
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFCBD5E1),
-                          width: 1.2,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
 
-              Row(
-                children: [
-                  const Text(
-                    "Permissions",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            Row(
+              children: [
+                const Text(
+                  "Permissions",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const Spacer(),
+                Transform.scale(
+                  scale: 0.9,
+                  child: Checkbox(
+                    value: allSelected,
+                    onChanged: _toggleAll,
+                    activeColor: const Color(0xFF0F172A),
                   ),
-                  const Spacer(),
-                  Transform.scale(
-                    scale: 0.9,
-                    child: Checkbox(
-                      value: allSelected,
-                      onChanged: _toggleAll,
-                      activeColor: const Color(0xFF0F172A),
-                    ),
-                  ),
-                  const Text("Select All", style: TextStyle(fontSize: 12)),
-                ],
-              ),
-              const Divider(),
+                ),
+                const Text("Select All", style: TextStyle(fontSize: 12)),
+              ],
+            ),
+            const Divider(),
 
-              Flexible(
-                child: isFetchingDetails
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(color: Color(0xFF0F172A)),
-                            SizedBox(height: 16),
-                            Text(
-                              "Loading privileges...",
-                              style: TextStyle(
-                                color: Color(0xFF64748B),
-                                fontSize: 13,
-                              ),
+            Flexible(
+              child: isFetchingDetails
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(color: Color(0xFF0F172A)),
+                          SizedBox(height: 16),
+                          Text(
+                            "Loading privileges...",
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 13,
                             ),
-                          ],
-                        ),
-                      )
-                    : Scrollbar(
+                          ),
+                        ],
+                      ),
+                    )
+                  : Scrollbar(
+                      controller: scrollController,
+                      thumbVisibility: true,
+                      thickness: 6.0,
+                      radius: const Radius.circular(8),
+                      child: SingleChildScrollView(
                         controller: scrollController,
-                        thumbVisibility: true,
-                        thickness: 6.0,
-                        radius: const Radius.circular(8),
-                        child: SingleChildScrollView(
-                          controller: scrollController,
-                          scrollDirection: Axis.vertical,
-                          child: SizedBox(
+                        scrollDirection: Axis.vertical,
+                        child: SizedBox(
                           width: double.infinity,
                           child: Table(
                             border: TableBorder.all(
@@ -1288,81 +1591,80 @@ class _RoleViewState extends State<RoleView>
                         ),
                       ),
                     ),
-              ),
-              const SizedBox(height: 24),
+            ),
+            const SizedBox(height: 24),
 
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      _resetForm();
-                      Navigator.pop(context);
-                    },
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 10,
-                        horizontal: 20,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    _resetForm();
+                    Navigator.pop(context);
+                  },
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 20,
                     ),
-                    child: const Text(
-                      "Cancel",
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  StatefulBuilder(
-                    builder: (context, setBtnState) {
-                      return ElevatedButton(
-                        onPressed: isSubmitting
-                            ? null
-                            : () async {
-                                setBtnState(() => {});
-                                await handleSubmit();
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F172A),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 10,
-                            horizontal: 32,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          elevation: 0,
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                StatefulBuilder(
+                  builder: (context, setBtnState) {
+                    return ElevatedButton(
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              setBtnState(() => {});
+                              await handleSubmit();
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 32,
                         ),
-                        child: isSubmitting
-                            ? const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Text(
-                                editingId == null ? "Submit" : "Update",
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: isSubmitting
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
                               ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-      ),
-    );
+                            )
+                          : Text(
+                              editingId == null ? "Submit" : "Update",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
   }
 
   DataColumn _buildCol(
@@ -1459,14 +1761,12 @@ class _RoleViewState extends State<RoleView>
           Transform.scale(
             scale: 0.7,
             child: Switch(
-              value: _isItemActive(role),
+              value: role['status'] == 1 || role['status'] == "1",
               activeColor: Colors.green,
-              onChanged: (v) {
-                setState(() {
-                  role['active_status'] = v ? 1 : 0;
-                  role['status'] = v ? 1 : 0;
-                });
-              },
+              onChanged: (v) => toggleStatus(
+                role['id'],
+                role['status'],
+              ),
             ),
           ),
         ),
@@ -1476,16 +1776,21 @@ class _RoleViewState extends State<RoleView>
 
   bool _isItemActive(dynamic data) {
     if (data == null || data is! Map) return false;
+    final id = int.tryParse((data['id'] ?? data['role_id'])?.toString() ?? '');
+    if (id != null && _statusOverrides.containsKey(id)) {
+      return _statusOverrides[id] == 1;
+    }
     final raw =
-        data['active_status'] ??
         data['status'] ??
+        data['active_status'] ??
         data['Status'] ??
         data['is_active'] ??
         data['role_status'];
-    if (raw == null) return true;
-    if (raw == 1 || raw == true) return true;
-    final str = raw.toString().trim().toLowerCase();
-    return str == '1' || str == 'active' || str == 'true' || str == 'enabled';
+    // For roleview slot:
+    // status == 1 (or "1"): Active -> Green toggle (ON).
+    // status == 0 (or "0"): Inactive -> Grey toggle (OFF).
+    final int parsed = int.tryParse(raw?.toString() ?? '0') ?? 0;
+    return parsed == 1;
   }
 
   Widget _buildCreateRoleButton(bool isNarrow) {
@@ -1514,7 +1819,7 @@ class _RoleViewState extends State<RoleView>
   Widget _buildListHeader() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth <= 1100;
+        final isNarrow = constraints.maxWidth < 600;
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1598,7 +1903,7 @@ class _RoleViewState extends State<RoleView>
                 hintText: 'Search roles...',
                 hintStyle: const TextStyle(
                   color: Color(0xFF94A3B8),
-                  fontSize: 12,
+                  fontSize: 14,
                 ),
                 prefixIcon: const Icon(
                   Icons.search,

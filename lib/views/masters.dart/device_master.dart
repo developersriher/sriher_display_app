@@ -320,7 +320,37 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       if (found is Map) itemMap = Map<String, dynamic>.from(found);
     }
 
-    final int newStatus = (rawStatus == 0 || rawStatus == "0") ? 1 : 0;
+    final bool currentlyActive = _isItemActive(itemMap);
+    final int newStatus = currentlyActive ? 1 : 0;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Confirm Action", textAlign: TextAlign.center),
+          content: Text(
+            newStatus == 0
+                ? "Do you want to set this item as active?"
+                : "Do you want to set this item as inactive?",
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
 
     // Optimistic UI update
     setState(() {
@@ -346,6 +376,13 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
 
       if (response.statusCode == 200) {
         if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(newStatus == 0 ? "Device has been successfully activated." : "Device has been successfully deactivated."),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         fetchDevices();
       }
     } catch (e) {
@@ -790,7 +827,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth <= 1100;
+                  final isNarrow = constraints.maxWidth < 600;
                   final heading = const AnimatedHeading(
                     text: "Device List",
                     style: TextStyle(
@@ -976,17 +1013,18 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             : minWidth;
 
         final Map<int, TableColumnWidth> colWidths = const {
-          0: FlexColumnWidth(4.2), // TYPE OF DEVICE
-          1: FlexColumnWidth(2.5), // DEVICE ID
-          2: FlexColumnWidth(2.5), // SERIAL NO
-          3: FlexColumnWidth(3.0), // NAME
-          4: FlexColumnWidth(2.5), // MODEL
-          5: FlexColumnWidth(1.8), // OS
-          6: FlexColumnWidth(3.5), // YEAR OF MODEL
-          7: FlexColumnWidth(2.5), // WARRANTY
-          8: FlexColumnWidth(3.5), // MANUFACTURE
-          9: FlexColumnWidth(1.4), // EDIT
-          10: FlexColumnWidth(1.6), // ACTION
+          0: FlexColumnWidth(1.2), // S.NO
+          1: FlexColumnWidth(4.2), // TYPE OF DEVICE
+          2: FlexColumnWidth(2.5), // DEVICE ID
+          3: FlexColumnWidth(2.5), // SERIAL NO
+          4: FlexColumnWidth(3.0), // NAME
+          5: FlexColumnWidth(2.5), // MODEL
+          6: FlexColumnWidth(1.8), // OS
+          7: FlexColumnWidth(3.5), // YEAR OF MODEL
+          8: FlexColumnWidth(2.5), // WARRANTY
+          9: FlexColumnWidth(3.5), // MANUFACTURE
+          10: FlexColumnWidth(1.4), // EDIT
+          11: FlexColumnWidth(1.6), // ACTION
         };
 
         return ScrollConfiguration(
@@ -1046,6 +1084,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                               children: [
                                 TableRow(
                                   children: [
+                                    _buildHeaderCell("S/NO", colIndex: -1),
                                     _buildHeaderCell(
                                       "TYPE OF DEVICE",
                                       colIndex: 0,
@@ -1112,7 +1151,10 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                               columnWidths: colWidths,
                               defaultVerticalAlignment:
                                   TableCellVerticalAlignment.middle,
-                              children: pagedList.map((device) {
+                              children: pagedList.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final device = entry.value;
+                                final sNo = (currentPage * (int.tryParse(entriesValue) ?? 10)) + index + 1;
                                 final Map<String, dynamic> data =
                                     (device is Map)
                                     ? Map<String, dynamic>.from(device)
@@ -1137,6 +1179,24 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                                     ),
                                   ),
                                   children: [
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 10.0,
+                                        ),
+                                        child: Text(
+                                          sNo.toString(),
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
                                     Align(
                                       alignment: Alignment.centerLeft,
                                       child: Padding(
@@ -1494,6 +1554,8 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
             : bVal.toLowerCase().compareTo(aVal.toLowerCase());
       });
+    } else {
+      list.sort((a, b) => (int.tryParse(a['id']?.toString() ?? '0') ?? 0).compareTo(int.tryParse(b['id']?.toString() ?? '0') ?? 0));
     }
 
     return list;
@@ -1817,7 +1879,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
   Widget _buildListHeaderControls() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth <= 1100;
+        final isNarrow = constraints.maxWidth < 600;
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1900,7 +1962,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 hintText: "Search Devices...",
                 hintStyle: const TextStyle(
                   color: Color(0xFF94A3B8),
-                  fontSize: 12,
+                  fontSize: 14,
                 ),
                 prefixIcon: const Icon(
                   Icons.search,
@@ -1960,7 +2022,7 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth <= 1100;
+        final isNarrow = constraints.maxWidth < 600;
         final paginationText = Text(
           "Showing $start to $end of $total entries",
           style: const TextStyle(

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
 import '../../widgets/searchable_dropdown.dart';
@@ -35,10 +36,52 @@ class _AddUserViewState extends State<AddUserView> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _hScroll = ScrollController();
 
+  final Map<int, int> _statusOverrides = {};
+
   @override
   void initState() {
     super.initState();
+    _loadPersistedStatuses();
     fetchUserList();
+  }
+
+  Future<void> _loadPersistedStatuses() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final str = prefs.getString('user_status_overrides');
+      if (str != null) {
+        final decoded = jsonDecode(str) as Map<String, dynamic>;
+        setState(() {
+          decoded.forEach((k, v) {
+            final id = int.tryParse(k);
+            final val = int.tryParse(v.toString());
+            if (id != null && val != null) {
+              _statusOverrides[id] = val;
+            }
+          });
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _persistStatuses() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stringKeyMap = _statusOverrides.map((k, v) => MapEntry(k.toString(), v));
+      await prefs.setString('user_status_overrides', jsonEncode(stringKeyMap));
+    } catch (_) {}
+  }
+
+  bool _isUserActive(dynamic user) {
+    if (user is! Map) return true;
+    final rawId = user['id'] ?? user['ID'];
+    final id = int.tryParse(rawId?.toString() ?? '') ?? int.tryParse(user['user_id']?.toString() ?? '');
+    if (id != null && _statusOverrides.containsKey(id)) {
+      return _statusOverrides[id] == 0;
+    }
+    final raw = user['status'] ?? user['Status'] ?? user['active_status'];
+    final statusInt = int.tryParse(raw?.toString() ?? '0') ?? 0;
+    return statusInt == 0;
   }
 
   @override
@@ -50,9 +93,11 @@ class _AddUserViewState extends State<AddUserView> {
 
   // ──────────────────────────── API CALLS ────────────────────────────────────
 
-  Future<void> fetchUserList() async {
+  Future<void> fetchUserList({bool showLoading = true}) async {
     if (!mounted) return;
-    setState(() => isLoading = true);
+    if (showLoading) {
+      setState(() => isLoading = true);
+    }
     try {
       final response = await http
           .post(
@@ -64,18 +109,47 @@ class _AddUserViewState extends State<AddUserView> {
 
       if (response.statusCode == 200) {
         final res = jsonDecode(response.body);
-        final payload = res is Map && res.containsKey('data')
-            ? res['data']
-            : res;
+        // Explicitly unwrap {"data": {"users": [...], "roles": [...]}}
+        final outerData = (res is Map && res.containsKey('data')) ? res['data'] : res;
+        final rawUsers = (outerData is Map && outerData.containsKey('users'))
+            ? outerData['users']
+            : (outerData is Map && outerData.containsKey('data'))
+                ? outerData['data']
+                : (res is Map && res.containsKey('users'))
+                    ? res['users']
+                    : [];
+        final List<dynamic> parsedUsers = (rawUsers as List).map((u) {
+          if (u is Map) {
+            final map = Map<String, dynamic>.from(u);
+            final rawId = map['id'] ?? map['ID'];
+            final id = int.tryParse(rawId?.toString() ?? '') ?? int.tryParse(map['user_id']?.toString() ?? '');
+            if (id != null && _statusOverrides.containsKey(id)) {
+              map['status'] = _statusOverrides[id];
+              map['Status'] = _statusOverrides[id];
+            } else {
+              final raw = map['status'] ?? map['Status'];
+              if (raw != null) {
+                map['status'] = int.tryParse(raw.toString()) ?? 0;
+                map['Status'] = map['status'];
+              }
+            }
+            return map;
+          }
+          return u;
+        }).toList();
+        final rawRoles = (outerData is Map ? outerData['roles'] : (res is Map ? res['roles'] : null)) ?? [];
+        if (!mounted) return;
         setState(() {
-          allUsers = (payload['users'] ?? payload['data'] ?? []) as List;
-          allRoles = (payload['roles'] ?? []) as List;
+          allUsers = parsedUsers;
+          allRoles = rawRoles is List ? rawRoles : [];
           isLoading = false;
         });
       } else {
+        if (!mounted) return;
         setState(() => isLoading = false);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => isLoading = false);
       _showSnack("Failed to load users. Check connection.", isError: true);
     }
@@ -144,7 +218,18 @@ class _AddUserViewState extends State<AddUserView> {
       "role_id": roleId!, // always validated non-null before calling
     };
     if (password.isNotEmpty) body["user_password"] = password;
-    if (isUpdating) body["id"] = editId;
+    if (isUpdating) {
+      body["id"] = editId;
+      final existing = allUsers.firstWhere(
+        (u) => (u['id'] ?? u['ID'])?.toString() == editId.toString(),
+        orElse: () => null,
+      );
+      if (existing != null && existing is Map) {
+        body["status"] = int.tryParse(existing['status']?.toString() ?? '0') ?? 0;
+      }
+    } else {
+      body["status"] = 0;
+    }
 
     // Optimistic update — insert at top immediately
     if (!isUpdating) {
@@ -192,45 +277,176 @@ class _AddUserViewState extends State<AddUserView> {
     fetchUserList();
   }
 
-  Future<void> toggleStatus(dynamic user, bool newStatus) async {
-    final id = int.tryParse(user['id']?.toString() ?? '');
-    if (id == null) return;
-
-    setState(() {
-      final idx = allUsers.indexWhere(
-        (u) => u['id']?.toString() == user['id']?.toString(),
-      );
-      if (idx != -1)
-        allUsers[idx] = {...allUsers[idx], 'status': newStatus ? 0 : 1};
-    });
-
+  Future<void> toggleStatus(dynamic idOrUser, [dynamic currentStatus]) async {
     try {
-      await http
-          .post(
-            Uri.parse('${getBaseUrl()}/regUpdateview'),
-            headers: {"Content-Type": "application/json"},
-            body: jsonEncode({
-              "api_key": _apiKey,
-              "device_id": id,
-              "status": newStatus ? 0 : 1,
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
-    } catch (e) {
-      setState(() {
-        final idx = allUsers.indexWhere(
-          (u) => u['id']?.toString() == user['id']?.toString(),
+      dynamic id;
+      dynamic rawStatus;
+
+      if (idOrUser is Map) {
+        id = idOrUser['id'] ?? idOrUser['ID'] ?? idOrUser['user_id'];
+        rawStatus = idOrUser['status'] ?? idOrUser['Status'] ?? currentStatus;
+      } else {
+        id = idOrUser;
+        rawStatus = currentStatus;
+      }
+
+      // Active = 0, Inactive = 1 for users
+      final int parsedStatus = int.tryParse(rawStatus?.toString() ?? '0') ?? 0;
+      final int newStatusVal = (parsedStatus == 0) ? 1 : 0;
+
+      final confirm = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text("Confirm Action", textAlign: TextAlign.center),
+            content: Text(
+              newStatusVal == 0
+                  ? "Do you want to set this item as active?"
+                  : "Do you want to set this item as inactive?",
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("OK"),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm != true) return;
+
+      final int userId = int.tryParse(id?.toString() ?? '0') ?? 0;
+
+      // Find the full user record so we can mirror _handleSubmit's payload exactly
+      final userItem = allUsers.firstWhere(
+        (u) => (u['id'] ?? u['ID'])?.toString() == id?.toString(),
+        orElse: () => null,
+      );
+
+      // Mirror the exact payload structure that the working Edit Modal uses
+      // (see _handleSubmit / regUpdateview). All required fields must be present.
+      final Map<String, dynamic> body = {
+        "api_key": _apiKey,
+        "id": userId,
+        "user_id": userItem is Map ? (userItem['user_id']?.toString() ?? '') : '',
+        "user_name": userItem is Map ? (userItem['user_name']?.toString() ?? '') : '',
+        "role_id": userItem is Map ? (userItem['role_id']?.toString() ?? '') : '',
+        "status": newStatusVal,
+      };
+      // Include other optional fields the server may reference
+      if (userItem is Map && userItem['user_email'] != null) {
+        body['user_email'] = userItem['user_email'];
+      }
+
+      // Send update ONLY to the update endpoint — NOT to the fetch endpoint
+      final response = await http.post(
+        Uri.parse('${getBaseUrl()}/regUpdateview'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        // Validate backend response body for actual success
+        bool backendSuccess = false;
+        String backendMsg = '';
+        try {
+          final resJson = jsonDecode(response.body);
+          if (resJson is Map) {
+            backendSuccess = resJson['status'] == true ||
+                resJson['status'] == 'true' ||
+                (resJson['message']?.toString().toLowerCase().contains('success') ?? false) ||
+                resJson['success'] == true;
+            backendMsg = resJson['message']?.toString() ?? '';
+          }
+          // If backend doesn't include a status/message field, treat HTTP 200 as success
+          if (!backendSuccess && backendMsg.isEmpty) {
+            backendSuccess = true;
+          }
+        } catch (_) {
+          // If body isn't JSON, treat HTTP 200 as success
+          backendSuccess = true;
+        }
+
+        if (backendSuccess) {
+          // Update local state ONLY after server confirms
+          setState(() {
+            _statusOverrides[userId] = newStatusVal;
+            final idx = allUsers.indexWhere((u) => (u['id'] ?? u['ID'])?.toString() == id?.toString());
+            if (idx != -1) {
+              allUsers[idx]['status'] = newStatusVal;
+              allUsers[idx]['Status'] = newStatusVal;
+            }
+          });
+          await _persistStatuses();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(newStatusVal == 0
+                  ? "User has been successfully activated."
+                  : "User has been successfully deactivated."),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          fetchUserList(showLoading: false);
+        } else {
+          // Backend returned 200 but indicated failure
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(backendMsg.isNotEmpty
+                  ? "Update failed: $backendMsg"
+                  : "Update failed. Please try again."),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        // HTTP error
+        String errorMsg = 'Server error (${response.statusCode})';
+        try {
+          final errJson = jsonDecode(response.body);
+          if (errJson is Map && errJson['message'] != null) {
+            errorMsg = errJson['message'].toString();
+          }
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
-        if (idx != -1)
-          allUsers[idx] = {...allUsers[idx], 'status': newStatus ? 1 : 0};
-      });
-      _showSnack("Failed to update status.", isError: true);
+      }
+    } catch (e) {
+      debugPrint("Toggle Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Connection failed: $e"),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
   Future<void> deleteUser(dynamic user) async {
     final id = int.tryParse(user['id']?.toString() ?? '');
     if (id == null) return;
+    _statusOverrides.remove(id);
+    await _persistStatuses();
 
     final confirm = await StylishDialog.show<bool>(
       context: context,
@@ -317,7 +533,7 @@ class _AddUserViewState extends State<AddUserView> {
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({
               "api_key": _apiKey,
-              "device_id": id,
+              "id": id,
               "status": 1,
             }),
           )
@@ -444,14 +660,14 @@ class _AddUserViewState extends State<AddUserView> {
         final intB = int.tryParse(bVal) ?? 0;
         return _sortAscending ? intA.compareTo(intB) : intB.compareTo(intA);
       } else if (_sortColumnIndex == -1) {
-        // Default sort: by DB id descending, placing temp_ optimistic rows at top
+        // Default sort: by DB id ascending
         final intA = aVal.startsWith('temp_')
             ? 999999999
             : (int.tryParse(aVal) ?? 0);
         final intB = bVal.startsWith('temp_')
             ? 999999999
             : (int.tryParse(bVal) ?? 0);
-        return intB.compareTo(intA);
+        return intA.compareTo(intB);
       }
       return _sortAscending
           ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
@@ -471,7 +687,7 @@ class _AddUserViewState extends State<AddUserView> {
     final List<dynamic> pagedUsers = filtered.sublist(start, end);
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth <= 1100;
+    final isMobile = screenWidth < 600;
 
     final heading = const AnimatedHeading(
       text: "User List",
@@ -523,7 +739,7 @@ class _AddUserViewState extends State<AddUserView> {
               // ── Responsive heading row ──
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth <= 1100;
+                  final isNarrow = constraints.maxWidth < 600;
                   return isNarrow
                       ? SizedBox(
                           width: double.infinity,
@@ -604,6 +820,389 @@ class _AddUserViewState extends State<AddUserView> {
   // ──────────────────────────── UI COMPONENTS ────────────────────────────────
 
   Widget _buildTableContainer(List<dynamic> pagedUsers) {
+    // ── Header row ────────────────────────────────────────────────────────────
+    final header = Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 1.0),
+        ),
+      ),
+      child: Row(
+        children: [
+          // S.NO – flex 1, left
+          Expanded(
+            flex: 1,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12.0),
+                child: const Text(
+                  'S/NO',
+                  style: TextStyle(
+                    color: Color.fromRGBO(33, 150, 243, 1),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // USER ID – flex 2, left
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'USER ID',
+                      style: TextStyle(
+                        color: Color.fromRGBO(33, 150, 243, 1),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 0;
+                            _sortAscending = true;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(Icons.arrow_drop_up, size: 14,
+                              color: _sortColumnIndex == 0 && _sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 0;
+                            _sortAscending = false;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(Icons.arrow_drop_down, size: 14,
+                              color: _sortColumnIndex == 0 && !_sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // USER NAME – flex 3, left
+          Expanded(
+            flex: 3,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'USER NAME',
+                      style: TextStyle(
+                        color: Color.fromRGBO(33, 150, 243, 1),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 1;
+                            _sortAscending = true;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(Icons.arrow_drop_up, size: 14,
+                              color: _sortColumnIndex == 1 && _sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 1;
+                            _sortAscending = false;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(Icons.arrow_drop_down, size: 14,
+                              color: _sortColumnIndex == 1 && !_sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // ROLE – flex 2, left
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'ROLE',
+                      style: TextStyle(
+                        color: Color.fromRGBO(33, 150, 243, 1),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 2;
+                            _sortAscending = true;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(Icons.arrow_drop_up, size: 14,
+                              color: _sortColumnIndex == 2 && _sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 2;
+                            _sortAscending = false;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(Icons.arrow_drop_down, size: 14,
+                              color: _sortColumnIndex == 2 && !_sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // EDIT – flex 1, center
+          Expanded(
+            flex: 1,
+            child: Align(
+              alignment: Alignment.center,
+              child: const Text(
+                'EDIT',
+                style: TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+          // ACTION – flex 1, right
+          Expanded(
+            flex: 1,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: const Text(
+                  'ACTION',
+                  style: TextStyle(
+                    color: Color.fromRGBO(33, 150, 243, 1),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Widget buildRows() {
+      if (isLoading) {
+        return const SizedBox(
+          height: 200,
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
+      if (allUsers.isNotEmpty && pagedUsers.isEmpty) {
+        return SizedBox(
+          height: 200,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.search_off_rounded, size: 48, color: Colors.blue.shade200),
+                const SizedBox(height: 12),
+                Text('No matching users found',
+                  style: TextStyle(color: Colors.blue.shade900, fontSize: 16.0, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                const Text('Try a different search term',
+                  style: TextStyle(color: Colors.grey, fontSize: 13.0)),
+              ],
+            ),
+          ),
+        );
+      }
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: pagedUsers.asMap().entries.map((entry) {
+          final index = entry.key;
+          final u = entry.value;
+          final sNo = ((currentPage - 1) * (int.tryParse(entriesValue) ?? 10)) + index + 1;
+          final roleName = allRoles.firstWhere(
+            (r) => r['id']?.toString() == u['role_id']?.toString(),
+            orElse: () => {'role_name': 'User'},
+          )['role_name'] ?? 'User';
+          final isActive = _isUserActive(u);
+          return Container(
+            height: 52,
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade200, width: 1.0),
+              ),
+            ),
+            child: Row(
+              children: [
+                // S.NO – flex 1
+                Expanded(
+                  flex: 1,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12.0),
+                      child: Text(
+                        sNo.toString(),
+                        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ),
+                ),
+                // USER ID – flex 2
+                Expanded(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12.0),
+                      child: Text(
+                        u['user_id']?.toString() ?? '-',
+                        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ),
+                ),
+                // USER NAME – flex 3
+                Expanded(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Text(
+                        u['user_name']?.toString() ?? '-',
+                        style: const TextStyle(fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ),
+                ),
+                // ROLE – flex 2
+                Expanded(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          roleName.toString(),
+                          style: TextStyle(
+                            color: Colors.blue.shade800,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // EDIT – flex 1, center
+                Expanded(
+                  flex: 1,
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
+                      onPressed: () => loadForEdit(u),
+                      tooltip: 'Edit',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ),
+                ),
+                // ACTION – flex 1, right
+                Expanded(
+                  flex: 1,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: Transform.scale(
+                        scale: 0.7,
+                        child: Switch(
+                          // Active = 0 (green/on), Inactive = 1 (grey/off)
+                          value: (int.tryParse(u['status']?.toString() ?? '0') ?? 0) == 0,
+                          activeColor: Colors.green,
+                          onChanged: (v) => toggleStatus(u),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      );
+    }
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -611,220 +1210,33 @@ class _AddUserViewState extends State<AddUserView> {
         border: Border.all(color: Colors.grey.shade200, width: 1.0),
       ),
       clipBehavior: Clip.antiAlias,
-      child: isLoading
-          ? const SizedBox(
-              height: 400,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          : (allUsers.isNotEmpty && pagedUsers.isEmpty)
-          ? SizedBox(
-              height: 400,
-              child: Center(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double minW = constraints.maxWidth > 1000 ? constraints.maxWidth : 1000.0;
+          return Scrollbar(
+            controller: _hScroll,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _hScroll,
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: minW, maxWidth: minW),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.search_off_rounded,
-                      size: 48,
-                      color: Colors.blue.shade200,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      "No matching users found",
-                      style: TextStyle(
-                        color: Colors.blue.shade900,
-                        fontSize: 16.0,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      "Try a different search term",
-                      style: TextStyle(color: Colors.grey, fontSize: 13.0),
-                    ),
-                  ],
+                  mainAxisSize: MainAxisSize.min,
+                children: [header, buildRows()],
                 ),
               ),
-            )
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final double minWidth = constraints.maxWidth > 1100
-                    ? constraints.maxWidth
-                    : 1100.0;
-                return ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(context).copyWith(
-                    dragDevices: {
-                      PointerDeviceKind.touch,
-                      PointerDeviceKind.mouse,
-                    },
-                  ),
-                  child: Scrollbar(
-                    controller: _hScroll,
-                    thumbVisibility: true,
-                    thickness: 12.0,
-                    trackVisibility: true,
-                    interactive: true,
-                    child: SingleChildScrollView(
-                      controller: _hScroll,
-                      scrollDirection: Axis.horizontal,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(minWidth: minWidth),
-                        child: DataTable(
-                          columnSpacing: 24,
-                          headingRowHeight: 52,
-                          dataRowMaxHeight: 56,
-                          headingRowColor: WidgetStateProperty.all(
-                            Colors.blue.shade50,
-                          ),
-                          showCheckboxColumn: false,
-                          dividerThickness: 0.0,
-                          columns: _buildColumns(),
-                          rows: pagedUsers.map((u) => _buildRow(u)).toList(),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
             ),
-    );
-  }
-
-  List<DataColumn> _buildColumns() {
-    return [
-      _buildSortableColumn("USER ID", 0),
-      _buildSortableColumn("USER NAME", 1),
-      _buildSortableColumn("ROLE", 2),
-      _buildSortableColumn("EDIT", -1),
-      _buildSortableColumn("ACTION", -1),
-    ];
-  }
-
-  DataColumn _buildSortableColumn(String label, int columnIndex) {
-    return DataColumn(
-      label: InkWell(
-        onTap: columnIndex < 0
-            ? null
-            : () {
-                setState(() {
-                  if (_sortColumnIndex == columnIndex) {
-                    _sortAscending = !_sortAscending;
-                  } else {
-                    _sortColumnIndex = columnIndex;
-                    _sortAscending = true;
-                  }
-                });
-              },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                label.toUpperCase(),
-                style: const TextStyle(
-                  color: Color.fromRGBO(33, 150, 243, 1),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16.0,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (columnIndex >= 0) ...[
-              const SizedBox(width: 4),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Align(
-                    heightFactor: 0.4,
-                    child: Icon(
-                      Icons.arrow_drop_up,
-                      size: 18,
-                      color: _sortColumnIndex == columnIndex && _sortAscending
-                          ? Colors.blue
-                          : Colors.grey.withOpacity(0.5),
-                    ),
-                  ),
-                  Align(
-                    heightFactor: 0.4,
-                    child: Icon(
-                      Icons.arrow_drop_down,
-                      size: 18,
-                      color: _sortColumnIndex == columnIndex && !_sortAscending
-                          ? Colors.blue
-                          : Colors.grey.withOpacity(0.5),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
+          );
+        },
       ),
-    );
-  }
-
-  DataRow _buildRow(dynamic u) {
-    final roleName =
-        allRoles.firstWhere(
-          (r) => r['id']?.toString() == u['role_id']?.toString(),
-          orElse: () => {'role_name': 'User'},
-        )['role_name'] ??
-        'User';
-
-    final isActive = (u['status'] == 0 || u['status'] == '0');
-
-    return DataRow(
-      cells: [
-        DataCell(
-          Text(
-            u['user_id']?.toString() ?? "-",
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-        ),
-        DataCell(Text(u['user_name']?.toString() ?? "-")),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              roleName.toString(),
-              style: TextStyle(
-                color: Colors.blue.shade800,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-        DataCell(
-          IconButton(
-            icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-            onPressed: () => loadForEdit(u),
-            tooltip: "Edit",
-          ),
-        ),
-        DataCell(
-          Transform.scale(
-            scale: 0.7,
-            child: Switch(
-              value: isActive,
-              activeColor: Colors.green,
-              onChanged: (v) => toggleStatus(u, v),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
   Widget _buildListHeader({bool isMobile = false, Widget? addUserBtn}) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth <= 1100;
+        final isNarrow = constraints.maxWidth < 600;
 
         final showEntries = Row(
       mainAxisSize: MainAxisSize.min,
@@ -909,7 +1321,7 @@ class _AddUserViewState extends State<AddUserView> {
           style: const TextStyle(fontSize: 12, color: Colors.black87),
           decoration: InputDecoration(
             hintText: 'Search ID or Name...',
-            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
             prefixIcon: const Icon(
               Icons.search,
               size: 16,
@@ -1114,7 +1526,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
   late final TextEditingController _passCtrl;
   String? _selectedRoleId;
   bool _submitting = false;
-  bool _obscurePass = true;
+  bool _isPasswordObscured = true;
 
   bool get _isEditing => widget.editId != null;
 
@@ -1123,7 +1535,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
     super.initState();
     _userIdCtrl = TextEditingController(text: widget.initUserId);
     _userNameCtrl = TextEditingController(text: widget.initUserName);
-    _passCtrl = TextEditingController(text: widget.initPassword);
+    _passCtrl = TextEditingController(text: _isEditing ? '' : widget.initPassword);
 
     // Only set selectedRoleId if initRoleId actually exists in the roles list.
     // If it doesn't match (e.g. deleted role or ID mismatch), leave null so
@@ -1157,35 +1569,44 @@ class _UserFormDialogState extends State<_UserFormDialog> {
     }
     setState(() => _submitting = true);
     Navigator.of(context).pop();
+
+    String finalPassword = _passCtrl.text.trim();
+    if (_isEditing && finalPassword.isEmpty) {
+      finalPassword = '';
+    }
+
     await widget.onSubmit(
       editId: widget.editId,
       userId: _userIdCtrl.text.trim(),
       userName: _userNameCtrl.text.trim(),
-      password: _passCtrl.text.trim(),
+      password: finalPassword,
       roleId: _selectedRoleId,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      insetPadding: const EdgeInsets.all(16),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: 550,
+          maxWidth: isMobile ? screenWidth * 0.95 : 550,
           maxHeight: MediaQuery.of(context).size.height * 0.85,
         ),
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(32),
+            borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.15),
-                blurRadius: 50,
-                offset: const Offset(0, 20),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
               ),
             ],
           ),
@@ -1193,11 +1614,11 @@ class _UserFormDialogState extends State<_UserFormDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ── Blue gradient header — matches StylishDialog exactly ──
+              // Header background: Gradient matching department.dart StylishDialog with top-left and top-right rounded corners
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 20,
+                padding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 16 : 24,
+                  vertical: isMobile ? 14 : 18,
                 ),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -1205,52 +1626,64 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
                 ),
                 child: Row(
                   children: [
+                    // Header content: White user icon inside a translucent box (Colors.white.withOpacity(0.2))
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
                         _isEditing
-                            ? Icons.edit_note_rounded
+                            ? Icons.manage_accounts_rounded
                             : Icons.person_add_rounded,
                         color: Colors.white,
-                        size: 28,
+                        size: 22,
                       ),
                     ),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 16),
+                    // Bold white title, and white subtitle
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            _isEditing ? 'Edit User' : 'Add User',
+                            _isEditing ? "Edit User" : "Add User",
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              letterSpacing: -0.5,
+                              letterSpacing: -0.3,
                             ),
                           ),
+                          const SizedBox(height: 2),
                           const Text(
-                            'Provide system credentials and role',
+                            "Provide system credentials and role",
                             style: TextStyle(
-                              color: Colors.white54,
+                              color: Colors.white,
                               fontSize: 12,
                             ),
                           ),
                         ],
                       ),
                     ),
+                    // Action: Include a white close IconButton (Icons.close) at top-right to close the modal
                     IconButton(
                       icon: const Icon(
-                        Icons.close_rounded,
-                        color: Colors.white70,
+                        Icons.close,
+                        color: Colors.white,
                       ),
+                      tooltip: "Close",
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
@@ -1260,7 +1693,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
               // ── Form fields ──
               Flexible(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(32),
+                  padding: EdgeInsets.all(isMobile ? 16 : 24),
                   child: Form(
                     key: _formKey,
                     autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -1331,37 +1764,33 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                         StatefulBuilder(
                           builder: (_, setLocal) => TextFormField(
                             controller: _passCtrl,
-                            obscureText: _obscurePass,
+                            obscureText: _isPasswordObscured,
+                            enabled: true,
+                            readOnly: false,
                             maxLength: 20,
                             style: const TextStyle(
                               fontSize: 13,
                               color: Color(0xFF475569),
                             ),
-                            decoration:
-                                _deco(
-                                  _isEditing
-                                      ? 'Leave blank to keep current'
-                                      : 'Enter Password',
-                                ).copyWith(
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePass
-                                          ? Icons.visibility_off
-                                          : Icons.visibility,
-                                      color: Colors.grey,
-                                      size: 20,
-                                    ),
-                                    onPressed: () => setLocal(
-                                      () => _obscurePass = !_obscurePass,
-                                    ),
-                                  ),
+                            decoration: _deco(_isEditing ? 'Enter new password' : 'Enter Password').copyWith(
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _isPasswordObscured
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  color: Colors.grey,
+                                  size: 20,
                                 ),
+                                onPressed: () {
+                                  setState(() => _isPasswordObscured = !_isPasswordObscured);
+                                  setLocal(() {});
+                                },
+                              ),
+                            ),
                             validator: (v) {
-                              if (_isEditing && (v == null || v.trim().isEmpty))
-                                return null;
-                              if (v == null || v.trim().isEmpty)
+                              if (!_isEditing && (v == null || v.trim().isEmpty))
                                 return 'Please enter the Password';
-                              if (v.trim().length < 6)
+                              if (v != null && v.trim().isNotEmpty && v.trim().length < 6)
                                 return 'Minimum 6 characters';
                               return null;
                             },

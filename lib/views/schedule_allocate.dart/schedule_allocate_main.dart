@@ -1099,128 +1099,146 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
                   );
                 }
 
-                final double newMinWidth = constraints.maxWidth;
+                final double tableWidth = constraints.maxWidth > 800 ? constraints.maxWidth : 800.0;
                 return ScrollConfiguration(
                   behavior: ScrollConfiguration.of(context).copyWith(
                     dragDevices: {
                       PointerDeviceKind.touch,
                       PointerDeviceKind.mouse,
+                      PointerDeviceKind.trackpad,
                     },
                   ),
-                  child: Scrollbar(
-                    controller: _hScroll,
-                    thumbVisibility: true,
-                    thickness: 8.0,
-                    trackVisibility: true,
-                    interactive: true,
-                    child: SingleChildScrollView(
+                  child: ScrollbarTheme(
+                    data: ScrollbarThemeData(
+                      thumbVisibility: WidgetStateProperty.all(true),
+                      interactive: true,
+                      thumbColor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.dragged) ||
+                            states.contains(WidgetState.hovered)) {
+                          return Colors.black87;
+                        }
+                        return Colors.grey.withOpacity(0.5);
+                      }),
+                    ),
+                    child: Scrollbar(
                       controller: _hScroll,
-                      scrollDirection: Axis.horizontal,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(minWidth: newMinWidth),
-                        child: Scrollbar(
-                          controller: _vScroll,
-                          thumbVisibility: true,
-                          thickness: 8.0,
-                          trackVisibility: true,
-                          interactive: true,
-                          child: SingleChildScrollView(
+                      thickness: 8.0,
+                      trackVisibility: true,
+                      child: SingleChildScrollView(
+                        controller: _hScroll,
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minWidth: tableWidth),
+                          child: Scrollbar(
                             controller: _vScroll,
+                            thickness: 8.0,
+                            trackVisibility: true,
+                            child: SingleChildScrollView(
+                              controller: _vScroll,
                             scrollDirection: Axis.vertical,
-                            child: DataTable(
-                              columnSpacing: 10,
-                              horizontalMargin: 12,
-                              dataRowMinHeight: 70,
-                              dataRowMaxHeight: 85,
-                              headingRowHeight: 45,
-                              headingRowColor: WidgetStateProperty.all(
-                                Colors.blue.shade50,
+                            child: Container(
+                              width: tableWidth,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade200, width: 1.5),
                               ),
-                              columns: [
-                                _buildSortableColumn('PLAY ORDER'),
-                                _buildSortableColumn('FILE'),
-                                _buildSortableColumn('FILE NAME'),
-                                _buildSortableColumn('DURATION'),
-                              ],
-                              rows: _pagedTemplateFiles.map((file) {
-                                final index =
-                                    _filteredTemplateFiles.indexOf(file) + 1;
-                                return DataRow(
-                                  cells: [
-                                    DataCell(
-                                      Text(
-                                        index.toString(),
-                                        style: const TextStyle(
-                                          fontSize: 12.0,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // Header
+                                  Container(
+                                    height: 45,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
                                     ),
-                                    DataCell(
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8.0,
-                                        ),
-                                        child: Container(
-                                          width: 100,
-                                          height: 65,
-                                          clipBehavior: Clip.antiAlias,
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              4,
+                                    child: Row(
+                                      children: [
+                                        Expanded(flex: 1, child: Padding(padding: const EdgeInsets.only(left: 12), child: Text('S.NO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color.fromRGBO(33, 150, 243, 1),)))),
+                                        Expanded(flex: 2, child: Text('FILE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color.fromRGBO(33, 150, 243, 1),))),
+                                        Expanded(flex: 4, child: Text('FILE NAME', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color.fromRGBO(33, 150, 243, 1),))),
+                                        Expanded(flex: 2, child: Padding(padding: const EdgeInsets.only(right: 16.0), child: Align(alignment: Alignment.centerRight, child: Text('DURATION', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color.fromRGBO(33, 150, 243, 1),))))),
+                                      ],
+                                    ),
+                                  ),
+                                  // Data Rows
+                                  ..._pagedTemplateFiles.asMap().entries.map((entry) {
+                                    final index = entry.key;
+                                    final file = entry.value;
+                                    final int perPage = int.tryParse(entriesValue) ?? 10;
+                                    final int sNo = ((currentFilePage - 1) * perPage) + index + 1;
+                                    return Container(
+                                      decoration: BoxDecoration(
+                                        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            flex: 1,
+                                            child: Padding(
+                                              padding: const EdgeInsets.only(left: 12),
+                                              child: Text(sNo.toString(), style: const TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: Colors.black87)),
                                             ),
-                                            border: Border.all(
-                                              color: Colors.grey.shade300,
+                                          ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Container(
+                                                width: 90.0,
+                                                height: 55.0,
+                                                alignment: Alignment.center,
+                                                clipBehavior: Clip.antiAlias,
+                                                decoration: BoxDecoration(
+                                                  borderRadius: BorderRadius.circular(8.0),
+                                                  border: Border.all(color: Colors.grey.shade300),
+                                                ),
+                                                child: _buildFilePreview(file),
+                                              ),
                                             ),
                                           ),
-                                          child: _buildFilePreview(file),
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        file['user_filename'] ??
-                                            file['file_name'] ??
-                                            '-',
-                                        style: const TextStyle(
-                                          fontSize: 12.0,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.shade50,
-                                          borderRadius: BorderRadius.circular(
-                                            12,
+                                          Expanded(
+                                            flex: 4,
+                                            child: Text(
+                                              file['user_filename'] ?? file['file_name'] ?? '-',
+                                              style: const TextStyle(fontSize: 12.0, color: Colors.black87),
+                                            ),
                                           ),
-                                        ),
-                                        child: Text(
-                                          "${file['duration'] ?? '30'}s",
-                                          style: TextStyle(
-                                            fontSize: 12.0,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue.shade900,
+                                          Expanded(
+                                            flex: 2,
+                                            child: Padding(
+                                              padding: const EdgeInsets.only(right: 16.0),
+                                              child: Align(
+                                                alignment: Alignment.centerRight,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.blue.shade50,
+                                                    borderRadius: BorderRadius.circular(12),
+                                                  ),
+                                                  child: Text(
+                                                    "${file['duration'] ?? '30'}s",
+                                                    style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                       ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
+                                    );
+                                  }).toList(),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                   ),
-                );
+                ),
+                ),
+              );
               },
             );
 
@@ -1529,6 +1547,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
           ),
         );
 
+        final bool isMobileView = MediaQuery.of(context).size.width < 800;
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1542,7 +1561,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
             ),
             const SizedBox(width: 8),
             dropdownButton,
-            if (!isNarrow) ...[
+            if (!isMobileView) ...[
               const SizedBox(width: 8),
               const Text(
                 "entries",
@@ -1557,7 +1576,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         );
 
         final searchBox = SizedBox(
-          width: isNarrow
+          width: isMobileView
               ? constraints.maxWidth * 0.5
               : constraints.maxWidth * 0.45,
           height: 38,
@@ -1575,7 +1594,7 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
               ),
               hintText: "Search files...",
               hintStyle: const TextStyle(
-                fontSize: 12.0,
+                fontSize: 14.0,
                 color: Color(0xFF94A3B8),
               ),
               isDense: true,
@@ -1605,13 +1624,13 @@ class _ScheduleAllocateViewState extends State<ScheduleAllocateView>
         );
 
         return Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: isNarrow
+          padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0, bottom: 8.0),
+          child: isMobileView
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Align(alignment: Alignment.centerRight, child: showEntries),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 5),
                     Align(alignment: Alignment.centerRight, child: searchBox),
                   ],
                 )

@@ -723,7 +723,6 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
           children: [
             Form(
               key: _formKey,
-              autovalidateMode: AutovalidateMode.onUserInteraction,
               child: Column(
                 children: [
                   AnimatedHeading(
@@ -861,7 +860,6 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
             ),
             child: Form(
               key: _formKey,
-              autovalidateMode: AutovalidateMode.onUserInteraction,
               child: Column(
                 children: [
                   Row(
@@ -1003,9 +1001,7 @@ class _SpecificRangesViewState extends State<SpecificRangesView> {
 
           final bool isSelectionComplete =
               selectedScheduleId != null &&
-              selectedTemplateId != null &&
-              _fromDateController.text.isNotEmpty &&
-              _toDateController.text.isNotEmpty;
+              selectedTemplateId != null;
 
           if (isNarrow) {
             return _buildMobileLayout(isSelectionComplete);
@@ -1085,21 +1081,14 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
               _buildListHeader(isMobile: isMobile),
               LayoutBuilder(
                 builder: (context, constraints) {
-                  double maxFileNameLength = 0;
-                  for (var file in _pagedTemplateFiles) {
-                    final String name = (file['user_filename'] ?? file['file_name'] ?? '-').toString();
-                    if (name.length > maxFileNameLength) {
-                      maxFileNameLength = name.length.toDouble();
-                    }
-                  }
-                  
-                  double requiredTableWidth = 350 + (maxFileNameLength * 7.5);
-                  final double tableWidth = constraints.maxWidth > requiredTableWidth
-                      ? constraints.maxWidth
-                      : requiredTableWidth < 600 ? 600.0 : requiredTableWidth;
-
+                  final double tableWidth = constraints.maxWidth > 800 ? constraints.maxWidth : 800.0;
                   Widget tableContent = Container(
                     width: tableWidth,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    clipBehavior: Clip.antiAlias,
                     child: Column(
                       children: [
                         _buildTableHeader(),
@@ -1150,11 +1139,11 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
                         ListView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _pagedTemplateFiles.length,
+                          itemCount: _filteredTemplateFiles.length,
                           itemBuilder: (context, index) {
-                            final file = _pagedTemplateFiles[index];
+                            final file = _filteredTemplateFiles[index];
                             return Container(
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               decoration: BoxDecoration(
                                 border: Border(
                                   bottom: BorderSide(
@@ -1165,8 +1154,9 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
                               child: Row(
                                 children: [
                                   Expanded(
-                                    flex: 1,
-                                    child: Center(
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
                                       child: Text(
                                         "${file['play_order'] ?? file['order_no'] ?? file['file_order'] ?? index + 1}",
                                         style: const TextStyle(
@@ -1177,8 +1167,9 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
                                     ),
                                   ),
                                   Expanded(
-                                    flex: 2,
-                                    child: Center(
+                                    flex: 3,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
                                       child: Container(
                                         width: 100,
                                         height: 65,
@@ -1200,7 +1191,7 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
                                     ),
                                   ),
                                   Expanded(
-                                    flex: 3,
+                                    flex: 4,
                                     child: Padding(
                                       padding: const EdgeInsets.only(left: 12.0),
                                       child: Text(
@@ -1215,7 +1206,7 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
                                   Expanded(
                                     flex: 2,
                                     child: Align(
-                                      alignment: Alignment.centerLeft,
+                                      alignment: Alignment.centerRight,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 8,
@@ -1243,9 +1234,9 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
                             );
                           },
                         ),
-                    ],
-                  ),
-                );
+                      ],
+                    ),
+                  );
 
                   return Scrollbar(
                     thumbVisibility: true,
@@ -1261,7 +1252,6 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
                   );
                 },
               ),
-              _buildTableFooter(),
             ],
           ),
         ),
@@ -1407,10 +1397,11 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
       child: const Row(
         children: [
           Expanded(
-            flex: 1,
-            child: Center(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
               child: Text(
-                "PLAY ORDER",
+                "S/NO",
                 style: TextStyle(
                   color: Color.fromRGBO(33, 150, 243, 1),
                   fontWeight: FontWeight.bold,
@@ -1422,8 +1413,9 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
             ),
           ),
           Expanded(
-            flex: 2,
-            child: Center(
+            flex: 3,
+            child: Align(
+              alignment: Alignment.centerLeft,
               child: Text(
                 "FILE",
                 style: TextStyle(
@@ -1437,9 +1429,9 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
             ),
           ),
           Expanded(
-            flex: 3,
+            flex: 4,
             child: Padding(
-              padding: const EdgeInsets.only(left: 12.0),
+              padding: EdgeInsets.only(left: 12.0),
               child: Text(
                 "FILE NAME",
                 style: TextStyle(
@@ -1455,7 +1447,7 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
           Expanded(
             flex: 2,
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: Alignment.centerRight,
               child: Text(
                 "DURATION",
                 style: TextStyle(
@@ -1564,8 +1556,9 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
           ],
         );
 
+        final bool isMobileView = MediaQuery.of(context).size.width < 800;
         final searchBox = SizedBox(
-          width: isMobile
+          width: isMobileView
               ? constraints.maxWidth * 0.5
               : constraints.maxWidth * 0.45,
           height: 38,
@@ -1599,7 +1592,6 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-
                 borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
               ),
               focusedBorder: OutlineInputBorder(
@@ -1616,155 +1608,12 @@ Widget _buildTemplateDetailsPanel({bool isMobile = false}) {
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 16.0, bottom: 8.0),
-          child: isMobile
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    mobileShowEntries,
-                    const SizedBox(height: 8),
-                    searchBox,
-                  ],
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    showEntries,
-                    searchBox,
-                  ],
-                ),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: searchBox,
+          ),
         );
       },
-    );
-  }
-
-  Widget _buildTableFooter() {
-    int total = _filteredTemplateFiles.length;
-    int limit = int.tryParse(entriesValue) ?? 10;
-    int totalPages = (total / limit).ceil();
-    if (totalPages == 0) totalPages = 1;
-
-    if (currentFilePage > totalPages) {
-      currentFilePage = totalPages;
-    }
-    if (currentFilePage < 1) {
-      currentFilePage = 1;
-    }
-
-    final start = total == 0 ? 0 : (currentFilePage - 1) * limit + 1;
-    final end = (currentFilePage * limit).clamp(0, total);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth <= 1100;
-          final paginationText = Text(
-            "Showing $start to $end of $total entries",
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF334155),
-            ),
-          );
-          final paginationControls = Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildPageBtn(
-                "Previous",
-                enabled: currentFilePage > 1,
-                onTap: () => setState(() => currentFilePage--),
-              ),
-              ..._buildPageNumberButtons(totalPages),
-              _buildPageBtn(
-                "Next",
-                enabled: currentFilePage < totalPages,
-                onTap: () => setState(() => currentFilePage++),
-              ),
-            ],
-          );
-
-          return SizedBox(
-            width: double.infinity,
-            child: isNarrow
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      paginationText,
-                      const SizedBox(height: 12),
-                      paginationControls,
-                    ],
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [paginationText, paginationControls],
-                  ),
-          );
-        },
-      ),
-    );
-  }
-
-  List<Widget> _buildPageNumberButtons(int totalPages) {
-    final visibleCount = totalPages.clamp(1, 3);
-    int windowStart = currentFilePage - 1;
-    if (windowStart < 1) windowStart = 1;
-    if (windowStart + visibleCount - 1 > totalPages) {
-      windowStart = totalPages - visibleCount + 1;
-    }
-    List<Widget> widgets = [];
-    for (int i = windowStart; i < windowStart + visibleCount; i++) {
-      final pageNum = i;
-      widgets.add(
-        _buildPageBtn(
-          "$pageNum",
-          enabled: true,
-          onTap: () => setState(() => currentFilePage = pageNum),
-          isActive: currentFilePage == pageNum,
-        ),
-      );
-    }
-    return widgets;
-  }
-
-  Widget _buildPageBtn(
-    String label, {
-    required bool enabled,
-    required VoidCallback onTap,
-    bool isActive = false,
-  }) {
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: label.length > 2 ? 12 : 8,
-          vertical: 8,
-        ),
-        decoration: BoxDecoration(
-          color: isActive
-              ? const Color(0xFF0F172A)
-              : (enabled ? Colors.white : Colors.grey.shade100),
-          border: Border.all(
-            color: isActive ? const Color(0xFF0F172A) : Colors.grey.shade300,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-            color: isActive
-                ? Colors.white
-                : (enabled ? Colors.black87 : Colors.grey.shade400),
-          ),
-        ),
-      ),
     );
   }
 

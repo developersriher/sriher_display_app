@@ -1942,6 +1942,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
 
     final rightCard = (selectedTemplateId != null && selectedCategoryId != null)
         ? Container(
+            width: double.infinity,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -2033,12 +2034,12 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                 configCard,
                 if (selectedCategoryId != null && fileType != null) ...[
                   const SizedBox(height: 20),
-                  SizedBox(height: 500, child: _buildAvailableFilesTable()),
+                  _buildAvailableFilesTable(),
                 ],
                 if (selectedTemplateId != null &&
                     selectedCategoryId != null) ...[
                   const SizedBox(height: 20),
-                  SizedBox(height: 500, child: rightCard),
+                  rightCard,
                 ],
               ],
             ),
@@ -2051,13 +2052,13 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       backgroundColor: Colors.white,
       body: SelectionArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.only(left: 24.0, top: 24.0, bottom: 24.0, right: 0),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // LEFT PANEL: Configuration Card & Available Files Table
               Expanded(
-                flex: 5,
+                flex: 1,
                 child: Column(
                   children: [
                     configCard,
@@ -2071,7 +2072,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               const SizedBox(width: 32),
               // RIGHT PANEL: Content Area (Current Selection List)
               Expanded(
-                flex: 6,
+                flex: 1,
                 child:
                     (selectedTemplateId != null && selectedCategoryId != null)
                     ? rightCard
@@ -2672,39 +2673,6 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
 
     if (isVideo) {
-      if (staticOnly) {
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildFallbackThumbnail(isVideo: true),
-            Positioned(
-              bottom: 2,
-              right: 2,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _showFullScreenVideo(
-                    fileUrl,
-                    userFileName.isNotEmpty ? userFileName : fileName,
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.black54,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.fullscreen,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      }
       return VideoThumbnail(
         url: fileUrl,
         title: userFileName.isNotEmpty ? userFileName : fileName,
@@ -2720,38 +2688,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     }
   }
 
-  void _showFullScreenVideo(String videoUrl, String title) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: EdgeInsets.zero,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            SizedBox(
-              width: double.infinity,
-              height: double.infinity,
-              child: VideoThumbnail(
-                url: videoUrl,
-                title: title,
-                fit: BoxFit.contain,
-              ),
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   Widget _buildFallbackThumbnail({bool isVideo = false}) {
     return Container(
@@ -2795,12 +2732,17 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           child: SingleChildScrollView(
             controller: _horizontalController,
             scrollDirection: Axis.horizontal,
-            child: SizedBox(
+            child: Container(
               width: tableWidth,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
                   _buildListHeader(),
-                  const SizedBox(height: 8),
                   assignedFiles.isEmpty
                       ? const Padding(
                           padding: EdgeInsets.all(48.0),
@@ -2888,9 +2830,15 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    // ── Preview column — FIXED WIDTH matching header ──
-                                    SizedBox(
-                                      width: thumbW,
+                                    Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        '${i + 1}',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 3,
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
@@ -2946,10 +2894,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
                                     // ── File name column — expanded & scrollable ──
                                     Expanded(
-                                      flex: 5,
+                                      flex: 4,
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
@@ -3001,7 +2948,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                                     Expanded(
                                       flex: 2,
                                       child: Align(
-                                        alignment: Alignment.centerLeft,
+                                        alignment: Alignment.centerRight,
                                         child: IconButton(
                                           icon:
                                               _removingFileIds.contains(fileId)
@@ -3058,32 +3005,23 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   }
 
   Widget _buildListHeader() {
-    // This width MUST match the fixed thumbW used in the row builder above.
-    final bool isMobile = MediaQuery.of(context).size.width < 600;
-    final double previewColW = isMobile ? 120.0 : 160.0;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Preview header — SAME fixed width as the thumbnail SizedBox in the row
-          SizedBox(
-            width: previewColW,
-            child: Text("File Name", style: _headerStyle()),
-          ),
-          const SizedBox(width: 8),
-          Expanded(flex: 5, child: Text("File", style: _headerStyle())),
+          Expanded(flex: 1, child: Text("S/NO", style: _headerStyle())),
+          Expanded(flex: 3, child: Text("FILE", style: _headerStyle())),
+          Expanded(flex: 4, child: Text("FILE NAME", style: _headerStyle())),
           Expanded(
             flex: 2,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
+            child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                "File Type",
+                "FILE TYPE",
                 style: _headerStyle(),
                 maxLines: 1,
                 softWrap: false,
@@ -3092,11 +3030,10 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           ),
           Expanded(
             flex: 2,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
+            child: Align(
+              alignment: Alignment.centerRight,
               child: Text(
-                "Action",
+                "ACTION",
                 style: _headerStyle(),
                 maxLines: 1,
                 softWrap: false,
@@ -3111,7 +3048,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   TextStyle _headerStyle() => const TextStyle(
     fontWeight: FontWeight.bold,
     fontSize: 12,
-    color: Colors.blueGrey,
+    color: Color.fromRGBO(33, 150, 243, 1),
   );
 
   Widget _buildFormRow(

@@ -205,7 +205,45 @@ class _LocationMasterViewState extends State<LocationMasterView> {
       if (found is Map) itemMap = Map<String, dynamic>.from(found);
     }
 
-    final int newStatus = (rawStatus == 0 || rawStatus == "0") ? 1 : 0;
+    final bool currentlyActive = _isItemActive(itemMap);
+    final int newStatus = currentlyActive ? 1 : 0;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Confirm Action", textAlign: TextAlign.center),
+          content: Text(
+            newStatus == 0
+                ? "Do you want to set this item as active?"
+                : "Do you want to set this item as inactive?",
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    setState(() {
+      final idx = locationList.indexWhere((e) => e['id']?.toString() == id?.toString());
+      if (idx != -1) {
+        locationList[idx]['status'] = newStatus;
+        locationList[idx]['active_status'] = newStatus;
+      }
+    });
 
     // Preserve all existing row fields in POST payload
     final Map<String, dynamic> payload = Map<String, dynamic>.from(itemMap);
@@ -223,6 +261,13 @@ class _LocationMasterViewState extends State<LocationMasterView> {
 
       if (response.statusCode == 200) {
         if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(newStatus == 0 ? "Location has been successfully activated." : "Location has been successfully deactivated."),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         fetchLocations();
       }
     } catch (e) {
@@ -397,7 +442,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth <= 1100;
+                  final isNarrow = constraints.maxWidth < 600;
                   final heading = const AnimatedHeading(
                     text: "Location List",
                     style: TextStyle(
@@ -578,8 +623,8 @@ class _LocationMasterViewState extends State<LocationMasterView> {
     } else {
       // Default sort by id to maintain consistent order
       filteredList.sort(
-        (a, b) => (int.tryParse(b['id']?.toString() ?? '0') ?? 0).compareTo(
-          int.tryParse(a['id']?.toString() ?? '0') ?? 0,
+        (a, b) => (int.tryParse(a['id']?.toString() ?? '0') ?? 0).compareTo(
+          int.tryParse(b['id']?.toString() ?? '0') ?? 0,
         ),
       );
     }
@@ -651,13 +696,28 @@ class _LocationMasterViewState extends State<LocationMasterView> {
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
                                 Expanded(
-                                  flex: 4,
+                                  flex: 1,
                                   child: Align(
                                     alignment: Alignment.centerLeft,
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12.0,
+                                      padding: const EdgeInsets.only(left: 12.0),
+                                      child: const Text(
+                                        'S/NO',
+                                        style: TextStyle(
+                                          color: Color.fromRGBO(33, 150, 243, 1),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
                                       ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(left: 12.0),
                                       child: _buildHeaderCell(
                                         'BUILDING/AREA NAME',
                                         colIndex: 0,
@@ -766,7 +826,10 @@ class _LocationMasterViewState extends State<LocationMasterView> {
                               ),
                             )
                           else
-                            ...pagedList.map((loc) {
+                            ...pagedList.asMap().entries.map((entry) {
+                              final index = entry.key;
+                              final loc = entry.value;
+                              final sNo = startIdx + index + 1;
                               return Container(
                                 height: 48,
                                 decoration: BoxDecoration(
@@ -781,13 +844,26 @@ class _LocationMasterViewState extends State<LocationMasterView> {
                                   mainAxisAlignment: MainAxisAlignment.start,
                                   children: [
                                     Expanded(
-                                      flex: 4,
+                                      flex: 1,
                                       child: Align(
                                         alignment: Alignment.centerLeft,
                                         child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12.0,
+                                          padding: const EdgeInsets.only(left: 12.0),
+                                          child: Text(
+                                            sNo.toString(),
+                                            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
                                           ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(left: 12.0),
                                           child: Text(
                                             loc['location_name']?.toString() ??
                                                 "-",
@@ -1021,7 +1097,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   Widget _buildListHeader() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth <= 1100;
+        final isNarrow = constraints.maxWidth < 600;
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1102,7 +1178,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
                 hintText: 'Search Locations...',
                 hintStyle: const TextStyle(
                   color: Color(0xFF94A3B8),
-                  fontSize: 12,
+                  fontSize: 14,
                 ),
                 prefixIcon: const Icon(
                   Icons.search,
@@ -1160,7 +1236,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth <= 1100;
+        final isNarrow = constraints.maxWidth < 600;
 
         final showingText = Text(
           "Showing ${total == 0 ? 0 : start} to $end of $total entries",

@@ -29,6 +29,7 @@ class _DepartmentViewState extends State<DepartmentView> {
   int currentPage = 0;
   int? editingId;
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final ScrollController _hScroll = ScrollController();
 
   int? _sortColumnIndex;
   bool _sortAscending = true;
@@ -41,11 +42,11 @@ class _DepartmentViewState extends State<DepartmentView> {
         return _sortAscending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
       });
     } else {
-      // Default: sort by id descending (newest at the top)
+      // Default: sort by id ascending
       filteredList.sort((a, b) {
         final aId = int.tryParse(a['id']?.toString() ?? '0') ?? 0;
         final bId = int.tryParse(b['id']?.toString() ?? '0') ?? 0;
-        return bId.compareTo(aId);
+        return aId.compareTo(bId);
       });
     }
   }
@@ -219,6 +220,44 @@ class _DepartmentViewState extends State<DepartmentView> {
       final int newStatus = (currentStatus == 0 || currentStatus == "0")
           ? 1
           : 0;
+          
+      final confirm = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text("Confirm Action", textAlign: TextAlign.center),
+            content: Text(
+              newStatus == 0
+                  ? "Do you want to set this item as active?"
+                  : "Do you want to set this item as inactive?",
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("OK"),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm != true) return;
+
+      setState(() {
+        final idx = categoryList.indexWhere((c) => c['id']?.toString() == id?.toString());
+        if (idx != -1) {
+          categoryList[idx]['status'] = newStatus;
+          categoryList[idx]['active_status'] = newStatus;
+        }
+      });
+
       final response = await http.post(
         Uri.parse('$_baseUrl/categoryStatusUpdateview'),
         headers: {"Content-Type": "application/json"},
@@ -231,6 +270,13 @@ class _DepartmentViewState extends State<DepartmentView> {
 
       if (response.statusCode == 200) {
         if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(newStatus == 0 ? "Department has been successfully activated." : "Department has been successfully deactivated."),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         fetchCategories();
       }
     } catch (e) {
@@ -576,7 +622,7 @@ class _DepartmentViewState extends State<DepartmentView> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth <= 1100;
+                  final isNarrow = constraints.maxWidth < 600;
                   final heading = const AnimatedHeading(
                     text: "Department List",
                     style: TextStyle(
@@ -705,9 +751,20 @@ class _DepartmentViewState extends State<DepartmentView> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final double minW = constraints.maxWidth > 1000 ? constraints.maxWidth : 1000.0;
+                        return Scrollbar(
+                          controller: _hScroll,
+                          thumbVisibility: true,
+                          child: SingleChildScrollView(
+                            controller: _hScroll,
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(minWidth: minW, maxWidth: minW),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
                         // Table Header Row
                         Container(
                           height: 45,
@@ -724,13 +781,28 @@ class _DepartmentViewState extends State<DepartmentView> {
                             mainAxisAlignment: MainAxisAlignment.start,
                             children: [
                               Expanded(
-                                flex: 3,
+                                flex: 1,
                                 child: Align(
                                   alignment: Alignment.centerLeft,
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12.0,
+                                    padding: const EdgeInsets.only(left: 12.0),
+                                    child: const Text(
+                                      'S/NO',
+                                      style: TextStyle(
+                                        color: Color.fromRGBO(33, 150, 243, 1),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
                                     ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 5,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(left: 12.0),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -823,16 +895,19 @@ class _DepartmentViewState extends State<DepartmentView> {
                               Expanded(
                                 flex: 2,
                                 child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: const Text(
-                                    "ACTION",
-                                    style: TextStyle(
-                                      color: Color.fromRGBO(33, 150, 243, 1),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
+                                  alignment: Alignment.centerRight,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 16.0),
+                                    child: const Text(
+                                      "ACTION",
+                                      style: TextStyle(
+                                        color: Color.fromRGBO(33, 150, 243, 1),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
                                   ),
                                 ),
                               ),
@@ -872,7 +947,10 @@ class _DepartmentViewState extends State<DepartmentView> {
                             ),
                           )
                         else
-                          ...pagedData.map((item) {
+                          ...pagedData.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final item = entry.value;
+                            final sNo = start + index + 1;
                             return Container(
                               height: 48,
                               decoration: BoxDecoration(
@@ -887,13 +965,26 @@ class _DepartmentViewState extends State<DepartmentView> {
                                 mainAxisAlignment: MainAxisAlignment.start,
                                 children: [
                                   Expanded(
-                                    flex: 3,
+                                    flex: 1,
                                     child: Align(
                                       alignment: Alignment.centerLeft,
                                       child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12.0,
+                                        padding: const EdgeInsets.only(left: 12.0),
+                                        child: Text(
+                                          sNo.toString(),
+                                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
                                         ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 5,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(left: 12.0),
                                         child: Text(
                                           item['category_name']?.toString() ??
                                               "-",
@@ -928,17 +1019,20 @@ class _DepartmentViewState extends State<DepartmentView> {
                                   Expanded(
                                     flex: 2,
                                     child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Transform.scale(
-                                        scale: 0.7,
-                                        child: Switch(
-                                          value:
-                                              item['status'] == 0 ||
-                                              item['status'] == "0",
-                                          activeColor: Colors.green,
-                                          onChanged: (v) => toggleStatus(
-                                            item['id'],
-                                            item['status'],
+                                      alignment: Alignment.centerRight,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(right: 8.0),
+                                        child: Transform.scale(
+                                          scale: 0.7,
+                                          child: Switch(
+                                            value:
+                                                item['status'] == 0 ||
+                                                item['status'] == "0",
+                                            activeColor: Colors.green,
+                                            onChanged: (v) => toggleStatus(
+                                              item['id'],
+                                              item['status'],
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -949,6 +1043,11 @@ class _DepartmentViewState extends State<DepartmentView> {
                             );
                           }),
                       ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
         SizedBox(height: MediaQuery.of(context).size.width < 950 ? 4 : 16),
@@ -992,7 +1091,7 @@ class _DepartmentViewState extends State<DepartmentView> {
   Widget _buildListHeader() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth <= 1100;
+        final isNarrow = constraints.maxWidth < 600;
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1069,7 +1168,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                 hintText: 'Search Departments...',
                 hintStyle: const TextStyle(
                   color: Color(0xFF94A3B8),
-                  fontSize: 12,
+                  fontSize: 14,
                 ),
                 prefixIcon: const Icon(
                   Icons.search,

@@ -41,7 +41,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
 
   // Sorting State
   int _sortColumnIndex = -1;
-  bool _sortAscending = false;
+  bool _sortAscending = true;
 
   // Form Controller
   final TextEditingController _templateNameController = TextEditingController();
@@ -207,7 +207,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
     return true;
   }
 
-  // API 5: STATUS UPDATE (optimistic local update — no full refetch to avoid blink)
+  // API 5: STATUS UPDATE
   Future<void> toggleStatus(dynamic itemOrId, [dynamic currentStatus]) async {
     Map<String, dynamic> itemMap = {};
     dynamic id = itemOrId;
@@ -230,10 +230,40 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
     final dynamic oldStatus =
         itemMap['status'] ?? currentStatus ?? (currentlyActive ? 0 : 1);
 
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Confirm Action", textAlign: TextAlign.center),
+          content: Text(
+            currentlyActive
+                ? "Do you want to set this item as inactive?"
+                : "Do you want to set this item as active?",
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
     if (idx != -1) {
       setState(() {
         templateList[idx] = Map<String, dynamic>.from(templateList[idx])
-          ..['status'] = nextStatus;
+          ..['status'] = nextStatus
+          ..['active_status'] = nextStatus;
       });
     }
 
@@ -248,20 +278,34 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(payload),
       );
-      if (response.statusCode != 200) {
-        if (idx != -1) {
+      if (response.statusCode == 200) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(nextStatus == 0
+                ? "Template has been successfully activated."
+                : "Template has been successfully deactivated."),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        fetchTemplatesFromServer();
+      } else {
+        if (idx != -1 && mounted) {
           setState(() {
             templateList[idx] = Map<String, dynamic>.from(templateList[idx])
-              ..['status'] = oldStatus;
+              ..['status'] = oldStatus
+              ..['active_status'] = oldStatus;
           });
         }
-        _showSnackBar("Status update failed. Reverted.");
+        _showSnackBar("Status update failed (${response.statusCode}).");
       }
     } catch (e) {
-      if (idx != -1) {
+      if (idx != -1 && mounted) {
         setState(() {
           templateList[idx] = Map<String, dynamic>.from(templateList[idx])
-            ..['status'] = oldStatus;
+            ..['status'] = oldStatus
+            ..['active_status'] = oldStatus;
         });
       }
       debugPrint("Status toggle fail: $e");
@@ -345,11 +389,13 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
 
   // ─── POPUP DIALOG FOR TEMPLATE ───────────────────────────────────────────
   void _showTemplateDialog() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 800;
     StylishDialog.show(
       context: context,
       title: editingId == null ? "Create New Template" : "Edit Template",
-      titleStyle: const TextStyle(
-        fontSize: 16,
+      titleStyle: TextStyle(
+        fontSize: isMobile ? 15 : 18,
         fontWeight: FontWeight.bold,
         color: Colors.white,
       ),
@@ -358,7 +404,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
       icon: editingId == null
           ? Icons.dashboard_customize_rounded
           : Icons.edit_note_rounded,
-      width: 430,
+      width: isMobile ? screenWidth * 0.9 : 450,
       child: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -506,7 +552,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth <= 1100;
+    final isMobile = screenWidth < 1000;
 
     final heading = const AnimatedHeading(
       text: "Templates List",
@@ -561,105 +607,62 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
           mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
           children: [
             // ── Responsive heading row ──
-            Align(
-              alignment: isMobile ? Alignment.center : Alignment.centerLeft,
-              child: heading,
-            ),
+            isMobile
+                ? Align(alignment: Alignment.center, child: heading)
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+                    children: [heading, createBtn],
+                  ),
             const SizedBox(height: 20),
             _buildListHeader(isMobile: isMobile, createBtn: createBtn),
             const SizedBox(height: 15),
-            isMobile
-                ? SizedBox(
-                    height: 300,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: Colors.grey.shade200,
-                          width: 1.0,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : (templateList.isNotEmpty && _filteredList.isEmpty)
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.search_off_rounded,
-                                    size: 48,
-                                    color: Colors.blue.shade200,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    "No matching templates found",
-                                    style: TextStyle(
-                                      color: Colors.blue.shade900,
-                                      fontSize: 16.0,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    "Try a different search term",
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 13.0,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : _buildDataTable(),
-                    ),
-                  )
-                : Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: Colors.grey.shade200,
-                          width: 1.0,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : (templateList.isNotEmpty && _filteredList.isEmpty)
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.search_off_rounded,
-                                    size: 48,
-                                    color: Colors.blue.shade200,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    "No matching templates found",
-                                    style: TextStyle(
-                                      color: Colors.blue.shade900,
-                                      fontSize: 16.0,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    "Try a different search term",
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 13.0,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : _buildDataTable(),
-                    ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 300),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Colors.grey.shade200,
+                    width: 1.0,
                   ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : (templateList.isNotEmpty && _filteredList.isEmpty)
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.search_off_rounded,
+                              size: 48,
+                              color: Colors.blue.shade200,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              "No matching templates found",
+                              style: TextStyle(
+                                color: Colors.blue.shade900,
+                                fontSize: 16.0,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              "Try a different search term",
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 13.0,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : _buildDataTable(),
+              ),
+            ),
             const SizedBox(height: 15),
             _buildPaginationControls(isMobile: isMobile),
           ],
@@ -671,164 +674,323 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
       body: SelectionArea(
-        child: isMobile
-            ? SingleChildScrollView(child: bodyContent)
-            : bodyContent,
+        child: Scrollbar(
+          controller: _vScroll,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _vScroll,
+            child: bodyContent,
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildDataTable() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double minWidth = constraints.maxWidth > 1100
-            ? constraints.maxWidth
-            : 1100.0;
-        return ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(
-            dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+    // ── Table header ──────────────────────────────────────────────────────────
+    final header = Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 1.0),
+        ),
+      ),
+      child: Row(
+        children: [
+          // S.NO – flex 1, left
+          Expanded(
+            flex: 1,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12.0),
+                child: const Text(
+                  'S/NO',
+                  style: TextStyle(
+                    color: Color.fromRGBO(33, 150, 243, 1),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
           ),
-          child: Scrollbar(
+          // TEMPLATE NAME – flex 5, left
+          Expanded(
+            flex: 5,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'TEMPLATE NAME',
+                      style: TextStyle(
+                        color: Color.fromRGBO(33, 150, 243, 1),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(width: 4),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 0;
+                            _sortAscending = true;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(
+                              Icons.arrow_drop_up,
+                              size: 14,
+                              color: _sortColumnIndex == 0 && _sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _sortColumnIndex = 0;
+                            _sortAscending = false;
+                          }),
+                          child: Align(
+                            heightFactor: 0.5,
+                            child: Icon(
+                              Icons.arrow_drop_down,
+                              size: 14,
+                              color: _sortColumnIndex == 0 && !_sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // EDIT – flex 2, left
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: const Text(
+                'EDIT',
+                style: TextStyle(
+                  color: Color.fromRGBO(33, 150, 243, 1),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+          // ACTION – flex 2, right
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: const Text(
+                  'ACTION',
+                  style: TextStyle(
+                    color: Color.fromRGBO(33, 150, 243, 1),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // ── Empty state ───────────────────────────────────────────────────────────
+    if (_pagedList.isEmpty) {
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade200, width: 1.0),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        clipBehavior: Clip.antiAlias,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double minW = constraints.maxWidth > 1000 ? constraints.maxWidth : 1000.0;
+          return Scrollbar(
             controller: _hScroll,
             thumbVisibility: true,
-            thickness: 8.0,
-            trackVisibility: true,
-            interactive: true,
             child: SingleChildScrollView(
               controller: _hScroll,
               scrollDirection: Axis.horizontal,
               child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: minWidth),
-                child: Scrollbar(
-                  controller: _vScroll,
-                  thumbVisibility: true,
-                  thickness: 8.0,
-                  trackVisibility: true,
-                  interactive: true,
-                  child: SingleChildScrollView(
-                    controller: _vScroll,
-                    scrollDirection: Axis.vertical,
-                    child: DataTable(
-                      headingRowHeight: 45,
-                      headingRowColor: WidgetStateProperty.all(
-                        Colors.blue.shade50,
-                      ),
-                      columns: [
-                        _buildCol('TEMPLATE NAME', 0),
-                        _buildCol('EDIT', -1),
-                        _buildCol('ACTION', -1),
-                      ],
-                      rows: _pagedList.map((item) {
-                        return DataRow(
-                          cells: [
-                            DataCell(
-                              Text(
-                                item['temp_name'] ?? "-",
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 12.0,
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.edit,
-                                  color: Colors.blue,
-                                ),
-                                onPressed: () => loadTemplateForEdit(item),
-                                hoverColor: Colors.blue.withOpacity(0.1),
-                              ),
-                            ),
-                            DataCell(
-                              Row(
-                                children: [
-                                  Transform.scale(
-                                    scale: 0.7,
-                                    child: Switch(
-                                      value: _isItemActive(item),
-                                      activeColor: Colors.green,
-                                      onChanged: (v) => toggleStatus(item),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  DataColumn _buildCol(String label, int colIndex) {
-    return DataColumn(
-      label: InkWell(
-        onTap: colIndex < 0
-            ? null
-            : () {
-                setState(() {
-                  if (_sortColumnIndex == colIndex) {
-                    _sortAscending = !_sortAscending;
-                  } else {
-                    _sortColumnIndex = colIndex;
-                    _sortAscending = true;
-                  }
-                  currentPage = 1;
-                });
-              },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+                constraints: BoxConstraints(minWidth: minW, maxWidth: minW),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
           children: [
-            Flexible(
-              child: Text(
-                label.toUpperCase(),
-                style: const TextStyle(
-                  color: Color.fromRGBO(33, 150, 243, 1),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16.0,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (colIndex >= 0) ...[
-              const SizedBox(width: 4),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
+            header,
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 36.0),
+              alignment: Alignment.center,
+              child: Column(
                 children: [
-                  Align(
-                    heightFactor: 0.4,
-                    child: Icon(
-                      Icons.arrow_drop_up,
-                      size: 18,
-                      color: _sortColumnIndex == colIndex && _sortAscending
-                          ? Colors.blue
-                          : Colors.grey.withOpacity(0.5),
+                  Icon(Icons.search_off_rounded, size: 36, color: Colors.blue.shade200),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No matching templates found',
+                    style: TextStyle(
+                      color: Colors.blue.shade900,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
                   ),
-                  Align(
-                    heightFactor: 0.4,
-                    child: Icon(
-                      Icons.arrow_drop_down,
-                      size: 18,
-                      color: _sortColumnIndex == colIndex && !_sortAscending
-                          ? Colors.blue
-                          : Colors.grey.withOpacity(0.5),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Try a different search term',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  ],
+                ),
+              ),
+            ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    }
+
+    // ── Data rows ─────────────────────────────────────────────────────────────
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade200, width: 1.0),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double minW = constraints.maxWidth > 1000 ? constraints.maxWidth : 1000.0;
+          return Scrollbar(
+            controller: _hScroll,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _hScroll,
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: minW, maxWidth: minW),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+        children: [
+          header,
+          ..._pagedList.asMap().entries.map((entry) {
+            final index = entry.key;
+            final item = entry.value;
+            final sNo = ((currentPage - 1) * (int.tryParse(entriesValue) ?? 10)) + index + 1;
+            return Container(
+              height: 48,
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey.shade200, width: 1.0),
+                ),
+              ),
+              child: Row(
+                children: [
+                  // S.NO cell – flex 1
+                  Expanded(
+                    flex: 1,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12.0),
+                        child: Text(
+                          sNo.toString(),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12.0,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // TEMPLATE NAME cell – flex 5
+                  Expanded(
+                    flex: 5,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                        child: Text(
+                          item['temp_name'] ?? '-',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12.0,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // EDIT cell – flex 2
+                  Expanded(
+                    flex: 2,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
+                        onPressed: () => loadTemplateForEdit(item),
+                        tooltip: 'Edit',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
+                  ),
+                  // ACTION cell – flex 2, right-aligned
+                  Expanded(
+                    flex: 2,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: Transform.scale(
+                          scale: 0.7,
+                          child: Switch(
+                            value: _isItemActive(item),
+                            activeColor: Colors.green,
+                            inactiveThumbColor: Colors.grey.shade400,
+                            inactiveTrackColor: Colors.grey.shade300,
+                            onChanged: (v) => toggleStatus(item),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-            ],
-          ],
-        ),
+            );
+          }),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -909,7 +1071,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
           style: const TextStyle(color: Colors.black87, fontSize: 12),
           decoration: InputDecoration(
             hintText: "Search templates...",
-            hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+            hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
             prefixIcon: const Icon(Icons.search, size: 16),
             isDense: true,
             filled: true,
@@ -948,19 +1110,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
           )
         : Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              showEntries,
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (createBtn != null) createBtn,
-                  const SizedBox(height: 10),
-                  searchBox,
-                ],
-              ),
-            ],
+            children: [showEntries, searchBox],
           );
   }
 

@@ -101,6 +101,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   final GlobalKey<FormState> _deptFormKey = GlobalKey<FormState>();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _hScroll = ScrollController();
+  final ScrollController _vScroll = ScrollController();
   final TextEditingController _fromDateController = TextEditingController();
   final TextEditingController _toDateController = TextEditingController();
   final TextEditingController _newDeptController = TextEditingController();
@@ -125,6 +126,7 @@ class _FileUploadViewState extends State<FileUploadView> {
     _descController.dispose();
     _searchController.dispose();
     _hScroll.dispose();
+    _vScroll.dispose();
     _fromDateController.dispose();
     _toDateController.dispose();
     _newDeptController.dispose();
@@ -249,22 +251,6 @@ class _FileUploadViewState extends State<FileUploadView> {
                   .toList();
               fileList = [...inFlight, ...freshData];
             });
-
-            if (targetFileNameToSetLive != null) {
-              final matchedFile = freshData.firstWhere(
-                (f) => f['file_name']?.toString() == targetFileNameToSetLive,
-                orElse: () => null,
-              );
-              if (matchedFile != null) {
-                final matchedId = matchedFile['id'];
-                final currentStatus =
-                    matchedFile['status'] ?? matchedFile['file_status'] ?? 0;
-                if (currentStatus == 0 || currentStatus == "0") {
-                  // Set it to live (1) at the start itself
-                  toggleFileStatus(matchedId, 0);
-                }
-              }
-            }
           }
         }
       }
@@ -628,6 +614,7 @@ class _FileUploadViewState extends State<FileUploadView> {
   Future<void> toggleFileStatus(
     dynamic itemOrId, [
     dynamic currentStatus,
+    bool showConfirmation = true,
   ]) async {
     Map<String, dynamic> itemMap = {};
     dynamic id;
@@ -637,8 +624,8 @@ class _FileUploadViewState extends State<FileUploadView> {
       itemMap = Map<String, dynamic>.from(itemOrId);
       id = itemMap['id'];
       rawStatus =
-          itemMap['file_status'] ??
           itemMap['status'] ??
+          itemMap['file_status'] ??
           itemMap['Status'] ??
           itemMap['active_status'];
     } else {
@@ -662,6 +649,37 @@ class _FileUploadViewState extends State<FileUploadView> {
     final int newStatus = currentlyActive ? 1 : 0;
     final idx = fileList.indexWhere((e) => e['id']?.toString() == rowKey);
 
+    if (showConfirmation) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text("Confirm Action", textAlign: TextAlign.center),
+            content: Text(
+              currentlyActive
+                  ? "Do you want to set this item as inactive?"
+                  : "Do you want to set this item as active?",
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("OK"),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm != true) return;
+    }
+
     // ── STEP 1: Optimistic UI update — flip the switch immediately ──
     if (mounted) {
       setState(() {
@@ -669,17 +687,18 @@ class _FileUploadViewState extends State<FileUploadView> {
         if (idx != -1) {
           fileList[idx] = Map<String, dynamic>.from(fileList[idx])
             ..['status'] = newStatus
-            ..['file_status'] = newStatus;
+            ..['file_status'] = newStatus
+            ..['active_status'] = newStatus;
         }
       });
     }
 
     try {
-      // ── STEP 2: Hit the server — preserve all existing row fields in POST payload ──
-      final Map<String, dynamic> payload = Map<String, dynamic>.from(itemMap);
-      payload["api_key"] = _apiKey;
-      payload["id"] = id;
-      payload["status"] = newStatus;
+      final Map<String, dynamic> payload = {
+        "api_key": _apiKey,
+        "id": id,
+        "status": newStatus,
+      };
 
       final response = await http
           .post(
@@ -690,11 +709,17 @@ class _FileUploadViewState extends State<FileUploadView> {
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        _showSnackBar(
-          newStatus == 0
-              ? "✅ File activated — now live on all displays."
-              : "⏸ File deactivated — removed from live stream.",
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(newStatus == 0
+                ? "File has been successfully activated."
+                : "File has been successfully deactivated."),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
+        fetchFilesFromServer();
       } else {
         // Rollback
         debugPrint('toggleFileStatus: server returned ${response.statusCode}');
@@ -702,7 +727,8 @@ class _FileUploadViewState extends State<FileUploadView> {
           setState(() {
             fileList[idx] = Map<String, dynamic>.from(fileList[idx])
               ..['status'] = rawStatus
-              ..['file_status'] = rawStatus;
+              ..['file_status'] = rawStatus
+              ..['active_status'] = rawStatus;
           });
         }
         _showSnackBar("Status update failed (${response.statusCode}).");
@@ -714,7 +740,8 @@ class _FileUploadViewState extends State<FileUploadView> {
         setState(() {
           fileList[idx] = Map<String, dynamic>.from(fileList[idx])
             ..['status'] = rawStatus
-            ..['file_status'] = rawStatus;
+            ..['file_status'] = rawStatus
+            ..['active_status'] = rawStatus;
         });
       }
       _showSnackBar("Network error — status not changed.");
@@ -726,28 +753,30 @@ class _FileUploadViewState extends State<FileUploadView> {
   bool _isItemActive(dynamic data) {
     if (data == null) return true;
     final raw = (data is Map)
-        ? (data['active_status'] ??
-              data['status'] ??
+        ? (data['status'] ??
+              data['file_status'] ??
+              data['active_status'] ??
               data['Status'] ??
-              data['is_active'] ??
-              data['file_status'])
+              data['is_active'])
         : data;
     if (raw == null) return true;
-    if (raw == 0 || raw == false) return true;
-    if (raw == 1 || raw == true) return false;
+    if (raw == 0 || raw == "0" || raw == false) return true;
+    if (raw == 1 || raw == "1" || raw == true) return false;
     final str = raw.toString().trim().toLowerCase();
     if (str == '0' ||
         str == 'active' ||
         str == 'true' ||
         str == 'enabled' ||
-        str == 'on')
+        str == 'on') {
       return true;
+    }
     if (str == '1' ||
         str == 'inactive' ||
         str == 'false' ||
         str == 'disabled' ||
-        str == 'off')
+        str == 'off') {
       return false;
+    }
     final intVal = int.tryParse(str);
     if (intVal != null) return intVal == 0;
     return true;
@@ -1059,12 +1088,13 @@ class _FileUploadViewState extends State<FileUploadView> {
     StylishDialog.show(
       context: context,
       title: editingId == null ? "Upload File" : "Edit File",
-      titleStyle: const TextStyle(
-        fontSize: 16,
+      titleStyle: TextStyle(
+        fontSize: isMobile ? 15 : 18,
         fontWeight: FontWeight.bold,
         color: Colors.white,
       ),
       subtitle: "Add or manage media assets for display",
+      subtitleStyle: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
       icon: editingId == null
           ? Icons.cloud_upload_rounded
           : Icons.edit_note_rounded,
@@ -1690,7 +1720,7 @@ class _FileUploadViewState extends State<FileUploadView> {
     // ScaffoldMessenger with a stable key ensures snackbars can be shown
     // safely from async callbacks even after dialogs have been popped.
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth <= 1100;
+    final isMobile = screenWidth < 1000;
 
     final heading = const AnimatedHeading(
       text: "Uploaded Files List",
@@ -1761,9 +1791,37 @@ class _FileUploadViewState extends State<FileUploadView> {
         backgroundColor: Colors.white,
         resizeToAvoidBottomInset: true,
         body: SelectionArea(
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: bodyContent,
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
+              },
+            ),
+            child: ScrollbarTheme(
+              data: ScrollbarThemeData(
+                thumbVisibility: WidgetStateProperty.all(true),
+                interactive: true,
+                thumbColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.dragged) ||
+                      states.contains(WidgetState.hovered)) {
+                    return Colors.black87;
+                  }
+                  return Colors.grey.withOpacity(0.5);
+                }),
+              ),
+              child: Scrollbar(
+                controller: _vScroll,
+                thickness: 8.0,
+                trackVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _vScroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: bodyContent,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -1840,16 +1898,30 @@ class _FileUploadViewState extends State<FileUploadView> {
         return SelectionArea(
           child: ScrollConfiguration(
             behavior: ScrollConfiguration.of(context).copyWith(
-              dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
+              },
             ),
-            child: Scrollbar(
-              controller: _hScroll,
-              thumbVisibility: true,
-              thickness: 8.0,
-              trackVisibility: true,
-              interactive: true,
-              child: SingleChildScrollView(
+            child: ScrollbarTheme(
+              data: ScrollbarThemeData(
+                thumbVisibility: WidgetStateProperty.all(true),
+                interactive: true,
+                thumbColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.dragged) ||
+                      states.contains(WidgetState.hovered)) {
+                    return Colors.black87;
+                  }
+                  return Colors.grey.withOpacity(0.5);
+                }),
+              ),
+              child: Scrollbar(
                 controller: _hScroll,
+                thickness: 8.0,
+                trackVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _hScroll,
                 scrollDirection: Axis.horizontal,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minWidth: newMinWidth),
@@ -1861,7 +1933,7 @@ class _FileUploadViewState extends State<FileUploadView> {
                     ),
                     dividerThickness: 0.0,
                     columns: [
-                      _buildCol('ID', 0),
+                      _buildCol('S.NO', 0),
                       _buildCol('PREVIEW', -1),
                       _buildCol('FILE NAME', 2),
                       _buildCol('DESCRIPTION', 3),
@@ -1871,10 +1943,17 @@ class _FileUploadViewState extends State<FileUploadView> {
                       _buildCol('STATUS', -1),
                       _buildCol('DELETE', -1),
                     ],
-                    rows: data.map((item) => _getRow(item)).toList(),
+                    rows: data.asMap().entries.map((entry) {
+                      final int index = entry.key;
+                      final item = entry.value;
+                      final int perPage = int.tryParse(entriesValue) ?? 10;
+                      final int sNo = ((currentPage - 1) * perPage) + index + 1;
+                      return _getRow(item, sNo: sNo);
+                    }).toList(),
                   ),
                 ),
               ),
+            ),
             ),
           ),
         );
@@ -1929,7 +2008,7 @@ class _FileUploadViewState extends State<FileUploadView> {
     ].contains(fileName.split('.').last.toLowerCase());
   }
 
-  DataRow _getRow(dynamic item) {
+  DataRow _getRow(dynamic item, {required int sNo}) {
     final String tempId = item['id']?.toString() ?? '';
     final bool isUploading = item['_isUploading'] == true;
     final bool hasError = item['_uploadError'] != null;
@@ -2098,7 +2177,7 @@ class _FileUploadViewState extends State<FileUploadView> {
       cells: [
         DataCell(
           Text(
-            item['id']?.toString() ?? '-',
+            sNo.toString(),
             style: const TextStyle(color: Colors.black87, fontSize: 12),
           ),
         ),
@@ -2599,24 +2678,25 @@ class _FileUploadViewState extends State<FileUploadView> {
               children: [
                 if (uploadBtn != null) uploadBtn,
                 const SizedBox(height: 10),
-                showEntries,
-                const SizedBox(height: 10),
                 searchBox,
+                const SizedBox(height: 10),
+                showEntries,
               ],
             ),
           )
         : Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               showEntries,
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  searchBox,
                   if (uploadBtn != null) ...[
-                    const SizedBox(width: 12),
                     uploadBtn,
+                    const SizedBox(height: 12),
                   ],
+                  searchBox,
                 ],
               ),
             ],

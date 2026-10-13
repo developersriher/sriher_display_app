@@ -169,21 +169,84 @@ class _ScheduleListViewState extends State<ScheduleListView> {
     }
   }
 
-  Future<void> _updateStatus(int id, int newStatus) async {
+  Future<void> _updateStatus(dynamic id, dynamic currentStatus) async {
     try {
+      final int current = (currentStatus == 0 || currentStatus == "0") ? 0 : 1;
+      final int newStatus = current == 0 ? 1 : 0;
+
+      final confirm = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text("Confirm Action", textAlign: TextAlign.center),
+            content: Text(
+              current == 0
+                  ? "Do you want to set this item as inactive?"
+                  : "Do you want to set this item as active?",
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("OK"),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm != true) return;
+
+      setState(() {
+        final idx = scheduleData.indexWhere(
+          (c) =>
+              (c['id']?.toString() == id?.toString()) ||
+              (c['schedule_id']?.toString() == id?.toString()),
+        );
+        if (idx != -1) {
+          scheduleData[idx]['status'] = newStatus;
+        }
+        final fIdx = _filteredData.indexWhere(
+          (c) =>
+              (c['id']?.toString() == id?.toString()) ||
+              (c['schedule_id']?.toString() == id?.toString()),
+        );
+        if (fIdx != -1) {
+          _filteredData[fIdx]['status'] = newStatus;
+        }
+      });
+
       final res = await http
           .post(
             Uri.parse('$_baseUrl/scheduleList_statusUpdateview'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({
               "api_key": _apiKey,
-              "schedule_id": id,
+              "schedule_id": int.tryParse(id?.toString() ?? '0') ?? id,
               "status": newStatus,
             }),
           )
           .timeout(const Duration(seconds: 10));
+
       if (res.statusCode == 200) {
-        _showSnack("Status updated successfully.");
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              newStatus == 0
+                  ? "Schedule has been successfully activated."
+                  : "Schedule has been successfully deactivated.",
+            ),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         // Refresh whichever tab is currently active
         if (showActive) {
           _fetchSchedules();
@@ -191,10 +254,48 @@ class _ScheduleListViewState extends State<ScheduleListView> {
           _fetchInactive(_selYear, _selMonth);
         }
       } else {
-        _showSnack("Failed to update status.", isError: true);
+        if (!mounted) return;
+        // Rollback
+        setState(() {
+          final idx = scheduleData.indexWhere(
+            (c) =>
+                (c['id']?.toString() == id?.toString()) ||
+                (c['schedule_id']?.toString() == id?.toString()),
+          );
+          if (idx != -1) {
+            scheduleData[idx]['status'] = current;
+          }
+          final fIdx = _filteredData.indexWhere(
+            (c) =>
+                (c['id']?.toString() == id?.toString()) ||
+                (c['schedule_id']?.toString() == id?.toString()),
+          );
+          if (fIdx != -1) {
+            _filteredData[fIdx]['status'] = current;
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("Failed to update status."),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
-    } catch (_) {
-      _showSnack("Network error.", isError: true);
+    } catch (e) {
+      if (!mounted) return;
+      if (showActive) {
+        _fetchSchedules();
+      } else {
+        _fetchInactive(_selYear, _selMonth);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error updating status: $e"),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -300,6 +401,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
       context: context,
       title: "Select Archive Period",
       subtitle: "Choose a month and year to view inactive schedules.",
+      icon: Icons.calendar_month_rounded,
       maxWidth: 450,
       builder: (ctx, setPopupState) {
         return Column(
@@ -585,8 +687,6 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                                 const SizedBox(width: 12),
                               ],
                               Expanded(child: heading),
-                              const SizedBox(width: 12),
-                              actionBtn,
                             ],
                           ),
                 const SizedBox(height: 16),
@@ -661,7 +761,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.start,
                                 children: [
-                                  _buildHeaderCell("#", flex: 1),
+                                  _buildHeaderCell("S/NO", flex: 1),
                                   _buildSortableHeaderCell(
                                     "SCHEDULE NAME",
                                     colIndex: 1,
@@ -679,7 +779,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                                   _buildHeaderCell("FROM DATE", flex: 2),
                                   _buildHeaderCell("TO DATE", flex: 2),
                                   _buildHeaderCell("ACTION", flex: 2),
-                                  _buildHeaderCell("CHANGES", flex: 2),
+                                  _buildHeaderCell("CHANGES", flex: 2, alignment: Alignment.centerRight),
                                 ],
                               ),
                             ),
@@ -738,11 +838,11 @@ class _ScheduleListViewState extends State<ScheduleListView> {
     );
   }
 
-  Widget _buildHeaderCell(String label, {required int flex}) {
+  Widget _buildHeaderCell(String label, {required int flex, Alignment alignment = Alignment.centerLeft}) {
     return Expanded(
       flex: flex,
       child: Align(
-        alignment: Alignment.centerLeft,
+        alignment: alignment,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10.0),
           child: Text(
@@ -835,12 +935,8 @@ class _ScheduleListViewState extends State<ScheduleListView> {
   }
 
   Widget _buildCustomDataRow(dynamic item, int sno) {
-    final isActive = (item['status'] == 1 || item['status'] == '1');
-    final id =
-        int.tryParse(
-          item['id']?.toString() ?? item['schedule_id']?.toString() ?? '0',
-        ) ??
-        0;
+    final isActive = (item['status'] == 0 || item['status'] == '0');
+    final id = item['id'] ?? item['schedule_id'] ?? 0;
     return Container(
       height: 52,
       decoration: BoxDecoration(
@@ -859,7 +955,10 @@ class _ScheduleListViewState extends State<ScheduleListView> {
                 padding: const EdgeInsets.symmetric(horizontal: 10.0),
                 child: Text(
                   "$sno",
-                  style: const TextStyle(color: Colors.black54, fontSize: 13),
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ),
@@ -962,19 +1061,22 @@ class _ScheduleListViewState extends State<ScheduleListView> {
               ),
             ),
           ),
-          // STATUS
+          // ACTION / STATUS
           Expanded(
             flex: 2,
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Transform.scale(
-                scale: 0.8,
-                child: Switch(
-                  value: isActive,
-                  activeColor: Colors.green.shade600,
-                  inactiveThumbColor: Colors.red.shade400,
-                  inactiveTrackColor: Colors.red.shade100,
-                  onChanged: (val) => _updateStatus(id, val ? 1 : 0),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: Transform.scale(
+                  scale: 0.7,
+                  child: Switch(
+                    value: isActive,
+                    activeColor: Colors.green,
+                    inactiveThumbColor: Colors.grey.shade400,
+                    inactiveTrackColor: Colors.grey.shade300,
+                    onChanged: (val) => _updateStatus(id, item['status']),
+                  ),
                 ),
               ),
             ),
@@ -983,7 +1085,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
           Expanded(
             flex: 2,
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: Alignment.centerRight,
               child: _buildChangesBtn(item),
             ),
           ),
@@ -1128,6 +1230,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
   // ── List header ───────────────────────────────────────────────────────────
 
   Widget _buildListHeader({bool isMobile = false, Widget? actionBtn}) {
+    final bool isMobileView = MediaQuery.of(context).size.width < 800;
     final showEntries = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1184,7 +1287,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
             },
           ),
         ),
-        if (!isMobile) ...[
+        if (!isMobileView) ...[
           const SizedBox(width: 6),
           const Text(
             " entries",
@@ -1199,7 +1302,7 @@ class _ScheduleListViewState extends State<ScheduleListView> {
     );
 
     final searchBox = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: isMobile ? 180 : 260),
+      constraints: BoxConstraints(maxWidth: isMobileView ? 180 : 260),
       child: SizedBox(
         height: 36,
         child: TextField(
@@ -1238,14 +1341,16 @@ class _ScheduleListViewState extends State<ScheduleListView> {
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: isMobile
+      child: isMobileView
           ? SizedBox(
               width: double.infinity,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (actionBtn != null) actionBtn,
-                  const SizedBox(height: 10),
+                  if (actionBtn != null) ...[
+                    actionBtn,
+                    const SizedBox(height: 10),
+                  ],
                   showEntries,
                   const SizedBox(height: 10),
                   searchBox,
@@ -1254,7 +1359,20 @@ class _ScheduleListViewState extends State<ScheduleListView> {
             )
           : Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [showEntries, searchBox],
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                showEntries,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (actionBtn != null) ...[
+                      actionBtn,
+                      const SizedBox(height: 10),
+                    ],
+                    searchBox,
+                  ],
+                ),
+              ],
             ),
     );
   }

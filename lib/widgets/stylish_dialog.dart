@@ -155,7 +155,7 @@ class StylishDialog extends StatelessWidget {
                     top: 0,
                     right: 0,
                     child: IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                      icon: const Icon(Icons.close, color: Colors.white),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: () => Navigator.pop(context),

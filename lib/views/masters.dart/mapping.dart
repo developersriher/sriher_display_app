@@ -416,31 +416,14 @@ class _MappingViewState extends State<MappingView> {
   bool _isItemActive(dynamic data) {
     if (data == null) return true;
     final raw = (data is Map)
-        ? (data['active_status'] ??
-              data['status'] ??
-              data['Status'] ??
-              data['is_active'] ??
-              data['mapping_status'])
+        ? (data['status'] ??
+            data['active_status'] ??
+            data['Status'] ??
+            data['is_active'] ??
+            data['mapping_status'])
         : data;
-    if (raw == null) return true;
-    if (raw == 0 || raw == false) return true;
-    if (raw == 1 || raw == true) return false;
-    final str = raw.toString().trim().toLowerCase();
-    if (str == '0' ||
-        str == 'active' ||
-        str == 'true' ||
-        str == 'enabled' ||
-        str == 'on')
-      return true;
-    if (str == '1' ||
-        str == 'inactive' ||
-        str == 'false' ||
-        str == 'disabled' ||
-        str == 'off')
-      return false;
-    final intVal = int.tryParse(str);
-    if (intVal != null) return intVal == 0;
-    return true;
+    final int status = int.tryParse(raw?.toString() ?? '0') ?? 0;
+    return status == 0;
   }
 
   // API 6: TOGGLE STATUS (mappingStatusUpdateview)
@@ -450,47 +433,58 @@ class _MappingViewState extends State<MappingView> {
   ]) async {
     Map<String, dynamic> itemMap = {};
     dynamic id;
-    dynamic rawStatus;
 
     if (itemOrId is Map) {
       itemMap = Map<String, dynamic>.from(itemOrId);
       id = itemMap['id'] ?? itemMap['mapping_id'];
-      rawStatus =
-          itemMap['active_status'] ??
-          itemMap['status'] ??
-          itemMap['Status'] ??
-          itemMap['is_active'] ??
-          itemMap['mapping_status'];
     } else {
       id = itemOrId;
-      rawStatus = currentStatus;
       final found = _mappingList.firstWhere(
-        (e) => e['id']?.toString() == id?.toString(),
+        (e) => (e['id'] ?? e['mapping_id'])?.toString() == id?.toString(),
         orElse: () => null,
       );
       if (found is Map) itemMap = Map<String, dynamic>.from(found);
     }
 
-    final bool currentlyActive = _isItemActive(
-      itemMap.isNotEmpty ? itemMap : {'status': rawStatus},
-    );
-    final int newStatus = currentlyActive ? 1 : 0;
+    final rawStatus = itemMap['status'] ??
+        itemMap['active_status'] ??
+        itemMap['Status'] ??
+        itemMap['is_active'] ??
+        itemMap['mapping_status'] ??
+        currentStatus;
 
-    // Optimistic UI update
-    setState(() {
-      final idx = _mappingList.indexWhere(
-        (e) => (e['id'] ?? e['mapping_id'])?.toString() == id?.toString(),
-      );
-      if (idx != -1) {
-        _mappingList[idx] = Map<String, dynamic>.from(_mappingList[idx])
-          ..['status'] = newStatus
-          ..['active_status'] = newStatus;
-      }
-      if (itemOrId is Map) {
-        itemOrId['status'] = newStatus;
-        itemOrId['active_status'] = newStatus;
-      }
-    });
+    final int currentStatusInt =
+        int.tryParse(rawStatus?.toString() ?? '0') ?? 0;
+    final int newStatus = (currentStatusInt == 0) ? 1 : 0;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Confirm Action", textAlign: TextAlign.center),
+          content: Text(
+            currentStatusInt == 0
+                ? "Do you want to set this item as inactive?"
+                : "Do you want to set this item as active?",
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
 
     try {
       // Preserve all existing row fields in POST payload
@@ -499,22 +493,66 @@ class _MappingViewState extends State<MappingView> {
       payload["mapping_id"] = id;
       payload["id"] = id;
       payload["status"] = newStatus;
+      // Omit user_password from the status toggle payload unless specifically edited
+      payload.remove('user_password');
+      payload.remove('password');
 
       final res = await http.post(
         Uri.parse('$_base/mappingStatusUpdateview'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       );
-      if (res.statusCode == 200) {
+
+      bool isSuccess = res.statusCode == 200;
+      if (!isSuccess) {
+        try {
+          final data = jsonDecode(res.body);
+          if (data is Map &&
+              (data['success'] == true ||
+                  data['status'] == true ||
+                  data['status'] == 200)) {
+            isSuccess = true;
+          }
+        } catch (_) {}
+      }
+
+      if (isSuccess) {
         if (!mounted) return;
-        _fetchMappings();
+        setState(() {
+          final idx = _mappingList.indexWhere(
+            (e) => (e['id'] ?? e['mapping_id'])?.toString() == id?.toString(),
+          );
+          if (idx != -1) {
+            _mappingList[idx] = Map<String, dynamic>.from(_mappingList[idx])
+              ..['status'] = newStatus
+              ..['active_status'] = newStatus;
+          }
+          if (itemOrId is Map) {
+            itemOrId['status'] = newStatus;
+            itemOrId['active_status'] = newStatus;
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(newStatus == 0
+                ? "Mapping has been successfully activated."
+                : "Mapping has been successfully deactivated."),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        await _fetchMappings();
       } else {
         if (!mounted) return;
-        _fetchMappings();
+        _snack("Failed to update status (${res.statusCode}).", isError: true);
+        await _fetchMappings();
       }
     } catch (e) {
       debugPrint('Status toggle error: $e');
-      if (mounted) _fetchMappings();
+      if (mounted) {
+        _snack("Connection failed.", isError: true);
+        await _fetchMappings();
+      }
     }
   }
 
@@ -523,270 +561,413 @@ class _MappingViewState extends State<MappingView> {
   void _showMappingDialog() {
     _formKey = GlobalKey<FormState>();
     final isMobile = MediaQuery.of(context).size.width < 800;
-    StylishDialog.show(
+    showDialog(
       context: context,
-      title: _editingId == null ? "Create Mapping" : "Edit Mapping ",
-      titleStyle: TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.bold,
-        color: Colors.white,
-      ),
-      subtitle: "Link display hardware to facility locations",
-      icon: _editingId == null
-          ? Icons.add_link_rounded
-          : Icons.edit_note_rounded,
-      width: isMobile ? MediaQuery.of(context).size.width * 0.95 : 550,
-      builder: (context, setDialogState) {
-        return ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 550,
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
-          ),
-          child: Form(
-            key: _formKey,
-            autovalidateMode: AutovalidateMode.disabled,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSectionHeader("DEVICE INFORMATION"),
-                  isMobile
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _dropsLoading
-                                ? const Center(
-                                    child: SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
-                                  )
-                                : _buildDropdownField(
-                                    hint: "Select Device Code",
-                                    value: _selDeviceId,
-                                    items: _deviceList
-                                        .map(
-                                          (d) => SearchableDropdownItem<String>(
-                                            value: d['id'].toString(),
-                                            label:
-                                                d['device_code']?.toString() ??
-                                                d['id'].toString(),
-                                          ),
-                                        )
-                                        .toList(),
-                                    validator: (v) => (v == null || v.isEmpty)
-                                        ? 'Please select the Device Code'
-                                        : null,
-                                    onChanged: (v) {
-                                      final dev = _deviceList.firstWhere(
-                                        (d) => d['id'].toString() == v,
-                                        orElse: () => <String, dynamic>{},
-                                      );
-                                      if ((dev as Map).isNotEmpty) {
-                                        _devNameCtrl.text =
-                                            dev['device_name']?.toString() ??
-                                            '';
-                                        _devModelCtrl.text =
-                                            dev['device_model']?.toString() ??
-                                            '';
-                                      }
-                                      setDialogState(() => _selDeviceId = v);
-                                      setState(() => _selDeviceId = v);
-                                    },
-                                  ),
-                            const SizedBox(height: 16),
-                            _buildTextField(
-                              "Device Name",
-                              _devNameCtrl,
-                              readOnly: false,
-                              validator: (v) => (v == null || v.isEmpty)
-                                  ? 'Please enter the Device Name'
-                                  : null,
-                            ),
-                          ],
-                        )
-                      : Row(
-                          children: [
-                            Expanded(
-                              child: _dropsLoading
-                                  ? const Center(
-                                      child: SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                    )
-                                  : _buildDropdownField(
-                                      hint: "Select Device Code",
-                                      value: _selDeviceId,
-                                      items: _deviceList
-                                          .map(
-                                            (d) =>
-                                                SearchableDropdownItem<String>(
-                                                  value: d['id'].toString(),
-                                                  label:
-                                                      d['device_code']
-                                                          ?.toString() ??
-                                                      d['id'].toString(),
-                                                ),
-                                          )
-                                          .toList(),
-                                      validator: (v) => (v == null || v.isEmpty)
-                                          ? 'Please select the Device Code'
-                                          : null,
-                                      onChanged: (v) {
-                                        final dev = _deviceList.firstWhere(
-                                          (d) => d['id'].toString() == v,
-                                          orElse: () => <String, dynamic>{},
-                                        );
-                                        if ((dev as Map).isNotEmpty) {
-                                          _devNameCtrl.text =
-                                              dev['device_name']?.toString() ??
-                                              '';
-                                          _devModelCtrl.text =
-                                              dev['device_model']?.toString() ??
-                                              '';
-                                        }
-                                        setDialogState(() => _selDeviceId = v);
-                                        setState(() => _selDeviceId = v);
-                                      },
-                                    ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildTextField(
-                                "Device Name",
-                                _devNameCtrl,
-                                readOnly: false,
-                                validator: (v) => (v == null || v.isEmpty)
-                                    ? 'Please enter the Device Name'
-                                    : null,
-                              ),
-                            ),
-                          ],
-                        ),
-                  const SizedBox(height: 16),
-                  _buildTextField(
-                    "Device Model",
-                    _devModelCtrl,
-                    readOnly: false,
-                    validator: (v) => (v == null || v.isEmpty)
-                        ? 'Please enter the Device Model'
-                        : null,
-                  ),
-                  const SizedBox(height: 32),
-                  _buildSectionHeader("LOCATION ASSIGNMENT"),
-                  _dropsLoading
-                      ? const Center(
-                          child: SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : _buildDropdownField(
-                          hint: "Select Location Name",
-                          value: _selLocationId,
-                          items: _locationList
-                              .map(
-                                (l) => SearchableDropdownItem<String>(
-                                  value: l['id'].toString(),
-                                  label:
-                                      l['location_name']?.toString() ??
-                                      l['id'].toString(),
-                                ),
-                              )
-                              .toList(),
-                          validator: (v) => (v == null || v.isEmpty)
-                              ? 'Please select the Location Name'
-                              : null,
-                          onChanged: (v) {
-                            setDialogState(() => _selLocationId = v);
-                            setState(() => _selLocationId = v);
-                          },
-                        ),
-                  const SizedBox(height: 32),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          _clearForm();
-                          Navigator.pop(context);
-                        },
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 12,
-                            horizontal: 20,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        child: const Text(
-                          "Cancel",
-                          style: TextStyle(
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton(
-                        onPressed: _submitting
-                            ? null
-                            : () async {
-                                if (_formKey.currentState!.validate()) {
-                                  Navigator.pop(context);
-                                  if (_editingId == null) {
-                                    await _insert();
-                                  } else {
-                                    await _update();
-                                  }
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F172A),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 12,
-                            horizontal: 32,
-                          ),
-                          elevation: 0,
-                        shape: RoundedRectangleBorder(
-  borderRadius: BorderRadius.circular(8),
-),
-                        ),
-                        child: _submitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Text(
-                                _editingId == null ? "Submit" : "Update",
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 12,
-                                ),
-                              ),
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth:
+                      isMobile ? MediaQuery.of(context).size.width * 0.95 : 550,
+                  maxHeight: MediaQuery.of(context).size.height * 0.85,
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
                       ),
                     ],
                   ),
-                ],
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header background: Primary Blue (0xFF0D47A1) with top-left and top-right rounded corners (Radius.circular(12))
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isMobile ? 16 : 24,
+                          vertical: isMobile ? 14 : 18,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF0D47A1),
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(12),
+                            topRight: Radius.circular(12),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            // Header content: White icon inside a translucent box (Colors.white.withOpacity(0.2))
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                _editingId == null
+                                    ? Icons.add_link_rounded
+                                    : Icons.edit_note_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            // Bold white title, and white subtitle
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _editingId == null
+                                        ? "Create Mapping"
+                                        : "Edit Mapping",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  const Text(
+                                    "Link display hardware to facility locations",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Action: Include a white close IconButton (Icons.close) at top-right to dismiss the modal
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.white),
+                              tooltip: "Close",
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () {
+                                _clearForm();
+                                Navigator.pop(dialogCtx);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Form Body
+                      Flexible(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.all(isMobile ? 16 : 24),
+                          child: Form(
+                            key: _formKey,
+                            autovalidateMode: AutovalidateMode.disabled,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionHeader("DEVICE INFORMATION"),
+                                isMobile
+                                    ? Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          _dropsLoading
+                                              ? const Center(
+                                                  child: SizedBox(
+                                                    height: 20,
+                                                    width: 20,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                                  ),
+                                                )
+                                              : _buildDropdownField(
+                                                  hint: "Select Device Code",
+                                                  value: _selDeviceId,
+                                                  items: _deviceList
+                                                      .map(
+                                                        (d) =>
+                                                            SearchableDropdownItem<
+                                                                String>(
+                                                          value: d['id']
+                                                              .toString(),
+                                                          label: d['device_code']
+                                                                  ?.toString() ??
+                                                              d['id'].toString(),
+                                                        ),
+                                                      )
+                                                      .toList(),
+                                                  validator: (v) =>
+                                                      (v == null || v.isEmpty)
+                                                          ? 'Please select the Device Code'
+                                                          : null,
+                                                  onChanged: (v) {
+                                                    final dev =
+                                                        _deviceList.firstWhere(
+                                                      (d) =>
+                                                          d['id'].toString() ==
+                                                          v,
+                                                      orElse: () =>
+                                                          <String, dynamic>{},
+                                                    );
+                                                    if ((dev as Map)
+                                                        .isNotEmpty) {
+                                                      _devNameCtrl.text =
+                                                          dev['device_name']
+                                                                  ?.toString() ??
+                                                              '';
+                                                      _devModelCtrl.text =
+                                                          dev['device_model']
+                                                                  ?.toString() ??
+                                                              '';
+                                                    }
+                                                    setDialogState(
+                                                        () => _selDeviceId = v);
+                                                    setState(
+                                                        () => _selDeviceId = v);
+                                                  },
+                                                ),
+                                          const SizedBox(height: 16),
+                                          _buildTextField(
+                                            "Device Name",
+                                            _devNameCtrl,
+                                            readOnly: false,
+                                            validator: (v) => (v == null ||
+                                                    v.isEmpty)
+                                                ? 'Please enter the Device Name'
+                                                : null,
+                                          ),
+                                        ],
+                                      )
+                                    : Row(
+                                        children: [
+                                          Expanded(
+                                            child: _dropsLoading
+                                                ? const Center(
+                                                    child: SizedBox(
+                                                      height: 20,
+                                                      width: 20,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : _buildDropdownField(
+                                                    hint: "Select Device Code",
+                                                    value: _selDeviceId,
+                                                    items: _deviceList
+                                                        .map(
+                                                          (d) =>
+                                                              SearchableDropdownItem<
+                                                                  String>(
+                                                            value: d['id']
+                                                                .toString(),
+                                                            label: d['device_code']
+                                                                    ?.toString() ??
+                                                                d['id']
+                                                                    .toString(),
+                                                          ),
+                                                        )
+                                                        .toList(),
+                                                    validator: (v) => (v ==
+                                                                null ||
+                                                            v.isEmpty)
+                                                        ? 'Please select the Device Code'
+                                                        : null,
+                                                    onChanged: (v) {
+                                                      final dev =
+                                                          _deviceList.firstWhere(
+                                                        (d) =>
+                                                            d['id']
+                                                                .toString() ==
+                                                            v,
+                                                        orElse: () =>
+                                                            <String, dynamic>{},
+                                                      );
+                                                      if ((dev as Map)
+                                                          .isNotEmpty) {
+                                                        _devNameCtrl.text =
+                                                            dev['device_name']
+                                                                    ?.toString() ??
+                                                                '';
+                                                        _devModelCtrl.text =
+                                                            dev['device_model']
+                                                                    ?.toString() ??
+                                                                '';
+                                                      }
+                                                      setDialogState(() =>
+                                                          _selDeviceId = v);
+                                                      setState(() =>
+                                                          _selDeviceId = v);
+                                                    },
+                                                  ),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: _buildTextField(
+                                              "Device Name",
+                                              _devNameCtrl,
+                                              readOnly: false,
+                                              validator: (v) => (v == null ||
+                                                      v.isEmpty)
+                                                  ? 'Please enter the Device Name'
+                                                  : null,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  "Device Model",
+                                  _devModelCtrl,
+                                  readOnly: false,
+                                  validator: (v) => (v == null || v.isEmpty)
+                                      ? 'Please enter the Device Model'
+                                      : null,
+                                ),
+                                const SizedBox(height: 32),
+                                _buildSectionHeader("LOCATION ASSIGNMENT"),
+                                _dropsLoading
+                                    ? const Center(
+                                        child: SizedBox(
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        ),
+                                      )
+                                    : _buildDropdownField(
+                                        hint: "Select Location Name",
+                                        value: _selLocationId,
+                                        items: _locationList
+                                            .map(
+                                              (l) => SearchableDropdownItem<
+                                                  String>(
+                                                value: l['id'].toString(),
+                                                label: l['location_name']
+                                                        ?.toString() ??
+                                                    l['id'].toString(),
+                                              ),
+                                            )
+                                            .toList(),
+                                        validator: (v) => (v == null ||
+                                                v.isEmpty)
+                                            ? 'Please select the Location Name'
+                                            : null,
+                                        onChanged: (v) {
+                                          setDialogState(
+                                              () => _selLocationId = v);
+                                          setState(() => _selLocationId = v);
+                                        },
+                                      ),
+                                const SizedBox(height: 32),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () {
+                                        _clearForm();
+                                        Navigator.pop(dialogCtx);
+                                      },
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                          horizontal: 20,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Cancel",
+                                        style: TextStyle(
+                                          color: Color(0xFF64748B),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    ElevatedButton(
+                                      onPressed: _submitting
+                                          ? null
+                                          : () async {
+                                              if (_formKey.currentState!
+                                                  .validate()) {
+                                                setDialogState(() => _submitting = true);
+                                                if (_editingId == null) {
+                                                  await _insert();
+                                                } else {
+                                                  await _update();
+                                                }
+                                                if (mounted) {
+                                                  setDialogState(() => _submitting = false);
+                                                }
+                                              }
+                                            },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFF0F172A),
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                          horizontal: 32,
+                                        ),
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                      child: _submitting
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child:
+                                                  CircularProgressIndicator(
+                                                color: Colors.white,
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : Text(
+                                              _editingId == null
+                                                  ? "Submit"
+                                                  : "Update",
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w900,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -796,11 +977,11 @@ class _MappingViewState extends State<MappingView> {
 
   bool _validate() {
     if (_selDeviceId == null) {
-      _snack('Please select a device code.');
+      _snack('Please select a device code.', isError: true);
       return false;
     }
     if (_selLocationId == null) {
-      _snack('Please select a location.');
+      _snack('Please select a location.', isError: true);
       return false;
     }
     return true;
@@ -816,11 +997,19 @@ class _MappingViewState extends State<MappingView> {
     _devModelCtrl.clear();
   }
 
-  void _snack(String msg) {
+  void _snack(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
-    );
+    try {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor:
+              isError ? Colors.red.shade700 : Colors.green.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {}
   }
 
   List<dynamic> get _filtered {
@@ -947,7 +1136,7 @@ class _MappingViewState extends State<MappingView> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth <= 1100;
+                  final isNarrow = constraints.maxWidth < 600;
                   final heading = const AnimatedHeading(
                     text: "Device Mapping",
                     style: TextStyle(
@@ -1417,7 +1606,7 @@ class _MappingViewState extends State<MappingView> {
   Widget _buildTableCard() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth <= 1100;
+        final isNarrow = constraints.maxWidth < 600;
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1496,7 +1685,7 @@ class _MappingViewState extends State<MappingView> {
               decoration: InputDecoration(
                 hintText: 'Search mappings...',
                 hintStyle: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 14,
                   color: Color(0xFF94A3B8),
                 ),
                 prefixIcon: const Icon(
@@ -1689,7 +1878,7 @@ class _MappingViewState extends State<MappingView> {
                                         horizontal: 8.0,
                                       ),
                                       child: _buildHeaderCell(
-                                        'S.NO',
+                                        'S/NO',
                                         colIndex: 0,
                                       ),
                                     ),
@@ -2044,6 +2233,12 @@ class _MappingViewState extends State<MappingView> {
                                           child: Switch(
                                             value: _isItemActive(item),
                                             activeColor: Colors.green,
+                                            activeTrackColor:
+                                                Colors.green.withOpacity(0.5),
+                                            inactiveThumbColor:
+                                                Colors.grey.shade400,
+                                            inactiveTrackColor:
+                                                Colors.grey.shade300,
                                             onChanged: (v) =>
                                                 toggleMappingStatus(item),
                                           ),

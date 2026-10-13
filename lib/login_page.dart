@@ -352,11 +352,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             Positioned.fill(
               child: Center(
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16 * scale,
-                    vertical: 12 * scale,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 24.0,
                   ),
-                  child: _buildLoginCard(scale),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final screenWidth = MediaQuery.of(context).size.width;
+                      return _buildLoginCard(screenWidth);
+                    },
+                  ),
                 ),
               ),
             ),
@@ -377,24 +382,29 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildLoginCard(double scale) {
-    final cardMaxWidth = (380 * scale).clamp(300.0, 450.0);
-    final cardPadding = (36 * scale).clamp(24.0, 52.0);
-    final logoPad = (16 * scale).clamp(10.0, 22.0);
-    final logoHeight = (56 * scale).clamp(38.0, 72.0);
-    final logoFallbackSize = (40 * scale).clamp(28.0, 50.0);
-    final titleFontSize = (22 * scale).clamp(16.0, 28.0);
-    final subtitleFontSize = (13 * scale).clamp(11.0, 16.0);
-    final sectionGap = (28 * scale).clamp(16.0, 44.0);
-    final fieldGap = (18 * scale).clamp(10.0, 28.0);
-    final buttonGap = (28 * scale).clamp(16.0, 44.0);
+  Widget _buildLoginCard(double screenWidth) {
+    final isMobile = screenWidth < 600;
+    
+    final cardMaxWidth = isMobile 
+        ? (screenWidth * 0.9).clamp(0.0, 400.0) 
+      : (screenWidth * 0.38).clamp(450.0, 550.0);
+    final cardPadding = isMobile ? 24.0 : 40.0;
+    final logoPad = isMobile ? 12.0 : 20.0;
+    final logoHeight = isMobile ? 48.0 : 72.0;
+    final logoFallbackSize = isMobile ? 36.0 : 50.0;
+    final titleFontSize = isMobile ? 20.0 : 28.0;
+    final subtitleFontSize = isMobile ? 13.0 : 16.0;
+    final sectionGap = isMobile ? 24.0 : 36.0;
+    final fieldGap = isMobile ? 16.0 : 24.0;
+    final buttonGap = isMobile ? 24.0 : 36.0;
 
     return GlassCard(
       constraints: BoxConstraints(maxWidth: cardMaxWidth),
       padding: EdgeInsets.all(cardPadding),
-      opacity: 0.08,
+      color: Colors.grey.shade100, // Light grey + white tint
+      opacity: 0.12, // slightly higher opacity for visibility
       blur: 25,
-      border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.5),
+      border: Border.all(color: Colors.white.withOpacity(0.15), width: 1.5),
       child: Form(
         key: _formKey,
         child: Column(
@@ -448,12 +458,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       'SRIHER DISPLAY',
                       style: TextStyle(
                         fontSize: titleFontSize,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.normal,
                         color: Colors.white,
                         letterSpacing: 2,
                       ),
                     ),
-                    SizedBox(height: 6 * scale),
+                     SizedBox(height: isMobile ? 4.0 : 8.0),
                     Text(
                       'Management System Portal',
                       style: TextStyle(
@@ -475,14 +485,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               opacity: _formFade,
               child: SlideTransition(
                 position: _formSlide,
-                child: Column(
-                  children: [
+                child: FractionallySizedBox(
+                  widthFactor: 1.0,
+                  child: Column(
+                    children: [
                     if (_errorMessage != null) ...[
-                      _buildErrorDisplay(scale),
+                      _buildErrorDisplay(isMobile),
                       SizedBox(height: fieldGap),
                     ],
                     _buildTextField(
-                      scale: scale,
+                      isMobile: isMobile,
                       controller: _userIdController,
                       label: 'User ID',
                       hint: 'Enter your credentials',
@@ -497,7 +509,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     ),
                     SizedBox(height: fieldGap),
                     _buildTextField(
-                      scale: scale,
+                      isMobile: isMobile,
                       controller: _passwordController,
                       label: 'Password',
                       hint: '••••••••',
@@ -512,6 +524,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     ),
                   ],
                 ),
+                ),
               ),
             ),
 
@@ -522,7 +535,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               opacity: _buttonFade,
               child: ScaleTransition(
                 scale: _buttonScale,
-                child: _buildSignInButton(scale),
+                child: _buildSignInButton(isMobile),
               ),
             ),
           ],
@@ -531,11 +544,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildErrorDisplay(double scale) {
+  Widget _buildErrorDisplay(bool isMobile) {
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: 14 * scale,
-        vertical: 10 * scale,
+        horizontal: isMobile ? 12.0 : 16.0,
+        vertical: isMobile ? 10.0 : 14.0,
       ),
       decoration: BoxDecoration(
         color: Colors.red.withOpacity(0.08),
@@ -547,15 +560,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           Icon(
             Icons.error_outline_rounded,
             color: const Color(0xFFF87171),
-            size: (18 * scale).clamp(14.0, 22.0),
+            size: isMobile ? 16.0 : 20.0,
           ),
-          SizedBox(width: 10 * scale),
+          SizedBox(width: isMobile ? 8.0 : 12.0),
           Expanded(
             child: Text(
               _errorMessage!,
               style: TextStyle(
                 color: const Color(0xFFF87171),
-                fontSize: (12 * scale).clamp(10.0, 15.0),
+                fontSize: isMobile ? 12.0 : 14.0,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -565,18 +578,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSignInButton(double scale) {
-    final btnHeight = (54 * scale).clamp(48.0, 64.0);
-    final btnFontSize = (14 * scale).clamp(11.0, 18.0);
-    final btnIconSize = (18 * scale).clamp(14.0, 22.0);
-    final btnRadius = (14 * scale).clamp(10.0, 18.0);
+  Widget _buildSignInButton(bool isMobile) {
+    final btnHeight = isMobile ? 48.0 : 56.0;
+    final btnFontSize = isMobile ? 14.0 : 16.0;
+    final btnIconSize = isMobile ? 18.0 : 22.0;
+    final btnRadius = isMobile ? 12.0 : 16.0;
 
     return ScaleTransition(
       scale: _buttonController,
-      child: SizedBox(
-        width: double.infinity,
-        height: btnHeight,
-        child: AnimatedBuilder(
+      child: Center(
+        child: FractionallySizedBox(
+          widthFactor: 0.375,
+          child: SizedBox(
+            height: btnHeight,
+            child: AnimatedBuilder(
           animation: _buttonFocusNode,
           builder: (context, child) {
             final isFocused = _buttonFocusNode.hasFocus;
@@ -616,13 +631,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
                 onPressed: _isLoggingIn ? null : _handleLogin,
                 child: _isLoggingIn
-                    ? SizedBox(
-                        width: 22 * scale,
-                        height: 22 * scale,
-                        child: const CircularProgressIndicator(
-                          strokeWidth: 3,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
+                    ? const Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                           ),
                         ),
                       )
@@ -637,7 +654,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               letterSpacing: 2,
                             ),
                           ),
-                          SizedBox(width: 10 * scale),
+                          SizedBox(width: isMobile ? 8.0 : 12.0),
                           Icon(Icons.arrow_forward_rounded, size: btnIconSize),
                         ],
                       ),
@@ -646,11 +663,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           },
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildTextField({
-    required double scale,
+    required bool isMobile,
     required TextEditingController controller,
     required String label,
     required String hint,
@@ -662,19 +681,19 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     String? Function(String?)? validator,
     bool autofocus = false,
   }) {
-    final labelSize = (10 * scale).clamp(8.0, 13.0);
-    final inputSize = (14 * scale).clamp(11.0, 17.0);
-    final hintSize = (13 * scale).clamp(10.0, 16.0);
-    final iconSize = (18 * scale).clamp(14.0, 22.0);
-    final vertPad = (14 * scale).clamp(8.0, 20.0);
-    final horizPad = (14 * scale).clamp(10.0, 20.0);
-    final borderRadius = (14 * scale).clamp(10.0, 18.0);
+    final labelSize = isMobile ? 11.0 : 13.0;
+    final inputSize = isMobile ? 14.0 : 16.0;
+    final hintSize = isMobile ? 13.0 : 15.0;
+    final iconSize = isMobile ? 18.0 : 22.0;
+    final vertPad = isMobile ? 14.0 : 20.0;
+    final horizPad = isMobile ? 14.0 : 20.0;
+    final borderRadius = isMobile ? 12.0 : 16.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: EdgeInsets.only(left: 6, bottom: 4 * scale),
+          padding: const EdgeInsets.only(left: 6, bottom: 6.0),
           child: Text(
             label.toUpperCase(),
             style: TextStyle(
