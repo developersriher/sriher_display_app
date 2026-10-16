@@ -159,8 +159,8 @@ class _MappingViewState extends State<MappingView> {
         }
         // Sort: highest id first (newest at top)
         data.sort((a, b) {
-          final ia = int.tryParse(a['id'].toString()) ?? 0;
-          final ib = int.tryParse(b['id'].toString()) ?? 0;
+          final ia = int.tryParse((a is Map ? (a['id'] ?? a['ID'] ?? a['mapping_id']) : null)?.toString() ?? '0') ?? 0;
+          final ib = int.tryParse((b is Map ? (b['id'] ?? b['ID'] ?? b['mapping_id']) : null)?.toString() ?? '0') ?? 0;
           return ib.compareTo(ia);
         });
         setState(() => _mappingList = data);
@@ -210,6 +210,11 @@ class _MappingViewState extends State<MappingView> {
         if (Navigator.canPop(context)) Navigator.pop(context);
         _snack('Mapping submitted successfully!');
         _clearForm();
+        setState(() {
+          _page = 1;
+          _sortColumnIndex = 0;
+          _sortAscending = false;
+        });
         await _fetchMappings();
       } else {
         if (!mounted) return;
@@ -1076,8 +1081,8 @@ class _MappingViewState extends State<MappingView> {
           bVal = val(dataB, ['sublocation']);
           break;
         default:
-          aVal = val(dataA, ['id']);
-          bVal = val(dataB, ['id']);
+          aVal = val(dataA, ['id', 'ID', 'mapping_id']);
+          bVal = val(dataB, ['id', 'ID', 'mapping_id']);
           break;
       }
 

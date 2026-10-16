@@ -528,29 +528,29 @@ class _DashboardViewState extends State<DashboardView>
   Widget _buildMetricsGrid(_DashboardData d) {
     final items = [
       _DashboardMetricItem(
-        title: 'Active Devices',
+        title: 'ACTIVE DEVICES',
         value: '${d.activeDevice}/${d.totalDevice}',
         icon: Icons.devices_rounded,
         color: const Color(0xFF3B82F6),
         anim: _cardAnimations[0],
       ),
       _DashboardMetricItem(
-        title: 'Templates',
+        title: 'TEMPLATES',
         value: '${d.totScheTemp}/${d.totTemp}',
         icon: Icons.auto_awesome_mosaic_rounded,
         color: const Color(0xFF8B5CF6),
         anim: _cardAnimations[1],
       ),
       _DashboardMetricItem(
-        title: 'Live Location',
+        title: 'LIVE LOCATION',
         value: '${d.activeLoc}/${d.totLocation}',
         icon: Icons.location_on_rounded,
         color: const Color(0xFF10B981),
         anim: _cardAnimations[2],
       ),
       _DashboardMetricItem(
-        title: 'Assets',
-        value: '${d.imgFile + d.vidFile}',
+        title: 'FILES',
+        value: '${d.imgFile}/${d.vidFile}',
         icon: Icons.perm_media_rounded,
         color: const Color(0xFFF59E0B),
         anim: _cardAnimations[3],

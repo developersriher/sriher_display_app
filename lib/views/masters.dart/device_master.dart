@@ -91,25 +91,31 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
       if (response.statusCode == 200) {
         final dynamic decoded = jsonDecode(response.body);
         if (!mounted) return;
-        setState(() {
-          if (decoded is List) {
-            deviceList = decoded;
-          } else if (decoded is Map) {
-            final data = decoded['data'];
-            if (data is Map) {
-              deviceList = (data['DeviceMasters'] is List)
-                  ? data['DeviceMasters']
-                  : [];
-            } else if (data is List) {
-              deviceList = data;
-            } else {
-              final otherPossibility =
-                  decoded['device_list'] ?? decoded['device_data'];
-              deviceList = (otherPossibility is List) ? otherPossibility : [];
-            }
+        List<dynamic> raw = [];
+        if (decoded is List) {
+          raw = decoded;
+        } else if (decoded is Map) {
+          final data = decoded['data'];
+          if (data is Map) {
+            raw = (data['DeviceMasters'] is List)
+                ? data['DeviceMasters']
+                : [];
+          } else if (data is List) {
+            raw = data;
           } else {
-            deviceList = [];
+            final otherPossibility =
+                decoded['device_list'] ?? decoded['device_data'];
+            raw = (otherPossibility is List) ? otherPossibility : [];
           }
+        }
+        final List<dynamic> list = List.from(raw);
+        list.sort((a, b) {
+          final aId = int.tryParse((a is Map ? (a['id'] ?? a['ID'] ?? a['device_id']) : null)?.toString() ?? '0') ?? 0;
+          final bId = int.tryParse((b is Map ? (b['id'] ?? b['ID'] ?? b['device_id']) : null)?.toString() ?? '0') ?? 0;
+          return bId.compareTo(aId);
+        });
+        setState(() {
+          deviceList = list;
           isLoading = false;
         });
       } else {
@@ -176,6 +182,12 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
                 : "Device Created Successfully",
           );
           _clearForm();
+          if (!isUpdate) {
+            setState(() {
+              currentPage = 0;
+              _sortColumnIndex = null;
+            });
+          }
           // DISMISS NOW HANDLED IN BUTTON PRESS
           await fetchDevices(); // Ensure we await the refresh
         } else {
@@ -1555,7 +1567,12 @@ class _DeviceMasterViewState extends State<DeviceMasterView> {
             : bVal.toLowerCase().compareTo(aVal.toLowerCase());
       });
     } else {
-      list.sort((a, b) => (int.tryParse(a['id']?.toString() ?? '0') ?? 0).compareTo(int.tryParse(b['id']?.toString() ?? '0') ?? 0));
+      // Default: sort by id descending (latest data at the top, oldest in last)
+      list.sort((a, b) {
+        final aId = int.tryParse((a is Map ? (a['id'] ?? a['ID'] ?? a['device_id']) : null)?.toString() ?? '0') ?? 0;
+        final bId = int.tryParse((b is Map ? (b['id'] ?? b['ID'] ?? b['device_id']) : null)?.toString() ?? '0') ?? 0;
+        return bId.compareTo(aId);
+      });
     }
 
     return list;

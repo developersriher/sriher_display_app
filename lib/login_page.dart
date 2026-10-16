@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
@@ -716,6 +717,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             color: Colors.white,
             fontSize: inputSize,
             fontWeight: FontWeight.w500,
+            fontFeatures: const [
+              FontFeature.liningFigures(),
+            ],
           ),
           decoration: InputDecoration(
             hintText: hint,

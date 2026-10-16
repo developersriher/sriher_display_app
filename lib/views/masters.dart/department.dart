@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../api_config.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
-import '../../widgets/searchable_dropdown.dart';
 
 class DepartmentView extends StatefulWidget {
   const DepartmentView({super.key});
@@ -34,6 +34,49 @@ class _DepartmentViewState extends State<DepartmentView> {
   int? _sortColumnIndex;
   bool _sortAscending = true;
 
+  Future<void> _loadPersistedStatuses() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('category_status_overrides');
+    } catch (_) {}
+  }
+
+  bool _isItemActive(dynamic data) {
+    if (data == null || data is! Map) return false;
+    final raw =
+        data['status'] ??
+        data['active_status'] ??
+        data['Status'] ??
+        data['is_active'];
+    if (raw == null) return true;
+
+    // Status 0 -> Active/ON
+    // Status 1 -> Inactive/OFF
+    if (raw == 0 || raw == false || raw == '0') return true;
+    if (raw == 1 || raw == true || raw == '1') return false;
+
+    final str = raw.toString().trim().toLowerCase();
+    if (str == '0' || str == 'active' || str == 'on') {
+      return true;
+    }
+    if (str == '1' || str == 'inactive' || str == 'off') {
+      return false;
+    }
+    return false;
+  }
+
+  int _validateStatus(dynamic rawStatus) {
+    if (rawStatus == null) return 0;
+    if (rawStatus is int) return rawStatus == 0 ? 0 : 1;
+    if (rawStatus is bool) return rawStatus ? 0 : 1;
+    final str = rawStatus.toString().trim().toLowerCase();
+    if (str == '0' || str == 'active' || str == 'true') return 0;
+    if (str == '1' || str == 'inactive' || str == 'false') return 1;
+    final parsed = int.tryParse(str);
+    if (parsed != null) return parsed == 0 ? 0 : 1;
+    return 0; // default active (0)
+  }
+
   void _applySort() {
     if (_sortColumnIndex == 0) {
       filteredList.sort((a, b) {
@@ -42,11 +85,11 @@ class _DepartmentViewState extends State<DepartmentView> {
         return _sortAscending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
       });
     } else {
-      // Default: sort by id ascending
+      // Default: sort by id descending (newest at the top, oldest in last)
       filteredList.sort((a, b) {
         final aId = int.tryParse(a['id']?.toString() ?? '0') ?? 0;
         final bId = int.tryParse(b['id']?.toString() ?? '0') ?? 0;
-        return aId.compareTo(bId);
+        return bId.compareTo(aId);
       });
     }
   }
@@ -59,7 +102,9 @@ class _DepartmentViewState extends State<DepartmentView> {
   @override
   void initState() {
     super.initState();
-    fetchCategories(); // Load data immediately
+    _loadPersistedStatuses().then((_) {
+      if (mounted) fetchCategories();
+    });
   }
 
   @override
@@ -74,8 +119,10 @@ class _DepartmentViewState extends State<DepartmentView> {
   // ──────────────────────────────────────────────────────────────────────────
 
   // 1. FETCH LIST (categoryview)
-  Future<void> fetchCategories() async {
-    setState(() => isLoading = true);
+  Future<void> fetchCategories({bool showLoading = true}) async {
+    if (showLoading && categoryList.isEmpty) {
+      setState(() => isLoading = true);
+    }
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/categoryview'),
@@ -89,22 +136,51 @@ class _DepartmentViewState extends State<DepartmentView> {
       if (response.statusCode == 200) {
         final dynamic decoded = jsonDecode(response.body);
         if (!mounted) return;
-        setState(() {
-          if (decoded is Map) {
-            categoryList = decoded['data'] ?? decoded['category_list'] ?? [];
-          } else if (decoded is List) {
-            categoryList = decoded;
+        final List<dynamic> raw = decoded is Map
+            ? (decoded['data'] ?? decoded['category_list'] ?? [])
+            : (decoded is List ? decoded : []);
+        final List<dynamic> parsed = raw.map((c) {
+          if (c is Map) {
+            final map = Map<String, dynamic>.from(c);
+            final int statusVal =
+                _validateStatus(map['status'] ?? map['active_status']);
+            map['status'] = statusVal;
+            map['active_status'] = statusVal;
+            return map;
           }
-          filteredList = List.from(categoryList);
+          return c;
+        }).toList();
+
+        setState(() {
+          categoryList = parsed;
+          final query = _searchController.text.trim().toLowerCase();
+          if (query.isNotEmpty) {
+            filteredList = categoryList
+                .where(
+                  (item) => (item['category_name'] ?? '')
+                      .toString()
+                      .toLowerCase()
+                      .contains(query),
+                )
+                .toList();
+          } else {
+            filteredList = List.from(categoryList);
+          }
           _applySort();
           isLoading = false;
         });
+      } else {
+        if (mounted) setState(() => isLoading = false);
       }
     } catch (e) {
       if (!mounted) return;
       _showSnackBar("Connection Error: $e");
       setState(() => isLoading = false);
     }
+  }
+
+  Future<void> fetchDepartmentList({bool showLoading = true}) async {
+    await fetchCategories(showLoading: showLoading);
   }
 
   // 2 & 4. INSERT OR UPDATE (insertCategoryview / categoryUpdateview)
@@ -122,6 +198,18 @@ class _DepartmentViewState extends State<DepartmentView> {
 
     try {
       final String name = _departmentNameController.text.trim();
+      final Map<String, dynamic> body = isUpdate
+          ? {"api_key": _apiKey, "id": editingId, "category_name": name}
+          : {"api_key": _apiKey, "category_name": name};
+      if (isUpdate) {
+        final existing = categoryList.firstWhere(
+          (c) => (c['id'] ?? c['category_id'])?.toString() == editingId.toString(),
+          orElse: () => null,
+        );
+        if (existing != null && existing is Map) {
+          body["status"] = _validateStatus(existing['status'] ?? existing['active_status']);
+        }
+      }
       final response = await http.post(
         Uri.parse(
           isUpdate
@@ -132,11 +220,7 @@ class _DepartmentViewState extends State<DepartmentView> {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: jsonEncode(
-          isUpdate
-              ? {"api_key": _apiKey, "id": editingId, "category_name": name}
-              : {"api_key": _apiKey, "category_name": name},
-        ),
+        body: jsonEncode(body),
       );
 
       if (response.statusCode == 200) {
@@ -215,72 +299,154 @@ class _DepartmentViewState extends State<DepartmentView> {
   }
 
   // 5. TOGGLE STATUS (categoryStatusUpdateview)
-  Future<void> toggleStatus(dynamic id, dynamic currentStatus) async {
-    try {
-      final int newStatus = (currentStatus == 0 || currentStatus == "0")
-          ? 1
-          : 0;
-          
-      final confirm = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text("Confirm Action", textAlign: TextAlign.center),
-            content: Text(
-              newStatus == 0
-                  ? "Do you want to set this item as active?"
-                  : "Do you want to set this item as inactive?",
-              textAlign: TextAlign.center,
+  Future<void> toggleStatus(dynamic department) async {
+    final int? categoryId = int.tryParse(
+      (department['id'] ?? department['category_id'] ?? department['ID'])
+              ?.toString() ??
+          '',
+    );
+    if (categoryId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Invalid department ID."),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Status mapping: 0 = Active (green switch), 1 = Inactive (grey switch)
+    final int currentStatus =
+        int.tryParse(department['status']?.toString() ?? '0') ?? 0;
+    final int targetStatus = currentStatus == 0 ? 1 : 0;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            "Confirm Action",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          content: Text(
+            currentStatus == 0
+                ? "Do you want to set this item as inactive?"
+                : "Do you want to set this item as active?",
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF475569)),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text(
+                "Cancel",
+                style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold),
+              ),
             ),
-            actionsAlignment: MainAxisAlignment.center,
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text("Cancel"),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 24),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text("OK"),
-              ),
-            ],
-          );
-        },
-      );
+              child: const Text("OK", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
 
-      if (confirm != true) return;
+    if (confirm != true) return;
 
-      setState(() {
-        final idx = categoryList.indexWhere((c) => c['id']?.toString() == id?.toString());
-        if (idx != -1) {
-          categoryList[idx]['status'] = newStatus;
-          categoryList[idx]['active_status'] = newStatus;
-        }
-      });
-
-      final response = await http.post(
-        Uri.parse('$_baseUrl/categoryStatusUpdateview'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "api_key": _apiKey,
-          "category_id": id,
-          "status": newStatus,
-        }),
-      );
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${getBaseUrl()}/categoryStatusUpdateview'),
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: jsonEncode({
+              "api_key": _apiKey,
+              "category_id": categoryId,
+              "status": targetStatus,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         if (!mounted) return;
+        setState(() {
+          if (department is Map) {
+            department['status'] = targetStatus;
+            department['active_status'] = targetStatus;
+            department['Status'] = targetStatus;
+          }
+          final cIdx = categoryList.indexWhere(
+            (c) =>
+                (c['id'] ?? c['category_id'])?.toString() ==
+                categoryId.toString(),
+          );
+          if (cIdx != -1 && categoryList[cIdx] is Map) {
+            categoryList[cIdx]['status'] = targetStatus;
+            categoryList[cIdx]['active_status'] = targetStatus;
+          }
+          final fIdx = filteredList.indexWhere(
+            (c) =>
+                (c['id'] ?? c['category_id'])?.toString() ==
+                categoryId.toString(),
+          );
+          if (fIdx != -1 && filteredList[fIdx] is Map) {
+            filteredList[fIdx]['status'] = targetStatus;
+            filteredList[fIdx]['active_status'] = targetStatus;
+          }
+        });
+
+        await fetchDepartmentList(showLoading: false);
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(newStatus == 0 ? "Department has been successfully activated." : "Department has been successfully deactivated."),
+            content: const Text("Status updated successfully."),
             backgroundColor: Colors.green.shade700,
             behavior: SnackBarBehavior.floating,
           ),
         );
-        fetchCategories();
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to update status (${response.statusCode})."),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } catch (e) {
       debugPrint("Toggle Error: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Connection error: $e"),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -399,17 +565,22 @@ class _DepartmentViewState extends State<DepartmentView> {
       context: context,
       title: editingId == null ? "Add Department" : "Edit Department",
       titleStyle: TextStyle(
-        fontSize: isMobile ? 15 : 20,
+        fontSize: isMobile ? 18 : 22,
         fontWeight: FontWeight.bold,
         color: Colors.white,
+        letterSpacing: -0.5,
       ),
       subtitle: "Manage organizational units and categories",
+      subtitleStyle: TextStyle(
+        fontSize: 12,
+        color: Colors.white.withOpacity(0.85),
+      ),
       icon: editingId == null
           ? Icons.add_business_rounded
           : Icons.edit_note_rounded,
       width: isMobile
-          ? MediaQuery.of(context).size.width * 0.8
-          : MediaQuery.of(context).size.width * 0.4,
+          ? MediaQuery.of(context).size.width * 0.85
+          : 500,
       child: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -950,6 +1121,7 @@ class _DepartmentViewState extends State<DepartmentView> {
                           ...pagedData.asMap().entries.map((entry) {
                             final index = entry.key;
                             final item = entry.value;
+                            final department = item;
                             final sNo = start + index + 1;
                             return Container(
                               height: 48,
@@ -1025,14 +1197,41 @@ class _DepartmentViewState extends State<DepartmentView> {
                                         child: Transform.scale(
                                           scale: 0.7,
                                           child: Switch(
-                                            value:
-                                                item['status'] == 0 ||
-                                                item['status'] == "0",
-                                            activeColor: Colors.green,
-                                            onChanged: (v) => toggleStatus(
-                                              item['id'],
-                                              item['status'],
-                                            ),
+                                            value: (department['status']?.toString() == '0'),
+                                            activeThumbColor: Colors.green,
+                                            activeTrackColor: Colors.green.shade200,
+                                            inactiveThumbColor: Colors.grey,
+                                            inactiveTrackColor: Colors.grey.shade300,
+                                            trackOutlineColor:
+                                                WidgetStateProperty.resolveWith<
+                                                  Color?
+                                                >((_) => Colors.transparent),
+                                            thumbColor:
+                                                WidgetStateProperty.resolveWith<
+                                                  Color
+                                                >((states) {
+                                                  if (states.contains(
+                                                    WidgetState.selected,
+                                                  )) {
+                                                    return Colors.green;
+                                                  }
+                                                  return Colors.grey;
+                                                }),
+                                            trackColor:
+                                                WidgetStateProperty.resolveWith<
+                                                  Color
+                                                >((states) {
+                                                  if (states.contains(
+                                                    WidgetState.selected,
+                                                  )) {
+                                                    return Colors
+                                                        .green
+                                                        .shade200;
+                                                  }
+                                                  return Colors.grey.shade300;
+                                                }),
+                                            onChanged: (bool newVal) =>
+                                                toggleStatus(department),
                                           ),
                                         ),
                                       ),

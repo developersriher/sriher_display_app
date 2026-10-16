@@ -41,7 +41,7 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
   // Sort State
   int _sortColumnIndex = -1;
-  bool _sortAscending = true;
+  bool _sortAscending = false;
 
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _hScroll = ScrollController();
@@ -264,11 +264,15 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
         if (resTemplate.statusCode == 200) {
           final tempParsed = jsonDecode(resTemplate.body)['data'];
-          if (tempParsed is List) {
-            tempList = tempParsed;
-          } else if (tempParsed is Map) {
-            tempList = tempParsed.values.first ?? [];
-          }
+          final List<dynamic> list = (tempParsed is List)
+              ? tempParsed
+              : (tempParsed is Map ? (tempParsed.values.first ?? []) : []);
+          list.sort((a, b) {
+            final aId = int.tryParse((a is Map ? (a['id'] ?? a['ID']) : null)?.toString() ?? '0') ?? 0;
+            final bId = int.tryParse((b is Map ? (b['id'] ?? b['ID']) : null)?.toString() ?? '0') ?? 0;
+            return bId.compareTo(aId);
+          });
+          tempList = list;
         }
 
         setState(() {
@@ -316,6 +320,13 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
               : "Updated successfully",
         );
         _resetForm();
+        if (_editingId == null) {
+          setState(() {
+            _currentPage = 1;
+            _sortColumnIndex = -1;
+            _sortAscending = false;
+          });
+        }
         _fetchTableData();
       }
     } catch (e) {
@@ -922,9 +933,9 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
 
     filtered.sort((a, b) {
       if (_sortColumnIndex == -1) {
-        int idA = int.tryParse(a['id']?.toString() ?? '0') ?? 0;
-        int idB = int.tryParse(b['id']?.toString() ?? '0') ?? 0;
-        return idA.compareTo(idB);
+        final aId = int.tryParse((a is Map ? (a['id'] ?? a['ID']) : null)?.toString() ?? '0') ?? 0;
+        final bId = int.tryParse((b is Map ? (b['id'] ?? b['ID']) : null)?.toString() ?? '0') ?? 0;
+        return _sortAscending ? aId.compareTo(bId) : bId.compareTo(aId);
       }
 
       String aVal = "";

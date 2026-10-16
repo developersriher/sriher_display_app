@@ -1,4 +1,3 @@
-import 'dart:ui';
 import '../../api_config.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -32,17 +31,18 @@ class _AddUserViewState extends State<AddUserView> {
   int _sortColumnIndex = -1;
   bool _sortAscending = false;
 
+  final Map<String, int> _toggledUserStatuses = {};
+
   // Table search controller (NOT form)
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _hScroll = ScrollController();
 
-  final Map<int, int> _statusOverrides = {};
-
   @override
   void initState() {
     super.initState();
-    _loadPersistedStatuses();
-    fetchUserList();
+    _loadPersistedStatuses().then((_) {
+      if (mounted) fetchUserList();
+    });
   }
 
   Future<void> _loadPersistedStatuses() async {
@@ -51,37 +51,25 @@ class _AddUserViewState extends State<AddUserView> {
       final str = prefs.getString('user_status_overrides');
       if (str != null) {
         final decoded = jsonDecode(str) as Map<String, dynamic>;
-        setState(() {
-          decoded.forEach((k, v) {
-            final id = int.tryParse(k);
-            final val = int.tryParse(v.toString());
-            if (id != null && val != null) {
-              _statusOverrides[id] = val;
-            }
-          });
+        decoded.forEach((k, v) {
+          final val = int.tryParse(v.toString());
+          if (val != null) {
+            _toggledUserStatuses[k] = val;
+          }
         });
+        if (mounted) setState(() {});
       }
     } catch (_) {}
   }
 
-  Future<void> _persistStatuses() async {
+  Future<void> _persistUserStatuses() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final stringKeyMap = _statusOverrides.map((k, v) => MapEntry(k.toString(), v));
-      await prefs.setString('user_status_overrides', jsonEncode(stringKeyMap));
+      await prefs.setString(
+        'user_status_overrides',
+        jsonEncode(_toggledUserStatuses),
+      );
     } catch (_) {}
-  }
-
-  bool _isUserActive(dynamic user) {
-    if (user is! Map) return true;
-    final rawId = user['id'] ?? user['ID'];
-    final id = int.tryParse(rawId?.toString() ?? '') ?? int.tryParse(user['user_id']?.toString() ?? '');
-    if (id != null && _statusOverrides.containsKey(id)) {
-      return _statusOverrides[id] == 0;
-    }
-    final raw = user['status'] ?? user['Status'] ?? user['active_status'];
-    final statusInt = int.tryParse(raw?.toString() ?? '0') ?? 0;
-    return statusInt == 0;
   }
 
   @override
@@ -89,6 +77,19 @@ class _AddUserViewState extends State<AddUserView> {
     _searchController.dispose();
     _hScroll.dispose();
     super.dispose();
+  }
+
+  // ──────────────────────────── STATUS VALIDATION ────────────────────────────
+  int _validateStatus(dynamic rawStatus) {
+    if (rawStatus == null) return 0;
+    if (rawStatus is int) return rawStatus == 0 ? 0 : 1;
+    if (rawStatus is bool) return rawStatus ? 0 : 1;
+    final str = rawStatus.toString().trim().toLowerCase();
+    if (str == '0' || str == 'active' || str == 'true') return 0;
+    if (str == '1' || str == 'inactive' || str == 'false') return 1;
+    final parsed = int.tryParse(str);
+    if (parsed != null) return parsed == 0 ? 0 : 1;
+    return 0;
   }
 
   // ──────────────────────────── API CALLS ────────────────────────────────────
@@ -109,39 +110,66 @@ class _AddUserViewState extends State<AddUserView> {
 
       if (response.statusCode == 200) {
         final res = jsonDecode(response.body);
-        // Explicitly unwrap {"data": {"users": [...], "roles": [...]}}
-        final outerData = (res is Map && res.containsKey('data')) ? res['data'] : res;
-        final rawUsers = (outerData is Map && outerData.containsKey('users'))
-            ? outerData['users']
-            : (outerData is Map && outerData.containsKey('data'))
-                ? outerData['data']
-                : (res is Map && res.containsKey('users'))
-                    ? res['users']
-                    : [];
-        final List<dynamic> parsedUsers = (rawUsers as List).map((u) {
+        List<dynamic> rawUsers = [];
+        List<dynamic> rawRoles = [];
+
+        // 1. API Response Extraction: response.data['data']['users']
+        if (res is Map && res['data'] is Map) {
+          final data = res['data'] as Map;
+          if (data['users'] is List) {
+            rawUsers = data['users'] as List;
+          }
+          if (data['roles'] is List) {
+            rawRoles = data['roles'] as List;
+          }
+        } else if (res is Map && res['users'] is List) {
+          rawUsers = res['users'] as List;
+          if (res['roles'] is List) {
+            rawRoles = res['roles'] as List;
+          }
+        }
+
+        final List<dynamic> parsedUsers = rawUsers.map((u) {
           if (u is Map) {
             final map = Map<String, dynamic>.from(u);
-            final rawId = map['id'] ?? map['ID'];
-            final id = int.tryParse(rawId?.toString() ?? '') ?? int.tryParse(map['user_id']?.toString() ?? '');
-            if (id != null && _statusOverrides.containsKey(id)) {
-              map['status'] = _statusOverrides[id];
-              map['Status'] = _statusOverrides[id];
-            } else {
-              final raw = map['status'] ?? map['Status'];
-              if (raw != null) {
-                map['status'] = int.tryParse(raw.toString()) ?? 0;
-                map['Status'] = map['status'];
-              }
+            final String uId = (map['id'] ?? map['ID'])?.toString() ?? '';
+            final int serverStatus = _validateStatus(
+              map['status'] ?? map['Status'],
+            );
+            if (_toggledUserStatuses.containsKey(uId) &&
+                _toggledUserStatuses[uId] == serverStatus) {
+              _toggledUserStatuses.remove(uId);
             }
+            final int statusVal = _toggledUserStatuses.containsKey(uId)
+                ? _toggledUserStatuses[uId]!
+                : serverStatus;
+            map['status'] = statusVal;
+            map['Status'] = statusVal;
             return map;
           }
           return u;
         }).toList();
-        final rawRoles = (outerData is Map ? outerData['roles'] : (res is Map ? res['roles'] : null)) ?? [];
+
+        // Sort latest data to the top, oldest in last
+        parsedUsers.sort((a, b) {
+          if (a is Map && b is Map) {
+            final aIdStr = (a['id'] ?? a['ID'])?.toString() ?? '';
+            final bIdStr = (b['id'] ?? b['ID'])?.toString() ?? '';
+            final int aId = aIdStr.startsWith('temp_')
+                ? 999999999
+                : (int.tryParse(aIdStr) ?? 0);
+            final int bId = bIdStr.startsWith('temp_')
+                ? 999999999
+                : (int.tryParse(bIdStr) ?? 0);
+            return bId.compareTo(aId);
+          }
+          return 0;
+        });
+
         if (!mounted) return;
         setState(() {
           allUsers = parsedUsers;
-          allRoles = rawRoles is List ? rawRoles : [];
+          allRoles = rawRoles;
           isLoading = false;
         });
       } else {
@@ -154,6 +182,9 @@ class _AddUserViewState extends State<AddUserView> {
       _showSnack("Failed to load users. Check connection.", isError: true);
     }
   }
+
+  Future<void> _fetchUsers({bool showLoading = true}) =>
+      fetchUserList(showLoading: showLoading);
 
   Future<void> loadForEdit(dynamic user) async {
     final id = int.tryParse(user['id']?.toString() ?? '');
@@ -225,7 +256,8 @@ class _AddUserViewState extends State<AddUserView> {
         orElse: () => null,
       );
       if (existing != null && existing is Map) {
-        body["status"] = int.tryParse(existing['status']?.toString() ?? '0') ?? 0;
+        body["status"] =
+            int.tryParse(existing['status']?.toString() ?? '0') ?? 0;
       }
     } else {
       body["status"] = 0;
@@ -234,6 +266,7 @@ class _AddUserViewState extends State<AddUserView> {
     // Optimistic update — insert at top immediately
     if (!isUpdating) {
       setState(() {
+        currentPage = 1;
         allUsers.insert(0, {
           'id': 'temp_${DateTime.now().millisecondsSinceEpoch}',
           'user_id': userId,
@@ -274,155 +307,151 @@ class _AddUserViewState extends State<AddUserView> {
     } catch (e) {
       _showSnack("Connection failed.", isError: true);
     }
-    fetchUserList();
+    await fetchUserList(showLoading: false);
   }
 
-  Future<void> toggleStatus(dynamic idOrUser, [dynamic currentStatus]) async {
-    try {
-      dynamic id;
-      dynamic rawStatus;
+  Future<void> toggleStatus(dynamic user) async {
+    final int? dbId = int.tryParse((user['id'] ?? user['ID'])?.toString() ?? '');
+    final String existingUserId = (user['user_id'] ?? user['User_id'] ?? '').toString();
+    final String existingUserName = (user['user_name'] ?? user['User_name'] ?? '').toString();
+    final String existingRoleId = (user['role_id'] ?? user['Role_id'] ?? '').toString();
 
-      if (idOrUser is Map) {
-        id = idOrUser['id'] ?? idOrUser['ID'] ?? idOrUser['user_id'];
-        rawStatus = idOrUser['status'] ?? idOrUser['Status'] ?? currentStatus;
-      } else {
-        id = idOrUser;
-        rawStatus = currentStatus;
+    if (dbId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Invalid user ID."),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
+      return;
+    }
 
-      // Active = 0, Inactive = 1 for users
-      final int parsedStatus = int.tryParse(rawStatus?.toString() ?? '0') ?? 0;
-      final int newStatusVal = (parsedStatus == 0) ? 1 : 0;
+    // Status Inversion: 0 = Active (green switch), 1 = Inactive (grey switch)
+    final int currentStatus = int.tryParse(user['status']?.toString() ?? '0') ?? 0;
+    final int targetStatus = currentStatus == 0 ? 1 : 0;
 
-      final confirm = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text("Confirm Action", textAlign: TextAlign.center),
-            content: Text(
-              newStatusVal == 0
-                  ? "Do you want to set this item as active?"
-                  : "Do you want to set this item as inactive?",
-              textAlign: TextAlign.center,
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          "Confirm Action",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        content: Text(
+          currentStatus == 0
+              ? "Do you want to set this item as inactive?"
+              : "Do you want to set this item as active?",
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 14, color: Color(0xFF475569)),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            actionsAlignment: MainAxisAlignment.center,
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text("Cancel"),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text("OK"),
-              ),
-            ],
-          );
-        },
-      );
+            child: const Text("Cancel", style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 24),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text("OK", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
 
-      if (confirm != true) return;
+    if (confirm != true) return;
 
-      final int userId = int.tryParse(id?.toString() ?? '0') ?? 0;
-
-      // Find the full user record so we can mirror _handleSubmit's payload exactly
-      final userItem = allUsers.firstWhere(
-        (u) => (u['id'] ?? u['ID'])?.toString() == id?.toString(),
-        orElse: () => null,
-      );
-
-      // Mirror the exact payload structure that the working Edit Modal uses
-      // (see _handleSubmit / regUpdateview). All required fields must be present.
-      final Map<String, dynamic> body = {
+    try {
+      final Map<String, String> body = {
         "api_key": _apiKey,
-        "id": userId,
-        "user_id": userItem is Map ? (userItem['user_id']?.toString() ?? '') : '',
-        "user_name": userItem is Map ? (userItem['user_name']?.toString() ?? '') : '',
-        "role_id": userItem is Map ? (userItem['role_id']?.toString() ?? '') : '',
-        "status": newStatusVal,
+        "id": dbId.toString(),
+        "device_id": dbId.toString(),
+        "user_id": existingUserId,
+        "user_name": existingUserName,
+        "role_id": existingRoleId,
+        "status": targetStatus.toString(),
       };
-      // Include other optional fields the server may reference
-      if (userItem is Map && userItem['user_email'] != null) {
-        body['user_email'] = userItem['user_email'];
+      if (user is Map && user['user_password'] != null && user['user_password'].toString().isNotEmpty) {
+        body["user_password"] = user['user_password'].toString();
       }
 
-      // Send update ONLY to the update endpoint — NOT to the fetch endpoint
-      final response = await http.post(
-        Uri.parse('${getBaseUrl()}/regUpdateview'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(body),
-      );
+      // 1. Primary server status update endpoint that persists directly to database
+      http.Response response = await http
+          .post(
+            Uri.parse('${getBaseUrl()}/userUpdateview'),
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Accept": "application/json",
+            },
+            body: {
+              "api_key": _apiKey,
+              "id": dbId.toString(),
+              "device_id": dbId.toString(),
+              "status": targetStatus.toString(),
+            },
+          )
+          .timeout(const Duration(seconds: 15));
 
-      if (!mounted) return;
+      // 2. Also trigger regUpdateview with device_id and full fields for complete persistence
+      try {
+        final regResponse = await http
+            .post(
+              Uri.parse('${getBaseUrl()}/regUpdateview'),
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+              },
+              body: body,
+            )
+            .timeout(const Duration(seconds: 10));
+        if (response.statusCode != 200 && regResponse.statusCode == 200) {
+          response = regResponse;
+        }
+      } catch (_) {}
 
       if (response.statusCode == 200) {
-        // Validate backend response body for actual success
-        bool backendSuccess = false;
-        String backendMsg = '';
-        try {
-          final resJson = jsonDecode(response.body);
-          if (resJson is Map) {
-            backendSuccess = resJson['status'] == true ||
-                resJson['status'] == 'true' ||
-                (resJson['message']?.toString().toLowerCase().contains('success') ?? false) ||
-                resJson['success'] == true;
-            backendMsg = resJson['message']?.toString() ?? '';
+        if (!mounted) return;
+        setState(() {
+          if (user is Map) {
+            user['status'] = targetStatus;
+            user['Status'] = targetStatus;
           }
-          // If backend doesn't include a status/message field, treat HTTP 200 as success
-          if (!backendSuccess && backendMsg.isEmpty) {
-            backendSuccess = true;
-          }
-        } catch (_) {
-          // If body isn't JSON, treat HTTP 200 as success
-          backendSuccess = true;
-        }
+          _toggledUserStatuses[dbId.toString()] = targetStatus;
+        });
+        await _persistUserStatuses();
 
-        if (backendSuccess) {
-          // Update local state ONLY after server confirms
-          setState(() {
-            _statusOverrides[userId] = newStatusVal;
-            final idx = allUsers.indexWhere((u) => (u['id'] ?? u['ID'])?.toString() == id?.toString());
-            if (idx != -1) {
-              allUsers[idx]['status'] = newStatusVal;
-              allUsers[idx]['Status'] = newStatusVal;
-            }
-          });
-          await _persistStatuses();
+        await fetchUserList(showLoading: false);
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(newStatusVal == 0
-                  ? "User has been successfully activated."
-                  : "User has been successfully deactivated."),
-              backgroundColor: Colors.green.shade700,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          fetchUserList(showLoading: false);
-        } else {
-          // Backend returned 200 but indicated failure
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(backendMsg.isNotEmpty
-                  ? "Update failed: $backendMsg"
-                  : "Update failed. Please try again."),
-              backgroundColor: Colors.red.shade700,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      } else {
-        // HTTP error
-        String errorMsg = 'Server error (${response.statusCode})';
-        try {
-          final errJson = jsonDecode(response.body);
-          if (errJson is Map && errJson['message'] != null) {
-            errorMsg = errJson['message'].toString();
-          }
-        } catch (_) {}
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMsg),
+            content: const Text("Status updated successfully."),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to update status (${response.statusCode})."),
             backgroundColor: Colors.red.shade700,
             behavior: SnackBarBehavior.floating,
           ),
@@ -430,23 +459,20 @@ class _AddUserViewState extends State<AddUserView> {
       }
     } catch (e) {
       debugPrint("Toggle Error: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Connection failed: $e"),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Connection error: $e"),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
   Future<void> deleteUser(dynamic user) async {
     final id = int.tryParse(user['id']?.toString() ?? '');
     if (id == null) return;
-    _statusOverrides.remove(id);
-    await _persistStatuses();
 
     final confirm = await StylishDialog.show<bool>(
       context: context,
@@ -534,15 +560,18 @@ class _AddUserViewState extends State<AddUserView> {
             body: jsonEncode({
               "api_key": _apiKey,
               "id": id,
+              "user_id": user['user_id']?.toString() ?? '',
+              "user_name": user['user_name']?.toString() ?? '',
+              "role_id": user['role_id']?.toString() ?? '',
               "status": 1,
             }),
           )
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
+        _toggledUserStatuses[id.toString()] = 1;
+        await _persistUserStatuses();
         _showSnack("User deleted successfully.");
-        // Don't re-fetch — the server marks status:1 but still returns the user.
-        // The row is already removed optimistically above.
       } else {
         // Rollback on failure
         if (deletedItem != null && deletedIndex != -1) {
@@ -660,14 +689,14 @@ class _AddUserViewState extends State<AddUserView> {
         final intB = int.tryParse(bVal) ?? 0;
         return _sortAscending ? intA.compareTo(intB) : intB.compareTo(intA);
       } else if (_sortColumnIndex == -1) {
-        // Default sort: by DB id ascending
+        // Default sort: by DB id descending (latest data at the top, oldest in last)
         final intA = aVal.startsWith('temp_')
             ? 999999999
             : (int.tryParse(aVal) ?? 0);
         final intB = bVal.startsWith('temp_')
             ? 999999999
             : (int.tryParse(bVal) ?? 0);
-        return intA.compareTo(intB);
+        return intB.compareTo(intA);
       }
       return _sortAscending
           ? aVal.toLowerCase().compareTo(bVal.toLowerCase())
@@ -879,8 +908,13 @@ class _AddUserViewState extends State<AddUserView> {
                           }),
                           child: Align(
                             heightFactor: 0.5,
-                            child: Icon(Icons.arrow_drop_up, size: 14,
-                              color: _sortColumnIndex == 0 && _sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                            child: Icon(
+                              Icons.arrow_drop_up,
+                              size: 14,
+                              color: _sortColumnIndex == 0 && _sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
                           ),
                         ),
                         GestureDetector(
@@ -890,8 +924,13 @@ class _AddUserViewState extends State<AddUserView> {
                           }),
                           child: Align(
                             heightFactor: 0.5,
-                            child: Icon(Icons.arrow_drop_down, size: 14,
-                              color: _sortColumnIndex == 0 && !_sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                            child: Icon(
+                              Icons.arrow_drop_down,
+                              size: 14,
+                              color: _sortColumnIndex == 0 && !_sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
                           ),
                         ),
                       ],
@@ -931,8 +970,13 @@ class _AddUserViewState extends State<AddUserView> {
                           }),
                           child: Align(
                             heightFactor: 0.5,
-                            child: Icon(Icons.arrow_drop_up, size: 14,
-                              color: _sortColumnIndex == 1 && _sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                            child: Icon(
+                              Icons.arrow_drop_up,
+                              size: 14,
+                              color: _sortColumnIndex == 1 && _sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
                           ),
                         ),
                         GestureDetector(
@@ -942,8 +986,13 @@ class _AddUserViewState extends State<AddUserView> {
                           }),
                           child: Align(
                             heightFactor: 0.5,
-                            child: Icon(Icons.arrow_drop_down, size: 14,
-                              color: _sortColumnIndex == 1 && !_sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                            child: Icon(
+                              Icons.arrow_drop_down,
+                              size: 14,
+                              color: _sortColumnIndex == 1 && !_sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
                           ),
                         ),
                       ],
@@ -983,8 +1032,13 @@ class _AddUserViewState extends State<AddUserView> {
                           }),
                           child: Align(
                             heightFactor: 0.5,
-                            child: Icon(Icons.arrow_drop_up, size: 14,
-                              color: _sortColumnIndex == 2 && _sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                            child: Icon(
+                              Icons.arrow_drop_up,
+                              size: 14,
+                              color: _sortColumnIndex == 2 && _sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
                           ),
                         ),
                         GestureDetector(
@@ -994,8 +1048,13 @@ class _AddUserViewState extends State<AddUserView> {
                           }),
                           child: Align(
                             heightFactor: 0.5,
-                            child: Icon(Icons.arrow_drop_down, size: 14,
-                              color: _sortColumnIndex == 2 && !_sortAscending ? Colors.blue : const Color(0xFF94A3B8)),
+                            child: Icon(
+                              Icons.arrow_drop_down,
+                              size: 14,
+                              color: _sortColumnIndex == 2 && !_sortAscending
+                                  ? Colors.blue
+                                  : const Color(0xFF94A3B8),
+                            ),
                           ),
                         ),
                       ],
@@ -1056,13 +1115,25 @@ class _AddUserViewState extends State<AddUserView> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.search_off_rounded, size: 48, color: Colors.blue.shade200),
+                Icon(
+                  Icons.search_off_rounded,
+                  size: 48,
+                  color: Colors.blue.shade200,
+                ),
                 const SizedBox(height: 12),
-                Text('No matching users found',
-                  style: TextStyle(color: Colors.blue.shade900, fontSize: 16.0, fontWeight: FontWeight.bold)),
+                Text(
+                  'No matching users found',
+                  style: TextStyle(
+                    color: Colors.blue.shade900,
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                const Text('Try a different search term',
-                  style: TextStyle(color: Colors.grey, fontSize: 13.0)),
+                const Text(
+                  'Try a different search term',
+                  style: TextStyle(color: Colors.grey, fontSize: 13.0),
+                ),
               ],
             ),
           ),
@@ -1073,12 +1144,16 @@ class _AddUserViewState extends State<AddUserView> {
         children: pagedUsers.asMap().entries.map((entry) {
           final index = entry.key;
           final u = entry.value;
-          final sNo = ((currentPage - 1) * (int.tryParse(entriesValue) ?? 10)) + index + 1;
-          final roleName = allRoles.firstWhere(
-            (r) => r['id']?.toString() == u['role_id']?.toString(),
-            orElse: () => {'role_name': 'User'},
-          )['role_name'] ?? 'User';
-          final isActive = _isUserActive(u);
+          final sNo =
+              ((currentPage - 1) * (int.tryParse(entriesValue) ?? 10)) +
+              index +
+              1;
+          final roleName =
+              allRoles.firstWhere(
+                (r) => r['id']?.toString() == u['role_id']?.toString(),
+                orElse: () => {'role_name': 'User'},
+              )['role_name'] ??
+              'User';
           return Container(
             height: 52,
             decoration: BoxDecoration(
@@ -1097,7 +1172,10 @@ class _AddUserViewState extends State<AddUserView> {
                       padding: const EdgeInsets.only(left: 12.0),
                       child: Text(
                         sNo.toString(),
-                        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
+                        ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
@@ -1113,7 +1191,10 @@ class _AddUserViewState extends State<AddUserView> {
                       padding: const EdgeInsets.only(left: 12.0),
                       child: Text(
                         u['user_id']?.toString() ?? '-',
-                        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
+                        ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
@@ -1144,7 +1225,10 @@ class _AddUserViewState extends State<AddUserView> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4.0),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(20),
@@ -1169,7 +1253,11 @@ class _AddUserViewState extends State<AddUserView> {
                   child: Align(
                     alignment: Alignment.center,
                     child: IconButton(
-                      icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Colors.blue,
+                        size: 18,
+                      ),
                       onPressed: () => loadForEdit(u),
                       tooltip: 'Edit',
                       padding: EdgeInsets.zero,
@@ -1187,10 +1275,12 @@ class _AddUserViewState extends State<AddUserView> {
                       child: Transform.scale(
                         scale: 0.7,
                         child: Switch(
-                          // Active = 0 (green/on), Inactive = 1 (grey/off)
-                          value: (int.tryParse(u['status']?.toString() ?? '0') ?? 0) == 0,
-                          activeColor: Colors.green,
-                          onChanged: (v) => toggleStatus(u),
+                          value: (u['status']?.toString() == '0'),
+                          activeThumbColor: Colors.green,
+                          activeTrackColor: Colors.green.shade200,
+                          inactiveThumbColor: Colors.grey,
+                          inactiveTrackColor: Colors.grey.shade300,
+                          onChanged: (bool newVal) => toggleStatus(u),
                         ),
                       ),
                     ),
@@ -1212,7 +1302,9 @@ class _AddUserViewState extends State<AddUserView> {
       clipBehavior: Clip.antiAlias,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final double minW = constraints.maxWidth > 1000 ? constraints.maxWidth : 1000.0;
+          final double minW = constraints.maxWidth > 1000
+              ? constraints.maxWidth
+              : 1000.0;
           return Scrollbar(
             controller: _hScroll,
             thumbVisibility: true,
@@ -1223,7 +1315,7 @@ class _AddUserViewState extends State<AddUserView> {
                 constraints: BoxConstraints(minWidth: minW, maxWidth: minW),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                children: [header, buildRows()],
+                  children: [header, buildRows()],
                 ),
               ),
             ),
@@ -1239,133 +1331,133 @@ class _AddUserViewState extends State<AddUserView> {
         final isNarrow = constraints.maxWidth < 600;
 
         final showEntries = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text(
-          "Show ",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-            color: Color(0xFF334155),
-          ),
-        ),
-        const SizedBox(width: 6),
-        SizedBox(
-          width: 75,
-          height: 35,
-          child: DropdownButtonFormField<String>(
-            value: entriesValue,
-            dropdownColor: Colors.white,
-            style: const TextStyle(color: Colors.black87, fontSize: 13),
-            decoration: InputDecoration(
-              isDense: true,
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 8,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Show ",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: Color(0xFF334155),
               ),
             ),
-            items: [
-              "10",
-              "25",
-              "50",
-              "100",
-            ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-            onChanged: (v) {
-              if (v != null) {
-                setState(() {
-                  entriesValue = v;
-                  currentPage = 1;
-                });
-              }
-            },
-          ),
-        ),
-        if (!isNarrow) ...[
-          const SizedBox(width: 6),
-          const Text(
-            " entries",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-              color: Color(0xFF334155),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 75,
+              height: 35,
+              child: DropdownButtonFormField<String>(
+                value: entriesValue,
+                dropdownColor: Colors.white,
+                style: const TextStyle(color: Colors.black87, fontSize: 13),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                ),
+                items: ["10", "25", "50", "100"]
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      entriesValue = v;
+                      currentPage = 1;
+                    });
+                  }
+                },
+              ),
             ),
-          ),
-        ],
-      ],
-    );
+            if (!isNarrow) ...[
+              const SizedBox(width: 6),
+              const Text(
+                " entries",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Color(0xFF334155),
+                ),
+              ),
+            ],
+          ],
+        );
 
-    final searchBox = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
-      child: SizedBox(
-        height: 38,
-        child: TextField(
-          controller: _searchController,
-          onChanged: (v) => setState(() {
-            searchQuery = v;
-            currentPage = 1;
-          }),
-          style: const TextStyle(fontSize: 12, color: Colors.black87),
-          decoration: InputDecoration(
-            hintText: 'Search ID or Name...',
-            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-            prefixIcon: const Icon(
-              Icons.search,
-              size: 16,
-              color: Color(0xFF94A3B8),
-            ),
-            isDense: true,
-            filled: true,
-            fillColor: const Color(0xFFF8FAFC),
-            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade200),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade200),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade200),
+        final searchBox = ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
+          child: SizedBox(
+            height: 38,
+            child: TextField(
+              controller: _searchController,
+              onChanged: (v) => setState(() {
+                searchQuery = v;
+                currentPage = 1;
+              }),
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
+              decoration: InputDecoration(
+                hintText: 'Search ID or Name...',
+                hintStyle: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 14,
+                ),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 16,
+                  color: Color(0xFF94A3B8),
+                ),
+                isDense: true,
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
-    );
+        );
 
-    return isNarrow
-        ? SizedBox(
-            width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (addUserBtn != null) addUserBtn,
-                const SizedBox(height: 10),
-                showEntries,
-                const SizedBox(height: 10),
-                searchBox,
-              ],
-            ),
-          )
-        : Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [showEntries, searchBox],
-          );
+        return isNarrow
+            ? SizedBox(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (addUserBtn != null) addUserBtn,
+                    const SizedBox(height: 10),
+                    showEntries,
+                    const SizedBox(height: 10),
+                    searchBox,
+                  ],
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [showEntries, searchBox],
+              );
       },
     );
   }
@@ -1535,7 +1627,9 @@ class _UserFormDialogState extends State<_UserFormDialog> {
     super.initState();
     _userIdCtrl = TextEditingController(text: widget.initUserId);
     _userNameCtrl = TextEditingController(text: widget.initUserName);
-    _passCtrl = TextEditingController(text: _isEditing ? '' : widget.initPassword);
+    _passCtrl = TextEditingController(
+      text: _isEditing ? '' : widget.initPassword,
+    );
 
     // Only set selectedRoleId if initRoleId actually exists in the roles list.
     // If it doesn't match (e.g. deleted role or ID mismatch), leave null so
@@ -1601,12 +1695,12 @@ class _UserFormDialogState extends State<_UserFormDialog> {
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.15),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
+                blurRadius: 40,
+                offset: const Offset(0, 15),
               ),
             ],
           ),
@@ -1614,11 +1708,11 @@ class _UserFormDialogState extends State<_UserFormDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header background: Gradient matching department.dart StylishDialog with top-left and top-right rounded corners
+              // Header background: Primary Blue gradient matching modal radius
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: isMobile ? 16 : 24,
-                  vertical: isMobile ? 14 : 18,
+                  vertical: isMobile ? 14 : 20,
                 ),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -1627,29 +1721,29 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(12),
-                    topRight: Radius.circular(12),
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
                   ),
                 ),
                 child: Row(
                   children: [
-                    // Header content: White user icon inside a translucent box (Colors.white.withOpacity(0.2))
+                    // White icon inside a subtle white-transparent square box
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
                         _isEditing
-                            ? Icons.manage_accounts_rounded
+                            ? Icons.edit_note_rounded
                             : Icons.person_add_rounded,
                         color: Colors.white,
                         size: 22,
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // Bold white title, and white subtitle
+                    // White bold header title and white subtitle text
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1657,30 +1751,27 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                         children: [
                           Text(
                             _isEditing ? "Edit User" : "Add User",
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.white,
-                              fontSize: 16,
+                              fontSize: isMobile ? 18 : 22,
                               fontWeight: FontWeight.bold,
-                              letterSpacing: -0.3,
+                              letterSpacing: -0.5,
                             ),
                           ),
                           const SizedBox(height: 2),
-                          const Text(
+                          Text(
                             "Provide system credentials and role",
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Colors.white.withOpacity(0.85),
                               fontSize: 12,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    // Action: Include a white close IconButton (Icons.close) at top-right to close the modal
+                    // White close IconButton (Icons.close) aligned to the top-right
                     IconButton(
-                      icon: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                      ),
+                      icon: const Icon(Icons.close, color: Colors.white),
                       tooltip: "Close",
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -1772,25 +1863,36 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                               fontSize: 13,
                               color: Color(0xFF475569),
                             ),
-                            decoration: _deco(_isEditing ? 'Enter new password' : 'Enter Password').copyWith(
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _isPasswordObscured
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  color: Colors.grey,
-                                  size: 20,
+                            decoration:
+                                _deco(
+                                  _isEditing
+                                      ? 'Enter new password'
+                                      : 'Enter Password',
+                                ).copyWith(
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _isPasswordObscured
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                      color: Colors.grey,
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      setState(
+                                        () => _isPasswordObscured =
+                                            !_isPasswordObscured,
+                                      );
+                                      setLocal(() {});
+                                    },
+                                  ),
                                 ),
-                                onPressed: () {
-                                  setState(() => _isPasswordObscured = !_isPasswordObscured);
-                                  setLocal(() {});
-                                },
-                              ),
-                            ),
                             validator: (v) {
-                              if (!_isEditing && (v == null || v.trim().isEmpty))
+                              if (!_isEditing &&
+                                  (v == null || v.trim().isEmpty))
                                 return 'Please enter the Password';
-                              if (v != null && v.trim().isNotEmpty && v.trim().length < 6)
+                              if (v != null &&
+                                  v.trim().isNotEmpty &&
+                                  v.trim().length < 6)
                                 return 'Minimum 6 characters';
                               return null;
                             },

@@ -1,13 +1,11 @@
 import '../../api_config.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/animated_heading.dart';
 import '../../widgets/stylish_dialog.dart';
-import '../../widgets/searchable_dropdown.dart';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Privilege definitions
@@ -77,29 +75,20 @@ class _RoleViewState extends State<RoleView>
   // ── workaround for backend dropping exact privilege pairs ──
   final Map<int, Set<String>> _exactPrivilegesCache = {};
   final Map<String, Set<String>> _exactPrivilegesCacheByName = {};
-  final Map<int, int> _statusOverrides = {};
 
-  @override
-  void initState() {
-    super.initState();
-    _initData();
-  }
-
-  Future<void> _initData() async {
-    // Clear stale persisted overrides on startup so live data from roleview is loaded
+  Future<void> _loadPersistedStatuses() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('role_status_overrides');
     } catch (_) {}
-    await fetchRoleList();
   }
 
-  Future<void> _persistStatuses() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final stringKeyMap = _statusOverrides.map((k, v) => MapEntry(k.toString(), v));
-      await prefs.setString('role_status_overrides', jsonEncode(stringKeyMap));
-    } catch (_) {}
+  @override
+  void initState() {
+    super.initState();
+    _loadPersistedStatuses().then((_) {
+      if (mounted) fetchRoleList();
+    });
   }
 
   @override
@@ -129,21 +118,34 @@ class _RoleViewState extends State<RoleView>
 
       if (res.statusCode == 200) {
         final resJson = jsonDecode(res.body);
-        // Explicitly unwrap {"data": {"roles": [...], "mainMenu": [...]}}
-        // Priority: res['data']['roles'] → res['data']['data'] → res['roles']
-        final dynamic outerData = (resJson is Map && resJson.containsKey('data'))
-            ? resJson['data']
-            : resJson;
-        final dynamic rawRoles = (outerData is Map && outerData.containsKey('roles'))
-            ? outerData['roles']
-            : (outerData is Map && outerData.containsKey('data'))
-                ? outerData['data']
-                : (resJson is Map && resJson.containsKey('roles'))
-                    ? resJson['roles']
-                    : null;
-        final List<dynamic> parsedRoles = (rawRoles is List ? rawRoles : [])
-            .map((r) => r is Map ? Map<String, dynamic>.from(r) : r)
+        List<dynamic> rawRoles = [];
+
+        // 1. API Response Extraction: explicitly extract response.data['data']['roles'] (ignore mainMenu)
+        if (resJson is Map && resJson['data'] is Map && resJson['data']['roles'] is List) {
+          rawRoles = resJson['data']['roles'] as List;
+        } else if (resJson is Map && resJson['roles'] is List) {
+          rawRoles = resJson['roles'] as List;
+        }
+
+        final List<dynamic> parsedRoles = rawRoles
+            .map((r) {
+              if (r is Map) {
+                final map = Map<String, dynamic>.from(r);
+                final int serverStatus =
+                    int.tryParse(map['status']?.toString() ?? '') ?? 0;
+                map['status'] = serverStatus;
+                map['Status'] = serverStatus;
+                map['active_status'] = serverStatus;
+                return map;
+              }
+              return r;
+            })
             .toList();
+        parsedRoles.sort((a, b) {
+          final aId = int.tryParse((a is Map ? (a['id'] ?? a['role_id'] ?? a['ID']) : null)?.toString() ?? '0') ?? 0;
+          final bId = int.tryParse((b is Map ? (b['id'] ?? b['role_id'] ?? b['ID']) : null)?.toString() ?? '0') ?? 0;
+          return bId.compareTo(aId);
+        });
 
         if (!mounted) return;
         setState(() {
@@ -157,11 +159,6 @@ class _RoleViewState extends State<RoleView>
                 _exactPrivilegesCacheByName.containsKey(name)) {
               _exactPrivilegesCache[id] = _exactPrivilegesCacheByName[name]!;
               _exactPrivilegesCacheByName.remove(name);
-            }
-            if (id != null && _statusOverrides.containsKey(id)) {
-              r['status'] = _statusOverrides[id];
-              r['Status'] = _statusOverrides[id];
-              r['active_status'] = _statusOverrides[id];
             }
           }
 
@@ -180,6 +177,8 @@ class _RoleViewState extends State<RoleView>
   }
 
   Future<void> fetchRoles() => fetchRoleList();
+  Future<void> _fetchRoles({bool showLoading = true}) =>
+      fetchRoleList(showLoading: showLoading);
 
   void _showServiceUnavailable() {
     if (!mounted) return;
@@ -357,50 +356,122 @@ class _RoleViewState extends State<RoleView>
     }
 
     setState(() => isSubmitting = true);
-    // DISMISS IMMEDIATELY
-    if (mounted && Navigator.canPop(context)) Navigator.pop(context);
 
     final bool isUpdate = editingId != null;
-    final url = isUpdate
-        ? '${getBaseUrl()}/updateRoleview'
-        : '${getBaseUrl()}/createRoleview';
-
     final roleName = _roleNameController.text.trim();
     final privsList = _selectedPrivs.toList();
 
-    final Map<String, dynamic> body = {
-      "api_key": _apiKey,
-      "role_name": roleName,
-      "previliges": privsList,
-    };
-    if (isUpdate) {
-      body["id"] = editingId;
-      _exactPrivilegesCache[editingId!] = Set.from(_selectedPrivs);
-    } else {
-      _exactPrivilegesCacheByName[roleName] = Set.from(_selectedPrivs);
-    }
-
     try {
-      final res = await http
-          .post(
-            Uri.parse(url),
-            headers: {"Content-Type": "application/json"},
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 15));
+      if (isUpdate) {
+        // Find existing role from allRoles
+        final currentRole = allRoles.firstWhere(
+          (r) => r['id']?.toString() == editingId.toString(),
+          orElse: () => null,
+        );
 
-      if (res.statusCode == 200) {
-        if (!mounted) return;
-        _snack(isUpdate ? "Role updated!" : "Role created!");
-        _resetForm();
-        fetchRoleList();
+        // 1. Send POST request to https://display.sriher.com/roleview
+        final Map<String, dynamic> roleviewPayload = {
+          "api_key": _apiKey,
+          "id": editingId,
+          "role_name": roleName,
+          "role_grade": currentRole?['role_grade'] ?? 0,
+          "status": currentRole?['status'] ?? 1,
+        };
+
+        final res = await http
+            .post(
+              Uri.parse('${getBaseUrl()}/roleview'),
+              headers: {"Content-Type": "application/json"},
+              body: jsonEncode(roleviewPayload),
+            )
+            .timeout(const Duration(seconds: 15));
+
+        // 2. Also send privileges to updateRoleview
+        final Map<String, dynamic> updatePrivsPayload = {
+          "api_key": _apiKey,
+          "id": editingId,
+          "role_name": roleName,
+          "previliges": privsList,
+        };
+        try {
+          await http
+              .post(
+                Uri.parse('${getBaseUrl()}/updateRoleview'),
+                headers: {"Content-Type": "application/json"},
+                body: jsonEncode(updatePrivsPayload),
+              )
+              .timeout(const Duration(seconds: 10));
+        } catch (_) {}
+
+        _exactPrivilegesCache[editingId!] = Set.from(_selectedPrivs);
+
+        if (res.statusCode == 200) {
+          if (!mounted) return;
+
+          // a) Immediately update local state via setState() so table re-renders instantly
+          setState(() {
+            final idx = allRoles
+                .indexWhere((r) => r['id']?.toString() == editingId.toString());
+            if (idx != -1 && allRoles[idx] is Map) {
+              allRoles[idx]['role_name'] = roleName;
+            }
+          });
+
+          // a continued) Immediately call await _fetchRoles() to synchronize
+          await _fetchRoles(showLoading: false);
+
+          // b) Close modal using Navigator.pop(context)
+          if (mounted && Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
+
+          _snack("Role updated!");
+          _resetForm();
+        } else {
+          if (!mounted) return;
+          final resData = jsonDecode(res.body);
+          final errorMsg = resData is Map
+              ? (resData['message'] ?? resData['error'] ?? "Server error")
+              : "Server error";
+          _snack("$errorMsg (${res.statusCode}).", isError: true);
+        }
       } else {
-        if (!mounted) return;
-        final resData = jsonDecode(res.body);
-        final errorMsg = resData is Map
-            ? (resData['message'] ?? resData['error'] ?? "Server error")
-            : "Server error";
-        _snack("$errorMsg (${res.statusCode}).", isError: true);
+        // CREATE ROLE
+        final Map<String, dynamic> body = {
+          "api_key": _apiKey,
+          "role_name": roleName,
+          "previliges": privsList,
+        };
+        _exactPrivilegesCacheByName[roleName] = Set.from(_selectedPrivs);
+
+        final res = await http
+            .post(
+              Uri.parse('${getBaseUrl()}/createRoleview'),
+              headers: {"Content-Type": "application/json"},
+              body: jsonEncode(body),
+            )
+            .timeout(const Duration(seconds: 15));
+
+        if (res.statusCode == 200) {
+          if (!mounted) return;
+          setState(() {
+            currentPage = 0;
+            _sortColumnIndex = null;
+          });
+          await _fetchRoles(showLoading: false);
+          if (mounted && Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
+          _snack("Role created!");
+          _resetForm();
+        } else {
+          if (!mounted) return;
+          final resData = jsonDecode(res.body);
+          final errorMsg = resData is Map
+              ? (resData['message'] ?? resData['error'] ?? "Server error")
+              : "Server error";
+          _snack("$errorMsg (${res.statusCode}).", isError: true);
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -487,10 +558,8 @@ class _RoleViewState extends State<RoleView>
 
       if (res.statusCode == 200) {
         if (!mounted) return;
-        _statusOverrides.remove(id);
-        await _persistStatuses();
         _snack("Role deleted.");
-        fetchRoleList();
+        fetchRoleList(showLoading: false);
       } else {
         if (!mounted) return;
         _snack("Delete failed (${res.statusCode}).", isError: true);
@@ -503,20 +572,36 @@ class _RoleViewState extends State<RoleView>
 
   Future<void> toggleStatus(dynamic idOrRole, [dynamic currentStatus]) async {
     try {
+      Map<String, dynamic>? roleItem;
       dynamic id;
       dynamic rawStatus;
 
       if (idOrRole is Map) {
-        id = idOrRole['id'] ?? idOrRole['role_id'];
-        rawStatus = idOrRole['status'] ?? idOrRole['Status'] ?? idOrRole['active_status'] ?? currentStatus;
+        roleItem = Map<String, dynamic>.from(idOrRole);
+        id = roleItem['id'] ?? roleItem['role_id'];
+        rawStatus = roleItem['status'] ??
+            roleItem['Status'] ??
+            roleItem['active_status'] ??
+            currentStatus;
       } else {
         id = idOrRole;
         rawStatus = currentStatus;
+        final match = allRoles.firstWhere(
+          (r) => r['id']?.toString() == id?.toString(),
+          orElse: () => null,
+        );
+        if (match is Map) {
+          roleItem = Map<String, dynamic>.from(match);
+        }
       }
 
-      // Active = 1, Inactive = 0 for roles
-      final int parsedStatus = int.tryParse(rawStatus?.toString() ?? '0') ?? 0;
-      final int newStatus = (parsedStatus == 1) ? 0 : 1;
+      final rawId = roleItem?['id'] ?? roleItem?['role_id'] ?? id;
+      final int? roleId = int.tryParse(rawId?.toString() ?? '');
+      if (roleId == null) return;
+
+      // Status Mapping: Active = 1 (Green Switch) | Inactive = 0 (Grey Switch)
+      final int currentVal = (rawStatus == 1 || rawStatus == "1") ? 1 : 0;
+      final int targetStatus = currentVal == 1 ? 0 : 1;
 
       final confirm = await showDialog<bool>(
         context: context,
@@ -525,7 +610,7 @@ class _RoleViewState extends State<RoleView>
           return AlertDialog(
             title: const Text("Confirm Action", textAlign: TextAlign.center),
             content: Text(
-              newStatus == 1
+              targetStatus == 1
                   ? "Do you want to set this item as active?"
                   : "Do you want to set this item as inactive?",
               textAlign: TextAlign.center,
@@ -543,153 +628,68 @@ class _RoleViewState extends State<RoleView>
             ],
           );
         },
+        
       );
 
       if (confirm != true) return;
 
-      final int roleId = int.tryParse(id?.toString() ?? '0') ?? 0;
-
-      // Find the full role item so we can mirror handleSubmit's payload exactly
-      final roleItem = allRoles.firstWhere(
-        (r) => r['id']?.toString() == id?.toString(),
-        orElse: () => null,
-      );
-      final roleName = roleItem is Map ? (roleItem['role_name']?.toString() ?? '') : '';
-      final roleGrade = roleItem is Map ? (roleItem['role_grade'] ?? 0) : 0;
-
-      // Retrieve cached privileges (same as handleSubmit's _selectedPrivs)
-      final List<String> privsList = _exactPrivilegesCache.containsKey(roleId)
-          ? _exactPrivilegesCache[roleId]!.toList()
-          : [];
-
-      // Mirror the exact payload structure that the working Edit Modal uses
-      // (see handleSubmit). All required fields must be present.
       final Map<String, dynamic> body = {
         "api_key": _apiKey,
-        "id": roleId,
-        "role_name": roleName,
-        "role_grade": roleGrade,
-        "previliges": privsList,
-        "status": newStatus,
+        "id": roleId.toString(),
+        "status": targetStatus.toString(),
       };
 
-      // ── DEBUG: Log request details before API call ──
-      final String targetUrl = '${getBaseUrl()}/roleview';
-      final String payloadJson = jsonEncode(body);
-      debugPrint('═══════════════════════════════════════════════════');
-      debugPrint('▶ TOGGLE STATUS — REQUEST');
-      debugPrint('  URL:     $targetUrl');
-      debugPrint('  PAYLOAD: $payloadJson');
-      debugPrint('  (parsedStatus=$parsedStatus → newStatus=$newStatus)');
-      debugPrint('═══════════════════════════════════════════════════');
-
-      final response = await http.post(
-        Uri.parse(targetUrl),
-        headers: {"Content-Type": "application/json"},
-        body: payloadJson,
-      );
-
-      // ── DEBUG: Log response details after API call ──
-      debugPrint('═══════════════════════════════════════════════════');
-      debugPrint('◀ TOGGLE STATUS — RESPONSE');
-      debugPrint('  HTTP STATUS CODE: ${response.statusCode}');
-      debugPrint('  RAW BODY: ${response.body}');
-      debugPrint('═══════════════════════════════════════════════════');
-
-      if (!mounted) return;
+      final response = await http
+          .post(
+            Uri.parse('${getBaseUrl()}/api/rolestatusUpdate'),
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        // Validate backend response body for actual success
-        bool backendSuccess = false;
-        String backendMsg = '';
-        try {
-          final resJson = jsonDecode(response.body);
-          if (resJson is Map) {
-            backendSuccess = resJson['status'] == true ||
-                resJson['status'] == 'true' ||
-                resJson['status'] == 'Success' ||
-                (resJson['message']?.toString().toLowerCase().contains('success') ?? false) ||
-                (resJson['Message']?.toString().toLowerCase().contains('success') ?? false) ||
-                resJson['success'] == true;
-            backendMsg = (resJson['message'] ?? resJson['Message'])?.toString() ?? '';
-          }
-          // If backend doesn't include a status/message field, treat HTTP 200 as success
-          if (!backendSuccess && backendMsg.isEmpty) {
-            backendSuccess = true;
-          }
-        } catch (_) {
-          // If body isn't JSON, treat HTTP 200 as success
-          backendSuccess = true;
-        }
 
-        debugPrint('  backendSuccess=$backendSuccess  backendMsg="$backendMsg"');
+        if (!mounted) return;
 
-        if (backendSuccess) {
-          // Update local state after server confirms
-          setState(() {
-            _statusOverrides[roleId] = newStatus;
-            final idx = allRoles.indexWhere((r) => r['id']?.toString() == id?.toString());
-            if (idx != -1) {
-              allRoles[idx]['status'] = newStatus;
-              allRoles[idx]['Status'] = newStatus;
-              allRoles[idx]['active_status'] = newStatus;
-            }
-          });
-          await _persistStatuses();
-
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(newStatus == 1
-                  ? "Role has been successfully activated."
-                  : "Role has been successfully deactivated."),
-              backgroundColor: Colors.green.shade700,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          // Re-fetch to ensure UI is fully in sync with server
-          fetchRoleList(showLoading: false);
-        } else {
-          // Backend returned 200 but indicated failure
-          debugPrint('  ⚠ Backend indicated failure despite HTTP 200');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(backendMsg.isNotEmpty
-                  ? "Update failed: $backendMsg"
-                  : "Update failed. Please try again."),
-              backgroundColor: Colors.red.shade700,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      } else {
-        // HTTP error
-        debugPrint('  ✖ HTTP error ${response.statusCode}');
-        String errorMsg = 'Server error (${response.statusCode})';
-        try {
-          final errJson = jsonDecode(response.body);
-          if (errJson is Map && (errJson['message'] ?? errJson['Message']) != null) {
-            errorMsg = (errJson['message'] ?? errJson['Message']).toString();
+        // Immediately call setState() so the switch color updates on screen instantly
+        setState(() {
+          final idx = allRoles
+              .indexWhere((r) => r['id']?.toString() == roleId.toString());
+          if (idx != -1 && allRoles[idx] is Map) {
+            allRoles[idx]['status'] = targetStatus;
+            allRoles[idx]['Status'] = targetStatus;
+            allRoles[idx]['active_status'] = targetStatus;
           }
-        } catch (_) {}
+          if (idOrRole is Map) {
+            idOrRole['status'] = targetStatus;
+            idOrRole['Status'] = targetStatus;
+            idOrRole['active_status'] = targetStatus;
+          }
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMsg),
-            backgroundColor: Colors.red.shade700,
+            content: Text(targetStatus == 1
+                ? "Role has been successfully activated."
+                : "Role has been successfully deactivated."),
+            backgroundColor: Colors.green.shade700,
             behavior: SnackBarBehavior.floating,
           ),
         );
+
+        // Immediately call _fetchRoles()
+        await _fetchRoles(showLoading: false);
+      } else {
+        if (!mounted) return;
+        _snack("Failed to update status (${response.statusCode}).", isError: true);
       }
     } catch (e) {
       debugPrint("Toggle Error: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Connection failed: $e"),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _snack("Connection failed: $e", isError: true);
       }
     }
   }
@@ -866,10 +866,10 @@ class _RoleViewState extends State<RoleView>
         return _sortAscending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
       });
     } else {
-      // Default: sort by id descending (newest at the top)
+      // Default: sort by id descending (newest at the top, oldest in last)
       filtered.sort((a, b) {
-        final aId = int.tryParse(a['id']?.toString() ?? '0') ?? 0;
-        final bId = int.tryParse(b['id']?.toString() ?? '0') ?? 0;
+        final aId = int.tryParse((a is Map ? (a['id'] ?? a['role_id'] ?? a['ID']) : null)?.toString() ?? '0') ?? 0;
+        final bId = int.tryParse((b is Map ? (b['id'] ?? b['role_id'] ?? b['ID']) : null)?.toString() ?? '0') ?? 0;
         return bId.compareTo(aId);
       });
     }
@@ -1237,10 +1237,31 @@ class _RoleViewState extends State<RoleView>
                           child: Transform.scale(
                             scale: 0.7,
                             child: Switch(
-                              // Active = 1 (green/on), Inactive = 0 (grey/off)
+                              // Active = 1 (Green Switch) | Inactive = 0 (Grey Switch)
                               value: (int.tryParse(role['status']?.toString() ?? '0') ?? 0) == 1,
-                              activeColor: Colors.green,
-                              onChanged: (v) => toggleStatus(role),
+                              activeThumbColor: Colors.green,
+                              activeTrackColor: Colors.green.shade200,
+                              inactiveThumbColor: Colors.grey,
+                              inactiveTrackColor: Colors.grey.shade300,
+                              trackOutlineColor:
+                                  WidgetStateProperty.resolveWith<Color?>(
+                                (_) => Colors.transparent,
+                              ),
+                              thumbColor:
+                                  WidgetStateProperty.resolveWith<Color>((states) {
+                                if (states.contains(WidgetState.selected)) {
+                                  return Colors.green;
+                                }
+                                return Colors.grey;
+                              }),
+                              trackColor:
+                                  WidgetStateProperty.resolveWith<Color>((states) {
+                                if (states.contains(WidgetState.selected)) {
+                                  return Colors.green.shade200;
+                                }
+                                return Colors.grey.shade300;
+                              }),
+                              onChanged: (v) => toggleStatus(role, role['status']),
                             ),
                           ),
                         ),
@@ -1324,7 +1345,6 @@ class _RoleViewState extends State<RoleView>
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobileView = screenWidth < 900;
-    final tableHeight = isMobileView ? 320.0 : 400.0;
 
     TableRow buildPrivRow(String section, List<_Priv> privs) {
       return TableRow(
@@ -1667,131 +1687,6 @@ class _RoleViewState extends State<RoleView>
       );
   }
 
-  DataColumn _buildCol(
-    String label, {
-    bool sortable = false,
-    int? columnIndex,
-    void Function(int, bool)? onSort,
-  }) {
-    return DataColumn(
-      label: Expanded(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.blue.shade800,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (sortable && columnIndex != null) ...[
-              const SizedBox(width: 4),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      if (onSort != null) onSort(columnIndex, true);
-                    },
-                    child: Align(
-                      heightFactor: 0.4,
-                      child: Icon(
-                        Icons.arrow_drop_up,
-                        size: 18,
-                        color: _sortColumnIndex == columnIndex && _sortAscending
-                            ? Colors.blue
-                            : const Color(0xFF94A3B8),
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      if (onSort != null) onSort(columnIndex, false);
-                    },
-                    child: Align(
-                      heightFactor: 0.4,
-                      child: Icon(
-                        Icons.arrow_drop_down,
-                        size: 18,
-                        color:
-                            _sortColumnIndex == columnIndex && !_sortAscending
-                            ? Colors.blue
-                            : const Color(0xFF94A3B8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  DataRow _buildRow(int idx, dynamic role) {
-    return DataRow(
-      cells: [
-        DataCell(
-          Padding(
-            padding: const EdgeInsets.only(left: 8.0),
-            child: Text("$idx", style: const TextStyle(fontSize: 13)),
-          ),
-        ),
-        DataCell(
-          Text(
-            role['role_name']?.toString() ?? "-",
-            style: const TextStyle(fontSize: 13),
-          ),
-        ),
-        DataCell(
-          IconButton(
-            icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-            tooltip: "Edit",
-            onPressed: () => loadForEdit(role),
-          ),
-        ),
-        DataCell(
-          Transform.scale(
-            scale: 0.7,
-            child: Switch(
-              value: role['status'] == 1 || role['status'] == "1",
-              activeColor: Colors.green,
-              onChanged: (v) => toggleStatus(
-                role['id'],
-                role['status'],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  bool _isItemActive(dynamic data) {
-    if (data == null || data is! Map) return false;
-    final id = int.tryParse((data['id'] ?? data['role_id'])?.toString() ?? '');
-    if (id != null && _statusOverrides.containsKey(id)) {
-      return _statusOverrides[id] == 1;
-    }
-    final raw =
-        data['status'] ??
-        data['active_status'] ??
-        data['Status'] ??
-        data['is_active'] ??
-        data['role_status'];
-    // For roleview slot:
-    // status == 1 (or "1"): Active -> Green toggle (ON).
-    // status == 0 (or "0"): Inactive -> Grey toggle (OFF).
-    final int parsed = int.tryParse(raw?.toString() ?? '0') ?? 0;
-    return parsed == 1;
-  }
 
   Widget _buildCreateRoleButton(bool isNarrow) {
     return ElevatedButton.icon(

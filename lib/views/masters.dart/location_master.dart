@@ -71,8 +71,15 @@ class _LocationMasterViewState extends State<LocationMasterView> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> decoded = jsonDecode(response.body);
         if (!mounted) return;
+        final raw = decoded['data'] ?? decoded['location_list'] ?? [];
+        final List<dynamic> list = (raw is List) ? List.from(raw) : [];
+        list.sort((a, b) {
+          final aId = int.tryParse((a is Map ? (a['id'] ?? a['ID'] ?? a['location_id']) : null)?.toString() ?? '0') ?? 0;
+          final bId = int.tryParse((b is Map ? (b['id'] ?? b['ID'] ?? b['location_id']) : null)?.toString() ?? '0') ?? 0;
+          return bId.compareTo(aId);
+        });
         setState(() {
-          locationList = decoded['data'] ?? decoded['location_list'] ?? [];
+          locationList = list;
           isLoading = false;
         });
       } else {
@@ -108,6 +115,10 @@ class _LocationMasterViewState extends State<LocationMasterView> {
         if (!mounted) return;
         _showSnackBar("Location Submitted Successfully!");
         _clearForm();
+        setState(() {
+          currentPage = 1;
+          _sortColumnIndex = null;
+        });
         fetchLocations(showLoading: false);
       }
     } catch (e) {
@@ -318,13 +329,13 @@ class _LocationMasterViewState extends State<LocationMasterView> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildSmallTextField(
-                  'Enter Building/Area Name',
+                  'Location Name',
                   _buildingAreaController,
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
                   ],
                   validator: (v) => (v == null || v.isEmpty)
-                      ? 'Please enter the Building/Area Name'
+                      ? 'Please enter the Location Name'
                       : null,
                 ),
                 const SizedBox(height: 20),
@@ -621,11 +632,13 @@ class _LocationMasterViewState extends State<LocationMasterView> {
             : bVal.toLowerCase().compareTo(aVal.toLowerCase());
       });
     } else {
-      // Default sort by id to maintain consistent order
+      // Default: sort by id descending (latest data at the top, oldest in last)
       filteredList.sort(
-        (a, b) => (int.tryParse(a['id']?.toString() ?? '0') ?? 0).compareTo(
-          int.tryParse(b['id']?.toString() ?? '0') ?? 0,
-        ),
+        (a, b) {
+          final aId = int.tryParse((a is Map ? (a['id'] ?? a['ID'] ?? a['location_id']) : null)?.toString() ?? '0') ?? 0;
+          final bId = int.tryParse((b is Map ? (b['id'] ?? b['ID'] ?? b['location_id']) : null)?.toString() ?? '0') ?? 0;
+          return bId.compareTo(aId);
+        },
       );
     }
 
@@ -719,7 +732,7 @@ class _LocationMasterViewState extends State<LocationMasterView> {
                                     child: Padding(
                                       padding: const EdgeInsets.only(left: 12.0),
                                       child: _buildHeaderCell(
-                                        'BUILDING/AREA NAME',
+                                        'LOCATION NAME',
                                         colIndex: 0,
                                       ),
                                     ),

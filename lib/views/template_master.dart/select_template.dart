@@ -275,6 +275,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   final TextEditingController _newDepartmentNameController =
       TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _leftPanelScrollController = ScrollController();
+  final ScrollController _availFilesHorizontalController = ScrollController();
 
   // Map to store controllers for each available file to prevent recreation
   final Map<int, TextEditingController> _availableFileControllers = {};
@@ -345,6 +347,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     _newTemplateNameController.dispose();
     _newDepartmentNameController.dispose();
     _searchController.dispose();
+    _leftPanelScrollController.dispose();
+    _availFilesHorizontalController.dispose();
     for (var controller in _availableFileControllers.values) {
       controller.dispose();
     }
@@ -1784,6 +1788,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 950;
+    final isSmallLaptop = screenWidth >= 950 && screenWidth < 1280;
 
     final configCard = Container(
       padding: const EdgeInsets.all(24),
@@ -1811,7 +1816,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               color: Color.fromARGB(255, 33, 150, 243),
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 10),
           _buildFormRow(
             context,
             "Select Template Name",
@@ -1839,7 +1844,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               }
             },
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 5),
           _buildFormRow(
             context,
             "Select Department Name",
@@ -1863,7 +1868,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               }
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 5),
           const Text(
             "FILE TYPE",
             style: TextStyle(
@@ -1872,7 +1877,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               color: Color(0xFF334155),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 5),
           Container(
             decoration: BoxDecoration(
               color: Colors.blue.shade50.withOpacity(0.3),
@@ -2059,14 +2064,23 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
               // LEFT PANEL: Configuration Card & Available Files Table
               Expanded(
                 flex: 1,
-                child: Column(
-                  children: [
-                    configCard,
-                    if (selectedCategoryId != null && fileType != null) ...[
-                      const SizedBox(height: 32),
-                      Expanded(child: _buildAvailableFilesTable()),
-                    ],
-                  ],
+                child: Scrollbar(
+                  controller: _leftPanelScrollController,
+                  thumbVisibility: isSmallLaptop,
+                  child: SingleChildScrollView(
+                    controller: _leftPanelScrollController,
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        configCard,
+                        if (selectedCategoryId != null && fileType != null) ...[
+                          const SizedBox(height: 24),
+                          _buildAvailableFilesTable(),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 32),
@@ -2219,7 +2233,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       child: Row(
         children: [
           Expanded(
-            flex: 3,
+            flex: 5,
             child: Text(
               fileType == 'videos' ? 'File Name / Video' : 'File Name / Image',
               style: _headerStyle(),
@@ -2232,16 +2246,16 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
             child: Text(
               "Duration",
               style: _headerStyle(),
-              textAlign: TextAlign.left,
+              textAlign: TextAlign.center,
             ),
           ),
           const SizedBox(width: 8),
-          SizedBox(
-            width: 90,
+          Expanded(
+            flex: 2,
             child: Text(
               "Action",
               style: _headerStyle(),
-              textAlign: TextAlign.left,
+              textAlign: TextAlign.center,
             ),
           ),
           const SizedBox(width: 16),
@@ -2276,8 +2290,8 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
     } else {
       // ── Lazy ListView.builder — renders visible rows ─────────────────────────
       body = ListView.builder(
-        shrinkWrap: false,
-        physics: const AlwaysScrollableScrollPhysics(),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         itemCount: displayedFilesList.length,
         itemBuilder: (context, i) {
           if (i < 0 || i >= displayedFilesList.length) {
@@ -2309,6 +2323,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
           }
           final controller = _availableFileControllers[fileId]!;
           final bool isMobile = screenWidth < 600;
+          final bool isSmallLaptop = screenWidth >= 600 && screenWidth < 1200;
+          final double thumbW = isMobile ? 85.0 : (isSmallLaptop ? 100.0 : 120.0);
+          final double thumbH = isMobile ? 65.0 : (isSmallLaptop ? 65.0 : 75.0);
 
           return Column(
             mainAxisSize: MainAxisSize.min,
@@ -2323,14 +2340,14 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   children: [
                     // ── Thumbnail & File Name (Combined) ─────────────────────────
                     Expanded(
-                      flex: 3,
+                      flex: 5,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Container(
-                            width: isMobile ? 85 : 120,
-                            height: isMobile ? 65 : 75,
+                            width: thumbW,
+                            height: thumbH,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(color: Colors.grey.shade200),
@@ -2357,8 +2374,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                     // ── Duration ──────────────────────────────────
                     Expanded(
                       flex: 2,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
+                      child: Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -2383,10 +2399,9 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                     ),
                     const SizedBox(width: 8),
                     // ── Add button ────────────────────────────────────────
-                    SizedBox(
-                      width: 90,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
+                    Expanded(
+                      flex: 2,
+                      child: Center(
                         child: ElevatedButton(
                           onPressed:
                               (_addingFileIds.contains(fileId) ||
@@ -2424,7 +2439,7 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                             backgroundColor: Colors.blue.shade600,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
+                              horizontal: 14,
                               vertical: 10,
                             ),
                             shape: RoundedRectangleBorder(
@@ -2468,14 +2483,17 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         entriesHeader,
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final double minWidth = 450;
-              final double tableWidth = constraints.maxWidth > minWidth
-                  ? constraints.maxWidth
-                  : minWidth;
-              return SingleChildScrollView(
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final double minWidth = 450;
+            final double tableWidth = constraints.maxWidth > minWidth
+                ? constraints.maxWidth
+                : minWidth;
+            return Scrollbar(
+              controller: _availFilesHorizontalController,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _availFilesHorizontalController,
                 scrollDirection: Axis.horizontal,
                 child: Container(
                   width: tableWidth,
@@ -2487,12 +2505,12 @@ class _SelectTemplateViewState extends State<SelectTemplateView> {
                   clipBehavior: Clip.antiAlias,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [header, Expanded(child: body)],
+                    children: [header, body],
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ],
     );

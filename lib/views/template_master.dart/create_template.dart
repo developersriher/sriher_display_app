@@ -41,7 +41,7 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
 
   // Sorting State
   int _sortColumnIndex = -1;
-  bool _sortAscending = true;
+  bool _sortAscending = false;
 
   // Form Controller
   final TextEditingController _templateNameController = TextEditingController();
@@ -95,11 +95,11 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
         List<dynamic> data = decoded['data'] ?? [];
 
         // Sorting: Latest IDs first
-        data.sort(
-          (a, b) => (int.tryParse(b['id'].toString()) ?? 0).compareTo(
-            int.tryParse(a['id'].toString()) ?? 0,
-          ),
-        );
+        data.sort((a, b) {
+          final aId = int.tryParse((a is Map ? (a['id'] ?? a['ID']) : null)?.toString() ?? '0') ?? 0;
+          final bId = int.tryParse((b is Map ? (b['id'] ?? b['ID']) : null)?.toString() ?? '0') ?? 0;
+          return bId.compareTo(aId);
+        });
 
         setState(() {
           templateList = data;
@@ -132,6 +132,11 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
       if (response.statusCode == 200) {
         _showSnackBar("Template submitted successfully.");
         _templateNameController.clear();
+        setState(() {
+          currentPage = 1;
+          _sortColumnIndex = -1;
+          _sortAscending = false;
+        });
         await fetchTemplatesFromServer();
       }
     } catch (e) {
@@ -367,8 +372,8 @@ class _CreateTemplateViewState extends State<CreateTemplateView> {
       }
 
       if (_sortColumnIndex == -1) {
-        int idA = int.tryParse(aVal) ?? 0;
-        int idB = int.tryParse(bVal) ?? 0;
+        int idA = int.tryParse((a is Map ? (a['id'] ?? a['ID']) : null)?.toString() ?? '0') ?? 0;
+        int idB = int.tryParse((b is Map ? (b['id'] ?? b['ID']) : null)?.toString() ?? '0') ?? 0;
         return _sortAscending ? idA.compareTo(idB) : idB.compareTo(idA);
       }
 
