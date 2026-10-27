@@ -1301,43 +1301,56 @@ class _ScheduleListViewState extends State<ScheduleListView> {
       ],
     );
 
-    final searchBox = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: isMobileView ? 180 : 260),
-      child: SizedBox(
-        height: 36,
-        child: TextField(
-          controller: _searchCtrl,
-          style: const TextStyle(fontSize: 12, color: Colors.black87),
-          decoration: InputDecoration(
-            hintText: 'Search schedules…',
-            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-            prefixIcon: const Icon(Icons.search, size: 16, color: Colors.grey),
-            suffixIcon: _searchCtrl.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear, size: 16, color: Colors.grey),
-                    onPressed: _searchCtrl.clear,
-                  )
-                : null,
-            isDense: true,
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
+
+final bool isMobile = MediaQuery.of(context).size.width < 600;
+final searchBox = ConstrainedBox(
+  constraints: BoxConstraints(maxWidth: isMobileView ? 180 : 260),
+  child: SizedBox(
+    height: 36,
+    child: TextField(
+      controller: _searchCtrl,
+      style: const TextStyle(fontSize: 12, color: Colors.black87),
+      decoration: InputDecoration(
+        hintText: 'Search schedules…',
+        hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+        prefixIconConstraints: BoxConstraints(
+          minWidth: isMobile ? 24 : 28,
+          minHeight: 16,
+        ),
+        prefixIcon: Padding(
+          padding: EdgeInsets.only(left: 8.0, right: isMobile ? 4.0 : 6.0),
+          child: Icon(
+            Icons.search,
+            size: isMobile ? 15 : 16,
+            color: const Color(0xFF94A3B8),
           ),
         ),
+        suffixIcon: _searchCtrl.text.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear, size: 16, color: Colors.grey),
+                onPressed: _searchCtrl.clear,
+              )
+            : null,
+        isDense: true,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
       ),
-    );
+    ),
+  ),
+);
 
     return Padding(
       padding: const EdgeInsets.all(16.0),

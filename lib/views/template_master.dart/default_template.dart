@@ -1490,6 +1490,21 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
   }
 
   Widget _buildTableControls({bool isMobile = false, Widget? createBtn}) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    final double searchMaxWidth;
+    final double searchFontSize;
+    if (screenWidth >= 1024) {
+      searchMaxWidth = 250;
+      searchFontSize = 13;
+    } else if (screenWidth >= 600) {
+      searchMaxWidth = 200;
+      searchFontSize = 12;
+    } else {
+      searchMaxWidth = 170;
+      searchFontSize = 11.5;
+    }
+
     final showEntries = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1557,35 +1572,46 @@ class _DefaultTemplateViewState extends State<DefaultTemplateView> {
     );
 
     final searchBox = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: isMobile ? 180 : 250),
+      constraints: BoxConstraints(maxWidth: searchMaxWidth),
       child: SizedBox(
-        height: 40,
+        height: 38,
         child: TextField(
           controller: _searchController,
           onChanged: (v) => setState(() {
             _searchQuery = v;
             _currentPage = 1;
           }),
-          style: const TextStyle(color: Colors.black87, fontSize: 12),
+          style: TextStyle(color: Colors.black87, fontSize: searchFontSize),
           decoration: InputDecoration(
-            hintText: "Search devices...",
-            hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
-            prefixIcon: const Icon(Icons.search, size: 16),
+            hintText: "Search devices",
+            hintStyle: TextStyle(fontSize: searchFontSize, color: const Color(0xFF94A3B8)),
+             prefixIconConstraints: BoxConstraints(
+  minWidth: isMobile ? 24 : 28,
+  minHeight: 16,
+),
+prefixIcon: Padding(
+  padding: EdgeInsets.only(left: 8.0, right: isMobile ? 4.0 : 6.0),
+  child: Icon(
+    Icons.search,
+    size: isMobile ? 15 : 16, // Icon size scales with device
+    color: const Color(0xFF94A3B8),
+  ),
+            ),
             isDense: true,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: const Color(0xFFF8FAFC),
             contentPadding: const EdgeInsets.symmetric(vertical: 8),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: BorderSide(color: Colors.grey.shade200),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: BorderSide(color: Colors.grey.shade200),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: BorderSide(color: Colors.grey.shade200),
             ),
           ),
         ),

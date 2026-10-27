@@ -2366,7 +2366,7 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                   color: Colors.white,
                   size: 64,
                 ),
-                onPressed: () {
+                onPressed: () { 
                   widget.onPlayPause();
                   setState(() => _playing = !_playing);
                 },

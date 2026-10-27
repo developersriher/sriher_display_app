@@ -144,7 +144,7 @@ class _RoleViewState extends State<RoleView>
         parsedRoles.sort((a, b) {
           final aId = int.tryParse((a is Map ? (a['id'] ?? a['role_id'] ?? a['ID']) : null)?.toString() ?? '0') ?? 0;
           final bId = int.tryParse((b is Map ? (b['id'] ?? b['role_id'] ?? b['ID']) : null)?.toString() ?? '0') ?? 0;
-          return bId.compareTo(aId);
+          return aId.compareTo(bId);
         });
 
         if (!mounted) return;
@@ -752,14 +752,18 @@ class _RoleViewState extends State<RoleView>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Header background: Primary Blue (0xFF0D47A1) with top rounded corners (Radius.circular(12))
+                      // Header background: Primary Blue gradient matching device master dialog
                       Container(
                         padding: EdgeInsets.symmetric(
                           horizontal: isMobile ? 16 : 24,
                           vertical: isMobile ? 14 : 18,
                         ),
                         decoration: const BoxDecoration(
-                          color: Color(0xFF0D47A1),
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                           borderRadius: BorderRadius.only(
                             topLeft: Radius.circular(12),
                             topRight: Radius.circular(12),
@@ -866,11 +870,11 @@ class _RoleViewState extends State<RoleView>
         return _sortAscending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
       });
     } else {
-      // Default: sort by id descending (newest at the top, oldest in last)
+      // Default: sort by id ascending (whatever data is added at the first at start is at the top of the table)
       filtered.sort((a, b) {
         final aId = int.tryParse((a is Map ? (a['id'] ?? a['role_id'] ?? a['ID']) : null)?.toString() ?? '0') ?? 0;
         final bId = int.tryParse((b is Map ? (b['id'] ?? b['role_id'] ?? b['ID']) : null)?.toString() ?? '0') ?? 0;
-        return bId.compareTo(aId);
+        return aId.compareTo(bId);
       });
     }
 
@@ -1714,7 +1718,21 @@ class _RoleViewState extends State<RoleView>
   Widget _buildListHeader() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isNarrow = screenWidth < 600;
+
+        final double searchMaxWidth;
+        final double searchFontSize;
+        if (screenWidth >= 1024) {
+          searchMaxWidth = 250;
+          searchFontSize = 13;
+        } else if (screenWidth >= 600) {
+          searchMaxWidth = 200;
+          searchFontSize = 12;
+        } else {
+          searchMaxWidth = 170;
+          searchFontSize = 11.5;
+        }
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1782,9 +1800,9 @@ class _RoleViewState extends State<RoleView>
             ],
           ],
         );
-
+final bool isMobile = MediaQuery.of(context).size.width < 600;
         final searchBox = ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
+          constraints: BoxConstraints(maxWidth: searchMaxWidth),
           child: SizedBox(
             height: 38,
             child: TextField(
@@ -1793,17 +1811,24 @@ class _RoleViewState extends State<RoleView>
                 searchQuery = val;
                 currentPage = 0;
               }),
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
+              style: TextStyle(fontSize: searchFontSize, color: Colors.black87),
               decoration: InputDecoration(
-                hintText: 'Search roles...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontSize: 14,
+                hintText: 'Search roles',
+                hintStyle: TextStyle(
+                  color: const Color(0xFF94A3B8),
+                  fontSize: searchFontSize,
                 ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 16,
-                  color: Color(0xFF94A3B8),
+                  prefixIconConstraints: BoxConstraints(
+  minWidth: isMobile ? 24 : 28,
+  minHeight: 16,
+),
+prefixIcon: Padding(
+  padding: EdgeInsets.only(left: 8.0, right: isMobile ? 4.0 : 6.0),
+  child: Icon(
+    Icons.search,
+    size: isMobile ? 15 : 16, // Icon size scales with device
+    color: const Color(0xFF94A3B8),
+  ),
                 ),
                 isDense: true,
                 filled: true,

@@ -33,7 +33,7 @@ class _MappingViewState extends State<MappingView> {
 
   // Sorting
   int _sortColumnIndex = 0;
-  bool _sortAscending = false;
+  bool _sortAscending = true;
 
   // Pagination & search
   String _entries = '10';
@@ -157,11 +157,11 @@ class _MappingViewState extends State<MappingView> {
         } else if (dataField is Map) {
           data = dataField.values.first as List<dynamic>? ?? [];
         }
-        // Sort: highest id first (newest at top)
+        // Sort: lowest id first (whatever data is added at the first at start is at top)
         data.sort((a, b) {
           final ia = int.tryParse((a is Map ? (a['id'] ?? a['ID'] ?? a['mapping_id']) : null)?.toString() ?? '0') ?? 0;
           final ib = int.tryParse((b is Map ? (b['id'] ?? b['ID'] ?? b['mapping_id']) : null)?.toString() ?? '0') ?? 0;
-          return ib.compareTo(ia);
+          return ia.compareTo(ib);
         });
         setState(() => _mappingList = data);
       }
@@ -213,7 +213,7 @@ class _MappingViewState extends State<MappingView> {
         setState(() {
           _page = 1;
           _sortColumnIndex = 0;
-          _sortAscending = false;
+          _sortAscending = true;
         });
         await _fetchMappings();
       } else {
@@ -431,21 +431,21 @@ class _MappingViewState extends State<MappingView> {
     return status == 0;
   }
 
-  // API 6: TOGGLE STATUS (mappingStatusUpdateview)
+  // API 6: TOGGLE STATUS (mapping_actionview)
   Future<void> toggleMappingStatus(
     dynamic itemOrId, [
     dynamic currentStatus,
   ]) async {
     Map<String, dynamic> itemMap = {};
-    dynamic id;
+    dynamic mappingId;
 
     if (itemOrId is Map) {
       itemMap = Map<String, dynamic>.from(itemOrId);
-      id = itemMap['id'] ?? itemMap['mapping_id'];
+      mappingId = itemMap['id'] ?? itemMap['mapping_id'];
     } else {
-      id = itemOrId;
+      mappingId = itemOrId;
       final found = _mappingList.firstWhere(
-        (e) => (e['id'] ?? e['mapping_id'])?.toString() == id?.toString(),
+        (e) => (e['id'] ?? e['mapping_id'])?.toString() == mappingId?.toString(),
         orElse: () => null,
       );
       if (found is Map) itemMap = Map<String, dynamic>.from(found);
@@ -458,31 +458,52 @@ class _MappingViewState extends State<MappingView> {
         itemMap['mapping_status'] ??
         currentStatus;
 
+    // Status mapping: 0 = Active (green switch), 1 = Inactive (grey switch)
     final int currentStatusInt =
         int.tryParse(rawStatus?.toString() ?? '0') ?? 0;
-    final int newStatus = (currentStatusInt == 0) ? 1 : 0;
+    final int targetStatus = (currentStatusInt == 0) ? 1 : 0;
 
     final confirm = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
-          title: const Text("Confirm Action", textAlign: TextAlign.center),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            "Confirm Action",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
           content: Text(
             currentStatusInt == 0
                 ? "Do you want to set this item as inactive?"
                 : "Do you want to set this item as active?",
             textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF475569)),
           ),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text("Cancel"),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text(
+                "Cancel",
+                style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold),
+              ),
             ),
+            const SizedBox(width: 8),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text("OK"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 24),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text("OK", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -492,31 +513,86 @@ class _MappingViewState extends State<MappingView> {
     if (confirm != true) return;
 
     try {
-      // Preserve all existing row fields in POST payload
-      final Map<String, dynamic> payload = Map<String, dynamic>.from(itemMap);
-      payload["api_key"] = _apiKey;
-      payload["mapping_id"] = id;
-      payload["id"] = id;
-      payload["status"] = newStatus;
-      // Omit user_password from the status toggle payload unless specifically edited
-      payload.remove('user_password');
-      payload.remove('password');
+      // 1. Resolve target device_id
+      String? targetDeviceId =
+          (itemMap['device'] ?? itemMap['device_id'])?.toString();
+
+      // Query mappingEditview to get the exact 'device' foreign key for this mapping
+      if ((targetDeviceId == null || targetDeviceId.isEmpty) && mappingId != null) {
+        try {
+          final editRes = await http.post(
+            Uri.parse('$_base/mappingEditview'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'api_key': _apiKey, 'id': mappingId}),
+          ).timeout(const Duration(seconds: 10));
+          if (editRes.statusCode == 200) {
+            final parsed = jsonDecode(editRes.body);
+            dynamic data = parsed['data'];
+            if (data is List && data.isNotEmpty) data = data.first;
+            if (data is Map) {
+              targetDeviceId =
+                  (data['device'] ?? data['device_id'])?.toString();
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Fallback: search _deviceList by device_code
+      if (targetDeviceId == null || targetDeviceId.isEmpty) {
+        final code = itemMap['device_code']?.toString();
+        if (code != null && code.isNotEmpty) {
+          final match = _deviceList.firstWhere(
+            (d) =>
+                d['device_code']?.toString() == code &&
+                (d['device_name']?.toString() ==
+                    itemMap['device_name']?.toString()),
+            orElse: () => _deviceList.firstWhere(
+              (d) => d['device_code']?.toString() == code,
+              orElse: () => <String, dynamic>{},
+            ),
+          );
+          if ((match as Map).isNotEmpty && match['id'] != null) {
+            targetDeviceId = match['id'].toString();
+          }
+        }
+      }
+
+      // Ultimate fallback: mappingId
+      targetDeviceId ??= mappingId?.toString();
+
+      if (targetDeviceId == null || targetDeviceId.isEmpty) {
+        if (!mounted) return;
+        _snack("Unable to identify device for this mapping.", isError: true);
+        return;
+      }
+
+      // 2. Trigger API: https://display.sriher.com/api/mapping_actionview
+      final Map<String, dynamic> requestBody = {
+        "api_key": _apiKey,
+        "device_id": targetDeviceId.toString(),
+        "status": targetStatus.toString(),
+      };
 
       final res = await http.post(
-        Uri.parse('$_base/mappingStatusUpdateview'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(payload),
-      );
+        Uri.parse('${getBaseUrl()}/api/mapping_actionview'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(const Duration(seconds: 15));
 
       bool isSuccess = res.statusCode == 200;
-      if (!isSuccess) {
+      if (res.statusCode == 200) {
         try {
           final data = jsonDecode(res.body);
-          if (data is Map &&
-              (data['success'] == true ||
-                  data['status'] == true ||
-                  data['status'] == 200)) {
-            isSuccess = true;
+          if (data is Map) {
+            final s = data['status']?.toString().toLowerCase();
+            if (s == 'failed' || s == 'error') {
+              isSuccess = false;
+            } else if (s == 'success' || data['success'] == true) {
+              isSuccess = true;
+            }
           }
         } catch (_) {}
       }
@@ -525,21 +601,27 @@ class _MappingViewState extends State<MappingView> {
         if (!mounted) return;
         setState(() {
           final idx = _mappingList.indexWhere(
-            (e) => (e['id'] ?? e['mapping_id'])?.toString() == id?.toString(),
+            (e) =>
+                (e['id'] ?? e['mapping_id'])?.toString() ==
+                mappingId?.toString(),
           );
-          if (idx != -1) {
+          if (idx != -1 && _mappingList[idx] is Map) {
             _mappingList[idx] = Map<String, dynamic>.from(_mappingList[idx])
-              ..['status'] = newStatus
-              ..['active_status'] = newStatus;
+              ..['status'] = targetStatus
+              ..['active_status'] = targetStatus
+              ..['device'] = targetDeviceId
+              ..['device_id'] = targetDeviceId;
           }
           if (itemOrId is Map) {
-            itemOrId['status'] = newStatus;
-            itemOrId['active_status'] = newStatus;
+            itemOrId['status'] = targetStatus;
+            itemOrId['active_status'] = targetStatus;
+            itemOrId['device'] = targetDeviceId;
+            itemOrId['device_id'] = targetDeviceId;
           }
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(newStatus == 0
+            content: Text(targetStatus == 0
                 ? "Mapping has been successfully activated."
                 : "Mapping has been successfully deactivated."),
             backgroundColor: Colors.green.shade700,
@@ -845,8 +927,8 @@ class _MappingViewState extends State<MappingView> {
                                       ? 'Please enter the Device Model'
                                       : null,
                                 ),
-                                const SizedBox(height: 32),
-                                _buildSectionHeader("LOCATION ASSIGNMENT"),
+                                const SizedBox(height: 16),
+                               
                                 _dropsLoading
                                     ? const Center(
                                         child: SizedBox(
@@ -1611,7 +1693,21 @@ class _MappingViewState extends State<MappingView> {
   Widget _buildTableCard() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isNarrow = screenWidth < 600;
+
+        final double searchMaxWidth;
+        final double searchFontSize;
+        if (screenWidth >= 1024) {
+          searchMaxWidth = 250;
+          searchFontSize = 13;
+        } else if (screenWidth >= 600) {
+          searchMaxWidth = 200;
+          searchFontSize = 12;
+        } else {
+          searchMaxWidth = 170;
+          searchFontSize = 11.5;
+        }
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1680,23 +1776,32 @@ class _MappingViewState extends State<MappingView> {
           ],
         );
 
+
+final bool isMobile = MediaQuery.of(context).size.width < 600;
         final searchBox = ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
+          constraints: BoxConstraints(maxWidth: searchMaxWidth),
           child: SizedBox(
             height: 38,
             child: TextField(
               controller: _searchCtrl,
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
+              style: TextStyle(fontSize: searchFontSize, color: Colors.black87),
               decoration: InputDecoration(
-                hintText: 'Search mappings...',
-                hintStyle: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF94A3B8),
+                hintText: 'Search mappings',
+                hintStyle: TextStyle(
+                  fontSize: searchFontSize,
+                  color: const Color(0xFF94A3B8),
                 ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 16,
-                  color: Color(0xFF94A3B8),
+                 prefixIconConstraints: BoxConstraints(
+  minWidth: isMobile ? 24 : 28,
+  minHeight: 16,
+),
+prefixIcon: Padding(
+  padding: EdgeInsets.only(left: 8.0, right: isMobile ? 4.0 : 6.0),
+  child: Icon(
+    Icons.search,
+    size: isMobile ? 15 : 16, // Icon size scales with device
+    color: const Color(0xFF94A3B8),
+  ),
                 ),
                 isDense: true,
                 filled: true,

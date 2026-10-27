@@ -1110,7 +1110,21 @@ class _LocationMasterViewState extends State<LocationMasterView> {
   Widget _buildListHeader() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isNarrow = screenWidth < 600;
+
+        final double searchMaxWidth;
+        final double searchFontSize;
+        if (screenWidth >= 1024) {
+          searchMaxWidth = 250;
+          searchFontSize = 13;
+        } else if (screenWidth >= 600) {
+          searchMaxWidth = 200;
+          searchFontSize = 12;
+        } else {
+          searchMaxWidth = 170;
+          searchFontSize = 11.5;
+        }
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1178,25 +1192,32 @@ class _LocationMasterViewState extends State<LocationMasterView> {
             ],
           ],
         );
-
+final bool isMobile = MediaQuery.of(context).size.width < 600;
         final searchBox = ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
+          constraints: BoxConstraints(maxWidth: searchMaxWidth),
           child: SizedBox(
             height: 38,
             child: TextField(
               controller: _searchController,
               onChanged: (val) => setState(() => searchQuery = val),
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
+              style: TextStyle(fontSize: searchFontSize, color: Colors.black87),
               decoration: InputDecoration(
-                hintText: 'Search Locations...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontSize: 14,
+                hintText: 'Search Locations',
+                hintStyle: TextStyle(
+                  color: const Color(0xFF94A3B8),
+                  fontSize: searchFontSize,
                 ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 16,
-                  color: Color(0xFF94A3B8),
+                prefixIconConstraints: BoxConstraints(
+  minWidth: isMobile ? 24 : 28,
+  minHeight: 16,
+),
+prefixIcon: Padding(
+  padding: EdgeInsets.only(left: 8.0, right: isMobile ? 4.0 : 6.0),
+  child: Icon(
+    Icons.search,
+    size: isMobile ? 15 : 16, // Icon size scales with device
+    color: const Color(0xFF94A3B8),
+  ),
                 ),
                 isDense: true,
                 filled: true,

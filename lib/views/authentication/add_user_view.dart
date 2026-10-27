@@ -21,6 +21,7 @@ class _AddUserViewState extends State<AddUserView> {
 
   List<dynamic> allUsers = [];
   List<dynamic> allRoles = [];
+  List<dynamic> allRolesMaster = [];
   bool isLoading = true;
   bool isSubmitting = false;
   String entriesValue = "10";
@@ -40,6 +41,7 @@ class _AddUserViewState extends State<AddUserView> {
   @override
   void initState() {
     super.initState();
+    fetchRoles();
     _loadPersistedStatuses().then((_) {
       if (mounted) fetchUserList();
     });
@@ -92,7 +94,66 @@ class _AddUserViewState extends State<AddUserView> {
     return 0;
   }
 
+  static bool _isRoleStatusActive(dynamic status) {
+    if (status == null) return false;
+    if (status is int) return status == 1;
+    if (status is bool) return status;
+    final str = status.toString().trim();
+    return int.tryParse(str) == 1 || str == '1' || str.toLowerCase() == 'active';
+  }
+
   // ──────────────────────────── API CALLS ────────────────────────────────────
+
+  Future<void> fetchRoles() async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${getBaseUrl()}/roleview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"api_key": _apiKey}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final res = jsonDecode(response.body);
+        List<dynamic> roles = [];
+        if (res is Map && res['data'] is Map && res['data']['roles'] is List) {
+          roles = res['data']['roles'] as List;
+        } else if (res is Map && res['roles'] is List) {
+          roles = res['roles'] as List;
+        }
+
+        final List<Map<String, String>> activeRoles = [];
+        final List<Map<String, String>> allRolesList = [];
+
+        for (var r in roles) {
+          if (r is Map) {
+            final id = (r['id'] ?? r['role_id'])?.toString() ?? '';
+            final roleName = (r['role_name'] ?? r['name'])?.toString() ?? '';
+            final status = r['status'] ?? r['Status'];
+
+            if (id.isNotEmpty) {
+              final roleMap = {
+                "id": id,
+                "role_name": roleName.isNotEmpty ? roleName : id,
+              };
+              allRolesList.add(roleMap);
+              if (_isRoleStatusActive(status)) {
+                activeRoles.add(roleMap);
+              }
+            }
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            allRoles = activeRoles;
+            allRolesMaster = allRolesList;
+          });
+        }
+      }
+    } catch (_) {}
+  }
 
   Future<void> fetchUserList({bool showLoading = true}) async {
     if (!mounted) return;
@@ -169,7 +230,29 @@ class _AddUserViewState extends State<AddUserView> {
         if (!mounted) return;
         setState(() {
           allUsers = parsedUsers;
-          allRoles = rawRoles;
+          if (allRoles.isEmpty && rawRoles.isNotEmpty) {
+            final List<Map<String, String>> activeRoles = [];
+            final List<Map<String, String>> allRolesList = [];
+            for (var r in rawRoles) {
+              if (r is Map) {
+                final id = (r['id'] ?? r['role_id'])?.toString() ?? '';
+                final roleName = (r['role_name'] ?? r['name'] ?? r['id'])?.toString() ?? '';
+                final status = r['status'] ?? r['Status'];
+                if (id.isNotEmpty) {
+                  final roleMap = {
+                    "id": id,
+                    "role_name": roleName.isNotEmpty ? roleName : id,
+                  };
+                  allRolesList.add(roleMap);
+                  if (_isRoleStatusActive(status)) {
+                    activeRoles.add(roleMap);
+                  }
+                }
+              }
+            }
+            allRoles = activeRoles;
+            allRolesMaster = allRolesList;
+          }
           isLoading = false;
         });
       } else {
@@ -194,7 +277,7 @@ class _AddUserViewState extends State<AddUserView> {
     String userId = user['user_id']?.toString() ?? '';
     String userName = user['user_name']?.toString() ?? '';
     String password = user['user_password']?.toString() ?? '';
-    String? roleId = user['role_id']?.toString();
+    String? roleId = (user['role_id'] ?? user['Role_id'] ?? user['roleId'])?.toString();
 
     try {
       final response = await http
@@ -207,16 +290,32 @@ class _AddUserViewState extends State<AddUserView> {
 
       if (response.statusCode == 200) {
         final res = jsonDecode(response.body);
-        final payload = res is Map && res.containsKey('data')
-            ? res['data']
-            : res;
-        final u = (payload is List && payload.isNotEmpty)
-            ? payload[0]
-            : payload;
-        userId = u['user_id']?.toString() ?? userId;
-        userName = u['user_name']?.toString() ?? userName;
-        password = u['user_password']?.toString() ?? password;
-        roleId = u['role_id']?.toString() ?? roleId;
+        dynamic userData;
+        if (res is Map && res['data'] is Map) {
+          final data = res['data'] as Map;
+          if (data['user'] is List && (data['user'] as List).isNotEmpty) {
+            userData = data['user'][0];
+          } else if (data['users'] is List && (data['users'] as List).isNotEmpty) {
+            userData = data['users'][0];
+          } else if (data['user'] is Map) {
+            userData = data['user'];
+          } else {
+            userData = data;
+          }
+        } else if (res is Map && res['data'] is List && (res['data'] as List).isNotEmpty) {
+          userData = res['data'][0];
+        } else if (res is Map && res['user'] is List && (res['user'] as List).isNotEmpty) {
+          userData = res['user'][0];
+        } else if (res is Map) {
+          userData = res;
+        }
+
+        if (userData is Map) {
+          userId = (userData['user_id'] ?? userData['userId'])?.toString() ?? userId;
+          userName = (userData['user_name'] ?? userData['userName'])?.toString() ?? userName;
+          password = (userData['user_password'] ?? userData['userPassword'])?.toString() ?? password;
+          roleId = (userData['role_id'] ?? userData['Role_id'] ?? userData['roleId'])?.toString() ?? roleId;
+        }
       }
     } catch (_) {}
 
@@ -248,7 +347,10 @@ class _AddUserViewState extends State<AddUserView> {
       "user_name": userName,
       "role_id": roleId!, // always validated non-null before calling
     };
-    if (password.isNotEmpty) body["user_password"] = password;
+    if (password.isNotEmpty) {
+      body["password"] = password;
+      body["user_password"] = password;
+    }
     if (isUpdating) {
       body["id"] = editId;
       final existing = allUsers.firstWhere(
@@ -609,6 +711,7 @@ class _AddUserViewState extends State<AddUserView> {
         initPassword: initPassword,
         initRoleId: initRoleId,
         allRoles: allRoles,
+        allRolesMaster: allRolesMaster,
         allUsers: allUsers,
         onSubmit: _handleSubmit,
       ),
@@ -646,7 +749,10 @@ class _AddUserViewState extends State<AddUserView> {
             final q = searchQuery.toLowerCase();
             return (u['user_id']?.toString().toLowerCase().contains(q) ??
                     false) ||
-                (u['user_name']?.toString().toLowerCase().contains(q) ?? false);
+                (u['user_name']?.toString().toLowerCase().contains(q) ??
+                    false) ||
+                (u['role_id']?.toString().toLowerCase().contains(q) ??
+                    false);
           }).toList();
 
     filtered.sort((a, b) {
@@ -663,20 +769,8 @@ class _AddUserViewState extends State<AddUserView> {
           bVal = b['user_name']?.toString() ?? "";
           break;
         case 2:
-          final rA =
-              allRoles.firstWhere(
-                (r) => r['id']?.toString() == a['role_id']?.toString(),
-                orElse: () => {'role_name': 'User'},
-              )['role_name'] ??
-              'User';
-          final rB =
-              allRoles.firstWhere(
-                (r) => r['id']?.toString() == b['role_id']?.toString(),
-                orElse: () => {'role_name': 'User'},
-              )['role_name'] ??
-              'User';
-          aVal = rA.toString();
-          bVal = rB.toString();
+          aVal = (a['role_id'] ?? a['roleId'])?.toString() ?? "";
+          bVal = (b['role_id'] ?? b['roleId'])?.toString() ?? "";
           break;
         default:
           aVal = a['id']?.toString() ?? "";
@@ -684,10 +778,12 @@ class _AddUserViewState extends State<AddUserView> {
           break;
       }
 
-      if (_sortColumnIndex == 0) {
-        final intA = int.tryParse(aVal) ?? 0;
-        final intB = int.tryParse(bVal) ?? 0;
-        return _sortAscending ? intA.compareTo(intB) : intB.compareTo(intA);
+      if (_sortColumnIndex == 0 || _sortColumnIndex == 2) {
+        final intA = int.tryParse(aVal);
+        final intB = int.tryParse(bVal);
+        if (intA != null && intB != null) {
+          return _sortAscending ? intA.compareTo(intB) : intB.compareTo(intA);
+        }
       } else if (_sortColumnIndex == -1) {
         // Default sort: by DB id descending (latest data at the top, oldest in last)
         final intA = aVal.startsWith('temp_')
@@ -1002,7 +1098,7 @@ class _AddUserViewState extends State<AddUserView> {
               ),
             ),
           ),
-          // ROLE – flex 2, left
+          // ROLE ID – flex 2, left
           Expanded(
             flex: 2,
             child: Align(
@@ -1013,7 +1109,7 @@ class _AddUserViewState extends State<AddUserView> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'ROLE',
+                      'ROLE ID',
                       style: TextStyle(
                         color: Color.fromRGBO(33, 150, 243, 1),
                         fontWeight: FontWeight.bold,
@@ -1148,12 +1244,10 @@ class _AddUserViewState extends State<AddUserView> {
               ((currentPage - 1) * (int.tryParse(entriesValue) ?? 10)) +
               index +
               1;
-          final roleName =
-              allRoles.firstWhere(
-                (r) => r['id']?.toString() == u['role_id']?.toString(),
-                orElse: () => {'role_name': 'User'},
-              )['role_name'] ??
-              'User';
+          final roleDataRaw = (u['role_id'] ?? u['roleId'])?.toString().trim();
+          final roleData = (roleDataRaw != null && roleDataRaw.isNotEmpty)
+              ? roleDataRaw
+              : '-';
           return Container(
             height: 52,
             decoration: BoxDecoration(
@@ -1217,32 +1311,18 @@ class _AddUserViewState extends State<AddUserView> {
                     ),
                   ),
                 ),
-                // ROLE – flex 2
+                // ROLE ID – flex 2
                 Expanded(
                   flex: 2,
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          roleName.toString(),
-                          style: TextStyle(
-                            color: Colors.blue.shade800,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
+                      child: Text(
+                        roleData,
+                        style: const TextStyle(fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                     ),
                   ),
@@ -1328,7 +1408,21 @@ class _AddUserViewState extends State<AddUserView> {
   Widget _buildListHeader({bool isMobile = false, Widget? addUserBtn}) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 600;
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isNarrow = screenWidth < 600;
+
+        final double searchMaxWidth;
+        final double searchFontSize;
+        if (screenWidth >= 1024) {
+          searchMaxWidth = 250;
+          searchFontSize = 13;
+        } else if (screenWidth >= 600) {
+          searchMaxWidth = 200;
+          searchFontSize = 12;
+        } else {
+          searchMaxWidth = 170;
+          searchFontSize = 11.5;
+        }
 
         final showEntries = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1397,48 +1491,53 @@ class _AddUserViewState extends State<AddUserView> {
           ],
         );
 
-        final searchBox = ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isNarrow ? 180 : 250),
-          child: SizedBox(
-            height: 38,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (v) => setState(() {
-                searchQuery = v;
-                currentPage = 1;
-              }),
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
-              decoration: InputDecoration(
-                hintText: 'Search ID or Name...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontSize: 14,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 16,
-                  color: Color(0xFF94A3B8),
-                ),
-                isDense: true,
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-              ),
-            ),
+       final searchBox = ConstrainedBox(
+  constraints: BoxConstraints(maxWidth: searchMaxWidth),
+  child: SizedBox(
+    height: 38,
+    child: TextField(
+      controller: _searchController,
+      onChanged: (v) => setState(() {
+        searchQuery = v;
+        currentPage = 1;
+      }),
+      style: TextStyle(fontSize: searchFontSize, color: Colors.black87),
+      decoration: InputDecoration(
+        hintText: 'Search ID or Name',
+        hintStyle: TextStyle(
+          color: const Color(0xFF94A3B8),
+          fontSize: searchFontSize,
+        ),
+        // 1. Removes Flutter's forced 48px width box:
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 26,
+          minHeight: 16,
+        ),
+        // 2. Gives a tiny, neat gap on both sides:
+        prefixIcon: const Padding(
+          padding: EdgeInsets.only(left: 8.0, right: 6.0),
+          child: Icon(
+            Icons.search,
+            size: 16,
+            color: Color(0xFF94A3B8),
           ),
-        );
+        ),
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
+      ),
+    ),
+  ),
+);
 
         return isNarrow
             ? SizedBox(
@@ -1586,6 +1685,7 @@ class _UserFormDialog extends StatefulWidget {
   final String initPassword;
   final String? initRoleId;
   final List<dynamic> allRoles;
+  final List<dynamic> allRolesMaster;
   final List<dynamic> allUsers;
   final Future<void> Function({
     required int? editId,
@@ -1603,6 +1703,7 @@ class _UserFormDialog extends StatefulWidget {
     this.initPassword = '',
     this.initRoleId,
     required this.allRoles,
+    this.allRolesMaster = const [],
     required this.allUsers,
     required this.onSubmit,
   });
@@ -1617,6 +1718,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
   late final TextEditingController _userNameCtrl;
   late final TextEditingController _passCtrl;
   String? _selectedRoleId;
+  late List<Map<String, dynamic>> _rolesList;
   bool _submitting = false;
   bool _isPasswordObscured = true;
 
@@ -1631,13 +1733,104 @@ class _UserFormDialogState extends State<_UserFormDialog> {
       text: _isEditing ? '' : widget.initPassword,
     );
 
-    // Only set selectedRoleId if initRoleId actually exists in the roles list.
-    // If it doesn't match (e.g. deleted role or ID mismatch), leave null so
-    // the user is forced to select a valid role before submitting.
-    final roleExists = widget.allRoles.any(
-      (r) => r['id']?.toString() == widget.initRoleId,
-    );
-    _selectedRoleId = roleExists ? widget.initRoleId : null;
+    // Build the roles list for the dropdown
+    _rolesList = widget.allRoles.map((r) {
+      if (r is Map) {
+        final id = (r['id'] ?? r['role_id'] ?? r['ID'])?.toString() ?? '';
+        final roleName = (r['role_name'] ?? r['name'])?.toString() ?? id;
+        return {'id': id, 'role_name': roleName};
+      }
+      return {'id': r.toString(), 'role_name': r.toString()};
+    }).toList();
+
+    // If initRoleId exists, ensure it is present in _rolesList so it displays in dropdown
+    final String? initRole = widget.initRoleId?.trim();
+    if (initRole != null && initRole.isNotEmpty) {
+      final exists = _rolesList.any((r) => r['id'] == initRole);
+      if (!exists) {
+        String roleLabel = initRole;
+        final matched = widget.allRolesMaster.firstWhere(
+          (r) =>
+              (r is Map
+                  ? (r['id'] ?? r['role_id'])?.toString()
+                  : r.toString()) ==
+              initRole,
+          orElse: () => null,
+        );
+        if (matched != null && matched is Map) {
+          roleLabel =
+              (matched['role_name'] ?? matched['name'] ?? initRole).toString();
+        }
+        _rolesList.insert(0, {
+          'id': initRole,
+          'role_name': roleLabel,
+        });
+      }
+      _selectedRoleId = initRole;
+    } else {
+      _selectedRoleId = null;
+    }
+
+    if (widget.allRoles.isEmpty) {
+      _fetchRolesForDialog();
+    }
+  }
+
+  Future<void> _fetchRolesForDialog() async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${getBaseUrl()}/roleview'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"api_key": _AddUserViewState._apiKey}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final res = jsonDecode(response.body);
+        List<dynamic> roles = [];
+        if (res is Map && res['data'] is Map && res['data']['roles'] is List) {
+          roles = res['data']['roles'] as List;
+        } else if (res is Map && res['roles'] is List) {
+          roles = res['roles'] as List;
+        }
+
+        if (mounted && roles.isNotEmpty) {
+          final List<Map<String, dynamic>> activeRoles = [];
+          final Map<String, String> masterRoleNames = {};
+
+          for (var r in roles) {
+            if (r is Map) {
+              final id = (r['id'] ?? r['role_id'] ?? r['ID'])?.toString() ?? '';
+              final roleName = (r['role_name'] ?? r['name'])?.toString() ?? id;
+              final status = r['status'] ?? r['Status'];
+              if (id.isNotEmpty) {
+                masterRoleNames[id] = roleName;
+                if (_AddUserViewState._isRoleStatusActive(status)) {
+                  activeRoles.add({'id': id, 'role_name': roleName});
+                }
+              }
+            }
+          }
+
+          setState(() {
+            _rolesList = activeRoles;
+
+            final String? initRole = widget.initRoleId?.trim();
+            if (initRole != null && initRole.isNotEmpty) {
+              final exists = _rolesList.any((r) => r['id'] == initRole);
+              if (!exists) {
+                final roleLabel = masterRoleNames[initRole] ?? initRole;
+                _rolesList.insert(0, {
+                  'id': initRole,
+                  'role_name': roleLabel,
+                });
+              }
+            }
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -1654,7 +1847,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
     if (_selectedRoleId == null || _selectedRoleId!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select a Role'),
+          content: Text('Please select a Role ID'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -1760,7 +1953,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            "Provide system credentials and role",
+                            "Provide system credentials and role ID",
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.85),
                               fontSize: 12,
@@ -1900,19 +2093,34 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Role
-                        _label('Role'),
+                        // Role ID
+                        _label('Role Name'),
                         const SizedBox(height: 6),
                         SearchableDropdown<String>(
                           value: _selectedRoleId,
-                          hint: 'Select Role',
+                          hint: 'Select Role Name',
                           autovalidateMode: AutovalidateMode.onUserInteraction,
-                          items: widget.allRoles.map((r) {
-                            return SearchableDropdownItem<String>(
-                              value: r['id']?.toString() ?? '',
-                              label: r['role_name']?.toString() ?? '',
-                            );
-                          }).toList(),
+                          items: () {
+                            final seen = <String>{};
+                            final items = <SearchableDropdownItem<String>>[];
+                            for (var r in _rolesList) {
+                              final id = (r['id'] ?? r['role_id'] ?? r['ID'])
+                                      ?.toString()
+                                      .trim() ??
+                                  '';
+                              final name = (r['role_name'] ?? r['name'])
+                                      ?.toString()
+                                      .trim() ??
+                                  '';
+                              if (id.isNotEmpty && seen.add(id)) {
+                                items.add(SearchableDropdownItem<String>(
+                                  value: id,
+                                  label: name.isNotEmpty ? name : id,
+                                ));
+                              }
+                            }
+                            return items;
+                          }(),
                           validator: (v) => (v == null || v.isEmpty)
                               ? 'Please select the Role'
                               : null,

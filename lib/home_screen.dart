@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'api_config.dart';
 import 'login_page.dart';
 
 import 'package:sriher_display_application/views/dashboard_view.dart';
@@ -31,9 +34,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _selectedIndex = 0;
   String? _userName;
   String? _userRole;
+  String? _roleId;
+  String? _userId;
+  Set<String> _adminOrManagerRoleIds = {'1', '4', '13', '18'};
 
   Map<String, dynamic>? _scheduleEditData;
   bool _isScheduleExtend = false;
+  String? _expandedSection;
+
+  bool get _canAccessAuth {
+    final currentRole = (_userRole ?? '').toLowerCase().trim();
+    final currentRoleId = (_roleId ?? '').toLowerCase().trim();
+    return currentRole == 'admin' ||
+        currentRole == 'manager' ||
+        currentRole == 'administrator' ||
+        currentRoleId == '1' ||
+        currentRoleId == '4' ||
+        currentRoleId == '13' ||
+        currentRoleId == '18' ||
+        _adminOrManagerRoleIds.contains(currentRoleId) ||
+        _adminOrManagerRoleIds.contains(currentRole);
+  }
 
   late AnimationController _sidebarController;
   late AnimationController _viewController;
@@ -78,10 +99,144 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Future<void> _loadUserInfo() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _userName = prefs.getString('userName');
       _userRole = prefs.getString('userRole');
+      _roleId = prefs.getString('roleId');
+      _userId = prefs.getString('userId');
     });
+    await _checkUserRoleFromApi();
+  }
+
+  Future<void> _checkUserRoleFromApi() async {
+    try {
+      const apiKey =
+          '933cdb13cb54e31e694f82bf7f75f0144a9495036db0243b85dd855be53c06f2';
+
+      // 1. Fetch roles from roleview
+      final roleRes = await http
+          .post(
+            Uri.parse('${getBaseUrl()}/roleview'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'api_key': apiKey}),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      final Map<String, String> roleMap = {};
+      final Set<String> adminManagerIds = {'1', '4', '13', '18'};
+
+      if (roleRes.statusCode == 200) {
+        final data = jsonDecode(roleRes.body);
+        List<dynamic> roles = [];
+        if (data is Map &&
+            data['data'] is Map &&
+            data['data']['roles'] is List) {
+          roles = data['data']['roles'];
+        } else if (data is Map && data['roles'] is List) {
+          roles = data['roles'];
+        }
+
+        for (var r in roles) {
+          if (r is Map) {
+            final id = (r['id'] ?? r['role_id'])?.toString() ?? '';
+            final name = (r['role_name'] ?? r['name'])?.toString() ?? '';
+            if (id.isNotEmpty) {
+              roleMap[id] = name;
+              final lower = name.toLowerCase().trim();
+              if (lower == 'admin' ||
+                  lower == 'manager' ||
+                  lower.contains('admin') ||
+                  lower.contains('manager')) {
+                adminManagerIds.add(id);
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Fetch users from Registerview to accurately match current logged-in user
+      final userRes = await http
+          .post(
+            Uri.parse('${getBaseUrl()}/Registerview'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'api_key': apiKey}),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (userRes.statusCode == 200) {
+        final uData = jsonDecode(userRes.body);
+        List<dynamic> users = [];
+        if (uData is Map &&
+            uData['data'] is Map &&
+            uData['data']['users'] is List) {
+          users = uData['data']['users'];
+        } else if (uData is Map && uData['users'] is List) {
+          users = uData['users'];
+        }
+
+        final currentName = (_userName ?? '').trim().toLowerCase();
+        final currentUserId = (_userId ?? '').trim().toLowerCase();
+
+        for (var u in users) {
+          if (u is Map) {
+            final uName =
+                (u['user_name'] ?? u['username'] ?? '')
+                    .toString()
+                    .trim()
+                    .toLowerCase();
+            final uId = (u['user_id'] ?? '').toString().trim().toLowerCase();
+
+            if ((currentName.isNotEmpty && uName == currentName) ||
+                (currentUserId.isNotEmpty && uId == currentUserId)) {
+              final userRoleId = (u['role_id'] ?? u['roleId'])?.toString();
+              if (userRoleId != null && userRoleId.isNotEmpty) {
+                final resolvedRoleName = roleMap[userRoleId] ?? _userRole;
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('roleId', userRoleId);
+                if (resolvedRoleName != null && resolvedRoleName.isNotEmpty) {
+                  await prefs.setString('userRole', resolvedRoleName);
+                }
+
+                if (mounted) {
+                  setState(() {
+                    _roleId = userRoleId;
+                    if (resolvedRoleName != null &&
+                        resolvedRoleName.isNotEmpty) {
+                      _userRole = resolvedRoleName;
+                    }
+                    _adminOrManagerRoleIds = adminManagerIds;
+                    if (!_canAccessAuth && _selectedIndex == 1) {
+                      _selectedIndex = 0;
+                    }
+                    if (!_canAccessAuth &&
+                        _expandedSection == 'Authentication') {
+                      _expandedSection = null;
+                    }
+                  });
+                }
+                return;
+              }
+            }
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _adminOrManagerRoleIds = adminManagerIds;
+          if (_roleId != null && roleMap.containsKey(_roleId)) {
+            _userRole = roleMap[_roleId];
+          }
+          if (!_canAccessAuth && _selectedIndex == 1) {
+            _selectedIndex = 0;
+          }
+          if (!_canAccessAuth && _expandedSection == 'Authentication') {
+            _expandedSection = null;
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -104,6 +259,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _viewController.forward(from: 0.0);
   }
 
+  void _toggleSection(String title) {
+    setState(() {
+      if (_expandedSection == title) {
+        _expandedSection = null;
+      } else {
+        _expandedSection = title;
+      }
+    });
+  }
+
   void _navigateToScheduleAllocate({
     Map<String, dynamic>? editData,
     bool isExtend = false,
@@ -112,6 +277,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _scheduleEditData = editData;
       _isScheduleExtend = isExtend;
       _selectedIndex = 6;
+      _expandedSection = 'Schedule';
     });
     _viewController.forward(from: 0.0);
   }
@@ -270,26 +436,31 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                   const SizedBox(height: 5),
 
-                  _CollapsibleSection(
-                    title: 'Authentication',
-                    icon: Icons.lock_person_rounded,
-                    iconColor: const Color(0xFFFBBF24),
-                    children: [
-                      _buildSidebarItem(
-                        Icons.person_add_rounded,
-                        'Add User',
-                        1,
-                        isDrawer: isDrawer,
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 5),
+                  if (_canAccessAuth) ...[
+                    _CollapsibleSection(
+                      title: 'Authentication',
+                      icon: Icons.lock_person_rounded,
+                      iconColor: const Color(0xFFFBBF24),
+                      isExpanded: _expandedSection == 'Authentication',
+                      onToggle: () => _toggleSection('Authentication'),
+                      children: [
+                        _buildSidebarItem(
+                          Icons.person_add_rounded,
+                          'Add User',
+                          1,
+                          isDrawer: isDrawer,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                  ],
 
                   _CollapsibleSection(
                     title: 'Masters',
                     icon: Icons.dns_rounded,
                     iconColor: const Color(0xFF34D399),
+                    isExpanded: _expandedSection == 'Masters',
+                    onToggle: () => _toggleSection('Masters'),
                     children: [
                       _buildSidebarItem(
                         Icons.admin_panel_settings_rounded,
@@ -329,6 +500,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     title: 'File Master',
                     icon: Icons.folder_shared_rounded,
                     iconColor: const Color(0xFFF472B6),
+                    isExpanded: _expandedSection == 'File Master',
+                    onToggle: () => _toggleSection('File Master'),
                     children: [
                       _buildSidebarItem(
                         Icons.cloud_upload_rounded,
@@ -344,6 +517,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     title: 'Template Master',
                     icon: Icons.dashboard_customize_rounded,
                     iconColor: const Color(0xFFA78BFA),
+                    isExpanded: _expandedSection == 'Template Master',
+                    onToggle: () => _toggleSection('Template Master'),
                     children: [
                       _buildSidebarItem(
                         Icons.add_to_photos_rounded,
@@ -371,6 +546,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     title: 'Schedule',
                     icon: Icons.calendar_month_rounded,
                     iconColor: const Color(0xFF22D3EE),
+                    isExpanded: _expandedSection == 'Schedule',
+                    onToggle: () => _toggleSection('Schedule'),
                     children: [
                       _buildSidebarItem(
                         Icons.event_available_rounded,
@@ -434,28 +611,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _userName ?? "Admin",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          _userRole ?? "Administrator",
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 11,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                    child: Text(
+                      _userName ?? "Admin",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   IconButton(
@@ -886,16 +1049,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      "You will need to sign in again to access the dashboard and manage display settings. Any unsaved progress will be discarded.",
-                      style: TextStyle(
-                        color: const Color(0xFF1E40AF),
-                        fontSize: isDesktop ? 13 : 12,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
+                 
                 ],
               ),
             ),
@@ -969,7 +1123,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       case 0:
         return const DashboardView();
       case 1:
-        return const AddUserView();
+        return _canAccessAuth ? const AddUserView() : const DashboardView();
       case 2:
         return const FileUploadView();
       case 3:
@@ -1013,25 +1167,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 }
 
-class _CollapsibleSection extends StatefulWidget {
+class _CollapsibleSection extends StatelessWidget {
   final String title;
   final IconData icon;
   final Color iconColor;
   final List<Widget> children;
+  final bool isExpanded;
+  final VoidCallback onToggle;
 
   const _CollapsibleSection({
     required this.title,
     required this.icon,
     required this.iconColor,
     required this.children,
+    required this.isExpanded,
+    required this.onToggle,
   });
-
-  @override
-  State<_CollapsibleSection> createState() => _CollapsibleSectionState();
-}
-
-class _CollapsibleSectionState extends State<_CollapsibleSection> {
-  bool _isExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1039,11 +1190,7 @@ class _CollapsibleSectionState extends State<_CollapsibleSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InkWell(
-          onTap: () {
-            setState(() {
-              _isExpanded = !_isExpanded;
-            });
-          },
+          onTap: onToggle,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(8, 14, 8, 6),
@@ -1052,15 +1199,15 @@ class _CollapsibleSectionState extends State<_CollapsibleSection> {
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: widget.iconColor.withOpacity(0.18),
+                    color: iconColor.withOpacity(0.18),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(widget.icon, size: 13, color: widget.iconColor),
+                  child: Icon(icon, size: 13, color: iconColor),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    widget.title,
+                    title,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.75),
                       fontSize: 14,
@@ -1071,7 +1218,7 @@ class _CollapsibleSectionState extends State<_CollapsibleSection> {
                   ),
                 ),
                 Icon(
-                  _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  isExpanded ? Icons.expand_less : Icons.expand_more,
                   color: Colors.white.withOpacity(0.5),
                   size: 18,
                 ),
@@ -1083,9 +1230,9 @@ class _CollapsibleSectionState extends State<_CollapsibleSection> {
           firstChild: const SizedBox(width: double.infinity, height: 0),
           secondChild: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: widget.children,
+            children: children,
           ),
-          crossFadeState: _isExpanded
+          crossFadeState: isExpanded
               ? CrossFadeState.showSecond
               : CrossFadeState.showFirst,
           duration: const Duration(milliseconds: 200),

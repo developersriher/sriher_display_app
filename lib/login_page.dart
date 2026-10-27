@@ -217,6 +217,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           final userInfo = data['data'];
           String name = "User";
           String role = "Admin";
+          String? roleId;
 
           if (userInfo is Map) {
             name =
@@ -225,13 +226,35 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 userInfo['name']?.toString() ??
                 userInfo['user_id']?.toString() ??
                 _userIdController.text.trim();
-            role = userInfo['role_name'] ?? userInfo['role'] ?? "Admin";
+            roleId = (userInfo['role_id'] ?? userInfo['roleId'])?.toString();
+            final rawRole = userInfo['role_name'] ?? userInfo['role'];
+            if (rawRole != null) {
+              role = rawRole.toString();
+            } else if (roleId != null) {
+              role = (roleId == '1' || roleId == '18')
+                  ? 'Admin'
+                  : (roleId == '4' || roleId == '13')
+                      ? 'Manager'
+                      : (roleId == '8')
+                          ? 'User'
+                          : (roleId == '3')
+                              ? 'client'
+                              : roleId;
+            } else {
+              role = "Admin";
+            }
           }
 
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('isLoggedIn', true);
           await prefs.setString('userName', name);
           await prefs.setString('userRole', role);
+          if (roleId != null) {
+            await prefs.setString('roleId', roleId);
+          }
+          if (userInfo is Map && userInfo['user_id'] != null) {
+            await prefs.setString('userId', userInfo['user_id'].toString());
+          }
           await prefs.setString('loginTime', DateTime.now().toString());
 
           if (!mounted) return;
