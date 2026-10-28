@@ -180,11 +180,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
         for (var u in users) {
           if (u is Map) {
-            final uName =
-                (u['user_name'] ?? u['username'] ?? '')
-                    .toString()
-                    .trim()
-                    .toLowerCase();
+            final uName = (u['user_name'] ?? u['username'] ?? '')
+                .toString()
+                .trim()
+                .toLowerCase();
             final uId = (u['user_id'] ?? '').toString().trim().toLowerCase();
 
             if ((currentName.isNotEmpty && uName == currentName) ||
@@ -893,9 +892,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     final double dialogWidth = isDesktop
         ? 560.0
-        : (isTablet
-            ? 480.0
-            : (screenWidth * 0.92).clamp(300.0, 420.0));
+        : (isTablet ? 480.0 : (screenWidth * 0.92).clamp(300.0, 420.0));
 
     final confirm = await StylishDialog.show<bool>(
       context: context,
@@ -950,7 +947,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF3B82F6).withValues(alpha: 0.25),
+                          color: const Color(
+                            0xFF3B82F6,
+                          ).withValues(alpha: 0.25),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),
@@ -996,7 +995,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFECFDF5),
                       borderRadius: BorderRadius.circular(20),
@@ -1030,30 +1032,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 12),
             // Advisory Note
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFDBEAFE)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2),
-                    child: Icon(
-                      Icons.info_outline_rounded,
-                      size: 16,
-                      color: Color(0xFF2563EB),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                 
-                ],
-              ),
-            ),
-            const SizedBox(height: 22),
+
             Row(
               children: [
                 Expanded(
